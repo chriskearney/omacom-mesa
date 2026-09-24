@@ -39,6 +39,7 @@
 #include "pipe/p_screen.h"
 #include "pipe-loader/pipe_loader.h"
 #include "renderonly/renderonly.h"
+#include "util/os_file.h"
 #include "util/u_memory.h"
 
 #include "loader.h"
@@ -74,7 +75,14 @@ kmsro_screen_create(int kms_fd, const struct pipe_screen_config *config,
          goto out;
 
       ro->kms_fd = kms_fd;
-      ro->gpu_fd = dup(gpu_fds[i]);
+      /* Close-on-exec: a plain dup() let every process the client started
+       * inherit its render-node file, and with it the client's GPU context.
+       */
+      ro->gpu_fd = os_dupfd_cloexec(gpu_fds[i]);
+      if (ro->gpu_fd < 0) {
+         FREE(ro);
+         goto out;
+      }
 
       render_dev_name = loader_get_kernel_driver_name(ro->gpu_fd);
       if (!render_dev_name) {
