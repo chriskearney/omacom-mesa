@@ -3176,6 +3176,12 @@ init_driver_workarounds(struct zink_screen *screen)
    case VK_DRIVER_ID_MESA_LLVMPIPE:
    case VK_DRIVER_ID_MESA_PANVK:
    case VK_DRIVER_ID_ARM_PROPRIETARY:
+   /* Apple GPUs have no kernel tiling metadata: every implicit-modifier
+    * dmabuf is linear. Honeykrisp only exports dmabuf images with LINEAR
+    * or explicit-modifier tiling, and the asahi gallium driver maps
+    * INVALID to LINEAR on import and on implicit shared/scanout export.
+    */
+   case VK_DRIVER_ID_MESA_HONEYKRISP:
       screen->driver_workarounds.can_do_invalid_linear_modifier = true;
       break;
    default:
