@@ -472,20 +472,7 @@ agx_g17p_rt0_tile_layout_supported(const struct agx_tilebuffer_layout *tib)
             rgba16i_or_x));
 }
 
-/* Other layouts of two to eight targets share Apple's multi-target EOT
- * builtin, whose targets differ only in a per-format IMGWBLK selector, and a
- * background program without pixel transactions. Each target keeps its own
- * tile offset, so admit any unspilled layout whose formats all have a grounded
- * selector.
- *
- * Layered layouts are admitted on the same terms. The earlier `!tib->layered`
- * clause was the scope of what had been captured -- only the 2D builtin family
- * was on hand -- and not a hardware limit: Apple's factory emits the same
- * program for a 2D-ARRAY attachment, differing only in that it also publishes
- * the layer wire, and its per-target selector is still the only
- * format-dependent byte. Those texts are now recorded for two through eight
- * targets in agx3_g17p_array_eot.h, which is the full range this function
- * admits. */
+
 static enum agx_g17p_mrt_layout
 agx_g17p_classify_mixed_mrt(const struct agx_tilebuffer_layout *tib,
                             unsigned active_count)

@@ -311,11 +311,7 @@ test_agx3_pbe(void)
                                           &native, &msaa));
    }
 
-   /* Native gl_fbo_readback's full-size render target. The width/height split
-    * is pinned by the G17P PBE capture corpus, including independent 8192x8,
-    * 100x60 and 40x24 witnesses; this checks the exact EOT descriptor the
-    * production allocation must reach after compression is ruled out.
-    */
+
    static const uint8_t fullscreen_bytes[32] = {
       0x22, 0x0a, 0xe4, 0x67, 0x49, 0x78, 0x01, 0x00,
       0x00, 0x10, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,

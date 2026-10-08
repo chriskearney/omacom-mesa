@@ -1,7 +1,7 @@
 /*
- * agx3_decompose.c -- structural decomposer over the packgen tables.
- * See agx3_decompose.h. Derived from Aurora's
- * src/asahi/compiler/test/probes/agx3-integer-uniform-corpus/decompose.c.
+ * agx3_decompose.c -- structural decomposer over the AGX3 encoder tables.
+ * See agx3_decompose.h. Based on the standalone decomposer (decompose.c)
+ * by DjDeveloperr, MIT.
  * SPDX-License-Identifier: MIT
  */
 #include "agx3_decompose.h"

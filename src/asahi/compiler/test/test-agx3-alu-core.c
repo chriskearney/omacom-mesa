@@ -15,9 +15,7 @@
 static void
 test_native_fma_uniform_destination(void)
 {
-   /* Fifteen exact own terrain constant-program bytes, pipeline 109,
-    * J514S/macOS 26A428. The final ep5 form's extra release fields are
-    * excluded, as are uniform sources and modifiers. */
+
    const struct {
       uint16_t dest, src[3], wait;
       enum agx3_alu_hint hints[3];

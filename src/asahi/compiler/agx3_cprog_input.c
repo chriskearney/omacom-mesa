@@ -16,8 +16,7 @@ agx3_cprog_inputs_init(const uint64_t halves[AGX3_CPROG_INPUT_WORDS],
    memcpy(result.halves, halves, sizeof(result.halves));
    for (unsigned i = 0; i < AGX3_CPROG_INPUT_WORDS; ++i)
       result.count += __builtin_popcountll(halves[i]);
-   /* The 16-byte input-frame alignment is witnessed in native metadata.
-    * Leave an absent import frame absent. */
+
    if (result.count)
       result.storage_bytes =
          ((AGX3_CPROG_INPUT_TPS_BASE + result.count) * 2u + 15u) & ~15u;

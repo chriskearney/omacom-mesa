@@ -123,9 +123,7 @@ bool agx_ioto_g17p_compute_ldshdr_build(
 bool agx_ioto_g17p_compiler_ldshdr_pack(
    uint64_t shader_va, uint32_t fetch_span, void *output, size_t capacity);
 
-/* Raw LDSHDR f1 values from three explicitly MIT-licensed, output-positive
- * G17P compute witnesses. The names identify those witnesses; they do not
- * assign inferred hardware semantics to the anonymous field. */
+
 enum agx_ioto_g17p_compute_ldshdr_f1 {
    AGX_IOTO_G17P_COMPUTE_LDSHDR_F1_DIRECT_ADD3 = 0,
    AGX_IOTO_G17P_COMPUTE_LDSHDR_F1_GRID_HELPER = 1,

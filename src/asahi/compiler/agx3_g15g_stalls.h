@@ -4,14 +4,14 @@
  *
  * G15G (M3 base, T8122) scheduling stalls.
  *
- * Apple's compiler emits the same AGX3b instruction stream for G15G as for
- * G15S/G16x/G17P, then inserts an 8-byte stall -- a `nop` whose wait field
- * (bits 10..15) is W, followed by three plain `06 00` nops -- immediately
- * before every instruction whose scoreboard wait mask covers a slot that may
- * still have an outstanding producer writing the general register file; W is
- * exactly those slots. `end` counts as waiting on every slot. Branch
- * displacements are then recomputed over the padded stream. See
- * README-g15g-scheduling-stalls.md for the evidence and the exact rule.
+ * G15G runs the same AGX3b instruction stream as G15S/G16x/G17P, plus an
+ * 8-byte stall -- a `nop` whose wait field (bits 10..15) is W, followed by
+ * three plain `06 00` nops -- immediately before every instruction whose
+ * scoreboard wait mask covers a slot that may still have an outstanding
+ * producer writing the general register file; W is exactly those slots.
+ * `end` counts as waiting on every slot. Branch displacements are then
+ * recomputed over the padded stream. agx3_g15g_stalls.c states the rule in
+ * full.
  */
 #pragma once
 

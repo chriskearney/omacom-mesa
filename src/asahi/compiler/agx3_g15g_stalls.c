@@ -3,18 +3,34 @@
  * SPDX-License-Identifier: MIT
  *
  * G15G scheduling-stall insertion over a finished AGX3b instruction stream.
- * The rule and its derivation from Apple's own G15G/G15S output are in
- * README-g15g-scheduling-stalls.md; this file is a direct implementation of
- * that rule and is checked against Apple's placement by
- * test/test-agx3-g15g-stalls.c.
+ *
+ * The rule:
+ *
+ *  - An instruction is a register producer of slot s when its signal slot
+ *    (f12) is s (1..6) and its destination file (f9) is 2, the general
+ *    registers: device and threadgroup loads, special-register reads,
+ *    texture results, coefficient loads and threadgroup atomics with a
+ *    return. Producers into the staging banks (f9 = 4 or 5) are not.
+ *  - A forward may-dataflow tracks the set P of slots that may still owe a
+ *    register result: a producer adds its slot, a wait mask removes its
+ *    slots. Edges are fallthrough (not after `end`), b/bn targets, and an
+ *    edge from each exec-mask push/else to the else/pop that closes its
+ *    region, because a region with no active lanes runs as a no-op. Each
+ *    program starts with P empty: the stream start, and the instruction
+ *    after an `end` plus zero-nop filler.
+ *  - Every instruction whose wait mask W meets P gets a stall in front of it
+ *    with the value W & P. `end` counts as waiting on all six slots. A
+ *    2-byte waiting nop that covers pending slots becomes the stall itself.
+ *  - b/bn displacements (48-bit, from the branch start) are recomputed over
+ *    the padded stream and land on the target's stall, so the wait also runs
+ *    on the branch path.
  *
  * It works on bytes, not IR, so every emitter -- including hand-assembled
- * sequences -- is covered, and so it can be replayed on Apple's own G15G code
- * with the stalls stripped. Each instruction is decomposed into Apple's field
+ * sequences -- is covered. Each instruction is decomposed into its field
  * vector with the composer tables (agx3_decompose), which also yields its
- * length. The fields used are:
+ * length. test/test-agx3-g15g-stalls.c checks it. The fields used are:
  *
- *    wait mask  six consecutive per-mnemonic field ids (see wait_base())
+ *    wait mask  six consecutive per-mnemonic field ids (see wait_ids())
  *    f12        signal slot 1..6 of an asynchronous producer (push count on
  *               cndst, depth elsewhere in control flow)
  *    f9         destination file: 2 = general registers, 4/5 = the staging
@@ -68,8 +84,7 @@ struct ins {
  * Per-mnemonic id of the wait field for slot 1; slots 2..6 follow. Long
  * forms deposit these at encoded bits 12..17, which agx3_wait_fields() finds
  * automatically. The mnemonics below compress or relocate the mask in every
- * form, so their ids are taken from Apple's corpus (a stall's value always
- * equals the next instruction's wait mask) and agree with Mesa's own packers
+ * form, so their ids are listed here; they agree with Mesa's own packers
  * (agx3_alu_table.h, agx3_sr_core.c, agx3_tex_core.c, agx3_stage_core.c).
  */
 static const struct {
@@ -184,7 +199,7 @@ agx3_g15g_insert_stalls(const uint8_t *in, size_t in_size, uint8_t **out,
       /* Asynchronous producers carry their signal slot in f12 and their
        * destination file in f9: 2 is the general register file; 4 and 5
        * are the staging banks read by the texture, image, atomic and
-       * varying units, whose consumers Apple never pads. The exec-mask ops
+       * varying units, whose consumers never need a stall. The exec-mask ops
        * and selects reuse f12 for nesting with f9 = 0 or 1. */
       const uint64_t slot = d.fields[12], file = d.fields[9];
       if (I->kind == K_OTHER && slot >= 1 && slot <= 6 && file == 2)
@@ -239,7 +254,7 @@ agx3_g15g_insert_stalls(const uint8_t *in, size_t in_size, uint8_t **out,
    }
 
    /* Entries: the stream start and anything after `end` plus nop filler
-    * (Apple's container places the main program after the constant one). */
+    * (the code container places the main program after the constant one). */
    v[0].reached = n > 0;
    for (unsigned k = 1; k < n; ++k) {
       if (v[k].kind == K_NOP)

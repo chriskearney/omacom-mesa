@@ -1731,13 +1731,7 @@ agx_compile_nir(struct agx_device *dev, nir_shader *nir,
    struct agx_shader_key key = {
       .dev = agx_gather_device_key(dev),
       .has_scratch = !secondary,
-      /* Apple's G17P constant-colour fragment keeps literals in the main
-       * program (the byte-exact fs-flat-colour compiler ratchet covers that
-       * sequence). A promoted literal instead requires an Ioto direct-uniform
-       * range before a fragment with no asynchronous staging; that unwitnessed
-       * combination retires without shading on hardware. Keep ordinary UBO
-       * uniforms and proven compute/vertex promotion, but materialize fragment
-       * literals through the native immediate path. */
+
       .promote_constants =
          !(agx_chip_uses_native_gallium(dev->chip) && stage == MESA_SHADER_FRAGMENT),
       .no_stop = !terminal,
@@ -1805,6 +1799,17 @@ agx_compile_nir(struct agx_device *dev, nir_shader *nir,
                 _mesa_shader_stage_to_abbrev(stage), agx_chip_name(dev->chip));
       return compiled;
    }
+
+#ifdef MESA_M3_HAL200_PROFILE
+   /* The current HAL200 kernel does not program scratch helpers. Refuse a
+    * spilled executable before upload rather than submitting an unbacked
+    * stack. Existing draw/dispatch failure paths skip refused variants. */
+   if (compiled->b.info.scratch_size || compiled->b.info.preamble_scratch_size) {
+      mesa_loge("asahi: J613 HAL200 shader requires unsupported scratch storage");
+      compiled->failed = true;
+      return compiled;
+   }
+#endif
 
    agx2_stats_util_debug(debug, _mesa_shader_stage_to_abbrev(nir->info.stage),
                          &compiled->b.info.stats);
@@ -1916,19 +1921,7 @@ agx_compile_variant(struct agx_device *dev, struct pipe_context *pctx,
          NIR_PASS(_, nir, agx_gallium_nir_lower_g17p_1x_sample_shading);
       }
 
-      /* AGX3 has no equivalent of the AGX2 machine code agx_fast_link()
-       * splices around a linked fragment program to run it once per sample.
-       * Apple's own compiler unrolls the body instead, once per sample, in one
-       * program (probes/README-g17p-per-sample-fragment.md).
-       *
-       * An unrolled main cannot carry a separate epilog: the stores the split
-       * moves out -- colour, and depth/stencil, which it defers past discards
-       * -- would run once for a body that ran per sample. So keep the whole
-       * fragment in one program. Only the shape with nothing but depth and
-       * stencil to keep is taken here, which is what a multisample depth blit
-       * needs; a per-sample colour shader would also need its tilebuffer and
-       * blending built into the main, and keeps its existing named refusal.
-       */
+
       const uint64_t zs_outputs = BITFIELD64_BIT(FRAG_RESULT_DEPTH) |
                                   BITFIELD64_BIT(FRAG_RESULT_STENCIL);
       const bool unrolled_samples =
@@ -4337,10 +4330,7 @@ agx_launch_precomp(struct agx_batch *batch, struct agx_grid grid,
          .data = batch->cdm.current,
          .capacity = batch->cdm.end - batch->cdm.current,
       };
-      /* Meta copies and fills feed later graphics and CPU transfers. Preserve
-       * AGX_BARRIER_ALL's cache-visibility contract with Apple's grounded
-       * strong post-dispatch barrier. Direct API compute remains on the
-       * existing minimal flags-0 barrier. */
+
       const uint8_t barrier_flags =
          (barrier & AGX_BARRIER_ALL) ? 0x5 : 0;
       if (!agx3_g17p_native_compute_dispatch_append_with_barrier(
@@ -5386,12 +5376,7 @@ agx_g17p_emit_bind_state(struct agx_batch *batch, uint8_t *out,
    struct agx_fragment_face_2_packed face_2;
    agx_pack_fragment_face_2(&face_2, object_type, &ctx->fs->b.info);
 
-   /* The output select carries the vertex program's clip-distance planes,
-    * point size and viewport/layer selectors alongside the fragment bits;
-    * Apple's clip3 pipeline keeps the first three plane bits in this word.
-    * The G17P layout matches AGX2's OUTPUT_SELECT, so the compiler's packed
-    * selects merge as they do on other chips.
-    */
+
    uint32_t output_select;
    if (!agx_ppp_hal200_output_select_pack(
           dev->chip, vs->uvs.osel.opaque[0], ctx->linked.fs->cf.nr_bindings,

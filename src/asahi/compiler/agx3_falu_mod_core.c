@@ -129,13 +129,7 @@ agx3_falu_fma_uniform_negate(enum agx_isa_encoding enc, uint16_t dest,
          return false;
    }
 
-   /* Apple G15S loop witnesses: 09010e0f200a (uniform multiplier),
-    * 09010e0b21080200 (uniform addend), 09010e1721080202 (both).
-    * Uniform sources use f36/f53, distinct from GPR fields f35/f52.
-    * Own strict-math fragment-loop witnesses additionally combine a uniform
-    * with a negated GPR: 19032e0511800202 and 09012e8521060208. Apple hoists
-    * negated constants, so those are not witnesses for negated uniforms.
-    * Keep independent register hints and all six dependency slots. */
+
    struct agx3_field_kv ov[23] = {
       KV(2,dest), KV(18,src[1]),
       KV(42,(uniform_mask & 1) ? 3 : 2),

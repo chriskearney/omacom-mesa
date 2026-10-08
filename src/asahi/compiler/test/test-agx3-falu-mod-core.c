@@ -16,8 +16,7 @@
 static unsigned
 uniform_binary_vectors(void)
 {
-   /* Own J514S macOS Minecraft pipeline 110, ordinary GPR destinations.
-    * Each complete ADD/MUL instruction is an independent native byte oracle. */
+
    const struct {
       bool multiply; uint16_t dest, uniform, reg;
       bool uniform_neg, reg_neg, dest_cache, cache, discard;
@@ -154,10 +153,7 @@ mixed_fma_vectors(void)
 static unsigned
 uniform_fma_negate_vectors(void)
 {
-   /* Own strict-math G15S fragment loop, Metal 32023.921: complete native
-    * instructions combining a uniform operand with a negated GPR. Apple
-    * pre-negates the constant inputs; uniform-negate combinations below are
-    * encoder domain checks, not additional whole-instruction Apple vectors. */
+
    const struct {
       unsigned mask;
       uint16_t dest, src[3];
@@ -213,9 +209,7 @@ uniform_fma_negate_vectors(void)
 static unsigned
 uniform_fma_vectors(void)
 {
-   /* Fresh strict-math applegpu_g15s compiler witnesses, three loop kernels.
-    * Each row uses four independent values; the overwritten x GPR is discarded
-    * while the second varying argument remains live across iterations. */
+
    const struct {
       unsigned mask; uint16_t s0, add; uint8_t size, bytes[4][8];
    } vectors[] = {

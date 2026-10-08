@@ -358,8 +358,7 @@ append_g17p_load_drain(uint8_t *output, size_t capacity, size_t *offset)
 {
    uint8_t nop[AGX_IOTO_LOAD_NOP_SIZE];
 
-   /* G17P's witnessed EslBuilder protocol drains physical slot 2 with bit 1
-    * on the first NOP, followed by the three empty pipeline NOPs. */
+
    agx_ioto_load_pack_nop(2, nop);
    if (!append_record(output, capacity, offset, nop, sizeof(nop)))
       return false;
@@ -394,10 +393,7 @@ load_indirect_uniform_range(
          return false;
    }
 
-   /* Load the pointer into r2:r3 and retire physical slot 2 with G17P's
-    * witnessed four-NOP protocol before using that pair as another LDDEV's
-    * ordinary-GPR base.  Payload LDDEVs use the separate r4..r7 window and
-    * follow the same exact drain before their register-to-uniform COPYs. */
+
    const uint16_t pointer_half = 4;
    const uint16_t staging_half = 8;
    const struct agx3_mem_desc pointer = {

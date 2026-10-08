@@ -7,11 +7,6 @@ and a versioned manifest. Successful compilations publish nothing by default. Se
 `AGX_COMPILER_CAPTURE_SUCCESS=fragment` to retain successful fragment inputs;
 optionally set `AGX_COMPILER_CAPTURE_BINARY_HASH=12345678,abcdef01` to select
 executables by the eight-digit lowercase hash reported by HK_M4_SHADER_PROFILE.
-`HK_M4_PROGRAM_PROFILE=true` additionally reports the selected graphics shader
-body hash and byte count for every profiled stage, including hardware vertex
-programs. Use `body_hash` with the same capture filter; it hashes the compiler
-body before link-time prolog/epilog additions, not the full linked executable.
-The address report remains bounded and does not count all shader invocations.
 To retain the same source before and after a transform, use
 `AGX_COMPILER_CAPTURE_SOURCE_HASH` with the 64-digit source BLAKE3 printed by
 NIR shader bisection. Unlike the executable hash, this survives code-generation
@@ -25,13 +20,6 @@ Build and replay on the development host (no Vulkan device needed):
 ninja -C build/mesa-m4-asahi-host src/asahi/compiler/agx_shader_replay
 build/mesa-m4-asahi-host/src/asahi/compiler/agx_shader_replay BUNDLE/input.bin
 ```
-
-`--print-nir` prints the captured entry-point NIR. To inspect NIR after the
-successful compiler optimization pipeline, set
-`AGX_REPLAY_OPTIMIZED_NIR_OUTPUT=/path/to/new-file.nir`. This separate file includes
-the resulting preamble and main function. It refuses to overwrite an existing
-file and reports write failures. Record compiler options alongside the dump;
-offline statistics alone do not identify the executable selected by a live draw.
 
 The workspace `tools/compiler-replay.py` wrapper saves compiler stdout/stderr,
 input and executable SHA256 hashes, Git revision, dirty patch and hashes of
@@ -122,11 +110,3 @@ arithmetic. Run `agx3_graphics_compile_test --packed-hdr-only` on the host.
 This is offline compiler coverage; native EOT support and pixel readback remain
 necessary before qualifying the game. Partial write masks and explicit tile
 store coordinates are not enabled by this lowering.
-
-The CPU-only `--native-preamble` diagnostic also accepts a captured main AGX3b
-vertex program. It aligns the input/output uniform boundary to 128 bits and
-keeps constants in instructions because the experimental native vertex loader
-has no rodata binding. This changes only the diagnostic compiler key: the normal
-driver still disables vertex arithmetic preambles. Smaller offline bodies do
-not establish a hardware speedup; the retained arithmetic-only and input-CSE
-experiments preserved Minecraft pixels but regressed completed-frame timings.

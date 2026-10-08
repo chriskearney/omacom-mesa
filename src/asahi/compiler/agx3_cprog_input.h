@@ -58,8 +58,7 @@ struct agx3_cprog_import {
    uint8_t slot_mirror;
    uint16_t wait_mask;
    bool tps_live;
-   /* Preserve the native structural field without attributing its currently
-    * unresolved policy to CProg mode: native CProg witnesses use both values. */
+
    bool structural_flag;
 };
 

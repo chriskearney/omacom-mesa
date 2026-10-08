@@ -1184,15 +1184,7 @@ agx3_g17p_rt0_eot_program_generate(
       desc->imageblock.sample_size_B ==
          ALIGN_POT(count * desc->imageblock_offset1_B, 8) &&
       !high_offsets && desc->imageblock.nr_samples == 1;
-   /* The same program reads every target's offset from its own uniform, so
-    * targets of other formats may sit at any offset inside the sample. Its
-    * multisample form has the same length and registers (texture type 4
-    * changes three bytes per target); the imageblock carries the count.
-    *
-    * A layered framebuffer uses Apple's 2D-ARRAY builtin instead. It has the
-    * same uniform contract and differs only in also publishing the layer wire,
-    * which lengthens the program and costs one more GPR dword. Its multisample
-    * form likewise has the same length and registers. */
+
    const bool mixed_2d = desc && desc->shader_binary_size == 32 + 44 * count &&
                          desc->nr_gprs == 8;
    const bool mixed_array = desc &&

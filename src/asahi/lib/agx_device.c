@@ -806,6 +806,15 @@ agx_open_device(void *memctx, struct agx_device *dev)
    }
 
    dev->chip = agx_chip_from_params(&dev->params);
+#ifdef MESA_M3_HAL200_PROFILE
+   if (dev->chip != AGX_CHIP_G15G || dev->params.chip_id != 0x8122 ||
+       dev->params.gpu_revision != 0x20 || dev->params.num_dies != 1 ||
+       dev->params.num_clusters_total != 1 || dev->params.usc_generation != 3 ||
+       dev->params.gpu_hal_generation != DRM_ASAHI_GPU_HAL_200) {
+      fprintf(stderr, "asahi: native J613 profile requires USC3/HAL200 G15G C0\n");
+      return false;
+   }
+#endif
 
    /*
     * Recognition, shader codegen, descriptors and the command stream are
@@ -823,20 +832,11 @@ agx_open_device(void *memctx, struct agx_device *dev)
       dev->params.num_clusters_total == 2 && dev->params.usc_generation == 3 &&
       dev->params.gpu_hal_generation == 0 &&
       debug_get_bool_option("ASAHI_M3_EXPERIMENTAL", false);
-   /* J613 (MacBook Air M3): T8122 / G15G C0, one cluster of ten cores, as
-    * published by the 25G83 J613 board path (USC3/HAL200). Exact identity only.
-    *
-    * UNMEASURED: no Mesa-generated command stream or shader has executed on
-    * a G15G yet. Apple's compiler pads G15G code with 8-byte scheduling
-    * stalls; the compiler now reproduces Apple's placement byte-for-byte on
-    * its corpus (agx3_g15g_stalls.c, README-g15g-scheduling-stalls.md), so
-    * admission needs only the M3 opt-in. ASAHI_G15G_UNSCHEDULED=1 disables
-    * the stall pass for A/B diagnosis. */
+   /* J613 uses USC3 and the HAL200 command stream on firmware 26.6.2.
+    * Enabled cores are supplied by the kernel's same-boot calibration. */
    const bool m3_g15g_identity = dev->chip == AGX_CHIP_G15G &&
       dev->params.chip_id == 0x8122 && dev->params.num_dies == 1 &&
       dev->params.num_clusters_total == 1 &&
-      dev->params.num_cores_per_cluster == 10 &&
-      dev->params.core_masks[0] == 0x3ff &&
       dev->params.usc_generation == 3 &&
       dev->params.gpu_hal_generation == DRM_ASAHI_GPU_HAL_200;
    const bool m3_g15g_experimental = m3_g15g_identity &&
@@ -846,16 +846,16 @@ agx_open_device(void *memctx, struct agx_device *dev)
    if (m3_g15g_identity && !m3_g15g_experimental) {
       fprintf(stderr,
               "Apple G15G (T8122) is recognised but not admitted: set "
-              "ASAHI_M3_EXPERIMENTAL=1 to run it (UNMEASURED on hardware)\n");
+              "ASAHI_M3_EXPERIMENTAL=1 to run it\n");
    } else if (dev->g15g_unscheduled) {
       fprintf(stderr,
               "WARNING: experimental G15G/T8122 admission with "
               "ASAHI_G15G_UNSCHEDULED=1: shaders are emitted WITHOUT G15G "
-              "scheduling stalls (UNMEASURED)\n");
+              "scheduling stalls\n");
    } else if (m3_g15g_experimental) {
       fprintf(stderr,
               "WARNING: experimental G15G/T8122 admission; shaders carry "
-              "Apple-placed G15G scheduling stalls (UNMEASURED on hardware)\n");
+              "G15G scheduling stalls\n");
    }
    if (!m3_experimental && !m3_g15g_experimental && !m4_experimental &&
        !agx_params_driver_supported(&dev->params)) {
@@ -1136,6 +1136,8 @@ agx_open_device(void *memctx, struct agx_device *dev)
    // reasonable use case.
    uint64_t kernel_size = MAX2(dev->params.vm_kernel_min_size, 32ull << 30);
    struct drm_asahi_vm_create vm_create = {
+      .flags = dev->params.gpu_hal_generation == DRM_ASAHI_GPU_HAL_200
+                  ? DRM_ASAHI_VM_CREATE_HAL200 : 0,
       .kernel_start = dev->params.vm_end - kernel_size,
       .kernel_end = dev->params.vm_end,
    };

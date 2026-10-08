@@ -130,11 +130,7 @@ bool agx3_alu_fma_minifloat(enum agx_isa_encoding enc, uint16_t dest,
 
 /* Native f32 FMA with a minifloat multiplier and an optionally negated f32
  * register addend. The addend modifier remains fused and rounds only once. */
-/* Own J514S/macOS 26A428 terrain constant program has fifteen short plain f32
- * FMAs writing uniform halves directly (f9=3, destination f3). All inputs
- * are registers; uniform sources/modifiers are deliberately absent. This
- * bounded form preserves source hints and only the witnessed slot-3 wait.
- * No compiler policy uses it yet. Failure leaves output/length untouched. */
+
 bool agx3_alu_fma_to_uniform(enum agx_isa_encoding enc, uint16_t uniform_half,
                              const uint16_t src[3],
                              const enum agx3_alu_hint hints[3],

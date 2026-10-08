@@ -1,16 +1,16 @@
 /*
- * agx3_decompose.h -- inverse of agx3_compose: recover a form and Apple's
- * anonymous field vector from encoded AGX3 instruction bytes.
+ * agx3_decompose.h -- inverse of agx3_compose: recover a form and its field
+ * vector from encoded AGX3 instruction bytes.
  *
- * Structural search over the same packgen tables the encoder uses: enumerate
- * each candidate form's choice-group alternatives, derive the field values the
+ * Structural search over the same tables the encoder uses: enumerate each
+ * candidate form's choice-group alternatives, derive the field values the
  * target bytes imply (predicates pin selectors, direct deposits recover
  * operands, LUT deposits are inverted by enumeration), then keep a candidate
  * only if agx3_compose() re-encodes it to exactly the same bytes. A reported
- * decomposition is therefore a fact about the encoder, not a guess.
+ * decomposition therefore always round-trips through the encoder.
  *
- * Derived from Aurora's agx3-integer-uniform-corpus/decompose.c (MIT), made
- * reentrant and extended to find the instruction length itself.
+ * Based on the standalone decomposer (decompose.c) by DjDeveloperr, MIT;
+ * made reentrant and extended to find the instruction length itself.
  */
 #ifndef AGX3_DECOMPOSE_H
 #define AGX3_DECOMPOSE_H

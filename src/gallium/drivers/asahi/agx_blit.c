@@ -522,15 +522,7 @@ agx_blitter_save(struct agx_context *ctx, struct blitter_context *blitter,
    }
 }
 
-/* G17P stores a multisample colour tile by resolving it directly into a
- * matching single-sample PBE target at EOT. Attach exact full-resource API
- * resolves to the still-active source batch instead of first requesting the
- * unwitnessed multisample PBE store needed by a second render pass.
- *
- * DRI additionally seeds its private multisample window drawable from the WSI
- * image. Keep that reverse copy restricted to the original WSI binding shape;
- * its later swap is the operation that supplies the direct resolve target.
- */
+
 static bool
 agx_g17p_rgba8_resolve_format(enum pipe_format format)
 {
@@ -700,19 +692,7 @@ agx_blit(struct pipe_context *pipe, const struct pipe_blit_info *info)
 {
    struct agx_context *ctx = agx_context(pipe);
 
-   /* G17P does not have a grounded fragment ABI for exporting stencil. That
-    * is not a hardware-resource limitation: standalone stencil is native S8,
-    * and u_transfer_helper represents every packed API Z/S image as a native
-    * depth image plus a separate native S8 image.
-    *
-    * Lower the stencil aspect at that representation boundary. Depth keeps
-    * using the depth blitter, whose G17P depthf sequence is Apple-witnessed.
-    * Reinterpret each physical S8 image as R8_UINT and use the ordinary
-    * integer-colour blitter, avoiding an unwitnessed stencilf contract.
-    * R8_UINT and S8_UINT have the same one-byte AIL layout and integer
-    * conversion, so this is a lossless plane copy, including scaling and
-    * array-layer selection performed by u_blitter.
-    */
+
    if (agx_chip_command_stream_generation(agx_device(pipe->screen)->chip) !=
           AGX_CS_GENERATION_AGX2 &&
        agx_g17p_stencil_plane_blit_shape(info)) {

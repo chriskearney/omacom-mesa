@@ -1,6 +1,0 @@
-[Desktop Entry]
-Name=Hyprland (J613 25G83 D3)
-Comment=Native GPU session for the separately qualified J613 D3 kernel
-Exec=/usr/libexec/j613-d3-gpu-env /usr/bin/start-hyprland
-Type=Application
-DesktopNames=Hyprland

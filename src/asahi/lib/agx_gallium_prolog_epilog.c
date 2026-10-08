@@ -838,24 +838,7 @@ agx_gallium_nir_fs_epilog(nir_builder *b, const void *key_)
       NIR_PASS(_, b->shader, nir_lower_alpha_to_coverage, false,
                NULL);
 
-   /* Native late SampleMask writes cross the main/epilog split in a register.
-    * Combine them with alpha coverage before the one test-triggering update,
-    * as Apple's G17P sample-mask + alpha-coverage fragment does. Applying the
-    * mask only to the tile store would still update depth for killed samples.
-    * Early-tested shaders must not run the tests again.
-    *
-    * At two and four samples the G17P depth/stencil write names the surviving
-    * samples in its own per-sample coverage words, so it already excludes the
-    * killed ones and needs no coverage update of its own. Issuing one anyway
-    * makes the hardware run the depth/stencil test on each surviving sample
-    * twice -- measured as four INCREMENT_AND_WRAP steps where the API asked
-    * for two, on renderpasses.*.multisample.d32_sfloat_s8_uint.samples_4. At
-    * one sample the write's word has no mask field at all, so there the kill
-    * is the only thing that can hold the test back, as
-    * fragment_operations.early_fragment.discard_no_early_fragment_tests_stencil
-    * depends on. A deferred epilog is cloned per sample after this point and
-    * coalesces its kills itself (agx_nir_hoist_g17p_zs_writes), so leave that
-    * shape alone. */
+
    const bool zs_carries_write_samples =
       (key->link.write_z || key->link.write_s) && key->nr_samples > 1 &&
       !key->defer_monolithic_msaa;
@@ -1339,25 +1322,7 @@ agx_gallium_nir_gather_fs_colour_exports(const nir_shader *s_, uint8_t *loc_writ
    }
 }
 
-/*
- * Give a G17P tile access the sample-mask source its hardware form actually
- * takes.
- *
- * At one sample the operand is the whole-pixel immediate, which is what Mesa
- * already spells as ALL_SAMPLES, so nothing has to happen.
- *
- * At two or four samples there is no immediate form at all. Apple's compiler
- * reads the live coverage word out of a special register and passes that
- * register as the mask -- raw for a per-pixel shader ("every sample this
- * fragment covers"), ANDed with a one-hot bit for each iteration of an
- * unrolled per-sample shader. Reproduce exactly those two shapes.
- *
- * A non-constant mask is already an expression in a register, so it is left
- * alone and reaches the packer as the register form by itself. An epilog
- * unrolled per sample (agx_nir_unroll_g17p_samples) has folded each sample's
- * `mask & active_samples` to that sample's one-hot constant beforehand, so it
- * too becomes coverage ANDed with the sample's bit.
- */
+
 struct g17p_tile_sample_state {
    unsigned samples;
    nir_def *coverage;

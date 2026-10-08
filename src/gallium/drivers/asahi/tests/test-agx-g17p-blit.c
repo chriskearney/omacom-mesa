@@ -125,10 +125,7 @@ build_es3_bitops_txf(void)
    nir_def *bit_value = nir_iand_imm(
       &b, nir_ixor(&b, reversed, nir_ishl_imm(&b, count, 3)), 0xff);
    nir_def *scale = nir_fmul_imm(&b, nir_u2f32(&b, bit_value), 1.0f / 255.0f);
-   /* This exact f16 -> f32 -> multiply chain is the remaining ext.frag
-    * failure from Hyprland's built-in corpus. The widening must stay explicit
-    * through the backend optimizer when the post-RA mixed multiply cannot
-    * carry the combined producer wait and lifetime hints. */
+
    nir_def *rounded_half = nir_f2f16(&b, nir_channel(&b, &tex->def, 3));
    nir_def *mixed_product = nir_fmul(
       &b, nir_f2f32(&b, rounded_half), nir_fadd_imm(&b, scale, 1.0f));
@@ -515,20 +512,7 @@ check_direct_resolve_shapes(void)
    return true;
 }
 
-/* A depth blit whose source and destination carry the same sample count is
- * the shape u_blitter shades once per sample: it turns on sample shading for
- * `src_samples > 1 && src_samples == dst_samples`. G17P has no per-sample
- * fragment execution -- agx_fast_link() refuses the AGX2 machine-code sample
- * loop -- so the fragment program fails to link and the draw is dropped, which
- * is what fails
- * KHR-GL30.framebuffer_blit.multisampled_to_singlesampled_blit_depth_config_test.
- *
- * The body is unrolled over the samples instead, which is what Apple's own
- * compiler does, and the whole run of depth stores shares one pixel
- * transaction (probes/README-g17p-per-sample-fragment.md). Run the blit
- * through the shim, which builds the same programs without a GPU, and hold it
- * to producing one.
- */
+
 static bool
 check_msaa_depth_blit(struct pipe_context *pctx, unsigned samples)
 {

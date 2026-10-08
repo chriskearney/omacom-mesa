@@ -122,12 +122,7 @@ agx_ppp_hal200_fragment_controls_pack(
 
    const uint32_t tri_merge_disable = UINT32_C(1) << 26;
 
-   /* updateFragmentShaderISPState masks these semantic fields into the
-    * HAL200 SECONDARY word.  Bit 26 is deliberately absent: Apple's G17P
-    * metadata leaves it clear for implicit texture gradients, explicit
-    * gradients, storage writes, and shadow sampling.  The generation-neutral
-    * linker sets its legacy bit for all of those cases, so it cannot be copied
-    * as native shader metadata. */
+
    const uint32_t linked_native_mask = UINT32_C(0xe2600000);
    uint32_t secondary = (secondary_original & ~tri_merge_disable) |
                         (fields->linked_control & linked_native_mask);
@@ -411,11 +406,7 @@ agx_ppp_hal200_fragment_face_depth_pack(
    if (!out || !agx_chip_uses_hal200_ioto(chip) || conservative_depth > 3)
       return false;
 
-   /* Native __GPU_LD_MD root2.field4 -> FragmentProgramVariant+0xfcd
-    * (216ba0bac..bd8), then updateFragmentShaderISPState (216c71904..950)
-    * inserts this mode into both SECONDARY face words. Isolated native
-    * witnesses give ANY=0, GREATER=1, LESS=2, UNCHANGED=3; adding a late
-    * atomic to either conservative depth shader changes its mode to ANY. */
+
    unsigned mode = early_tests ? 3 : writes_memory ? 0 : conservative_depth;
    *out = (original & ~UINT32_C(0x00c00000)) | (mode << 22);
    return true;

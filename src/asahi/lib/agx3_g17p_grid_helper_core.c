@@ -7,11 +7,7 @@
 
 #include <string.h>
 
-/*
- * `xcrun metal-nt -arch applegpu_g17p` output for agx3_g17p_grid_helper_source().
- * SHA-256 a7b47ac674d55766863a0b762cc23576155c25aec5e9f69673b4e29700d8c9c7.
- * Byte-identical to the tail of m1n1's captured G17P GRID_SETUP image.
- */
+
 static const uint8_t agx3_g17p_grid_helper_code[
    AGX3_G17P_GRID_HELPER_SHADER_SIZE] = {
    0x2c, 0x8c, 0x09, 0x27, 0x60, 0x00, 0x00, 0x80,

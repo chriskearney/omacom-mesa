@@ -11,6 +11,8 @@
 #include "asahi/lib/agx3_compute_program_core.h"
 #include "asahi/lib/agx_ioto_program_core.h"
 
+#include "compiler/shader_enums.h"
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -22,6 +24,8 @@ extern "C" {
 /* G15/G16 fragment constant-program input publication. This is a conservative
  * drain, not a claim about the minimum instruction latency on other chips. */
 #define HK_AGX3_FRAGMENT_PREAMBLE_DRAIN_SIZE 16
+
+#define HK_AGX3_MAX_COLOR_ATTACHMENTS (FRAG_RESULT_MAX - FRAG_RESULT_DATA0)
 
 /* Append a compiled constant program after the loader's uniform writes, keeping
  * the fragment dependency release last. Both inputs must end in STOP; the
@@ -234,7 +238,7 @@ struct hk_agx3_g17p_rt0_eot_program_desc {
    uint64_t pbe_argument_va;
    /* RT0 byte offset inside one imageblock sample (native kind5 argument).
     * Published as a zero-extended32-bit value in uniform halves4..5. */
-   uint8_t imageblock_offsets_B[AGX_IOTO_MAX_COLOR_ATTACHMENTS];
+   uint8_t imageblock_offsets_B[HK_AGX3_MAX_COLOR_ATTACHMENTS];
    uint8_t attachment_count;
    uint32_t shader_binary_size;
    uint32_t scratch_size;

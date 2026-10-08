@@ -334,11 +334,7 @@ agx_nir_lower_g17p_combined_sampler(
    return true;
 }
 
-/* Reuse the witnessed texture0/sampler0 ABI for repeated accesses to one
- * statically bound combined descriptor. Ordinary descriptor-set reads (UBOs,
- * for example) keep their separate fragment root and must not be removed.
- * Call on a clone: a residual unsupported handle can reject after DCE.
- */
+
 bool
 agx_nir_lower_g17p_repeated_sampler(
    nir_shader *shader, struct agx_g17p_combined_sampler_binding *binding)

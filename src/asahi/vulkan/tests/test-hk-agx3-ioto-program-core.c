@@ -2291,9 +2291,7 @@ test_vertex_preamble_external_publication(void)
        sizeof(loader) - 4 + HK_AGX3_FRAGMENT_PREAMBLE_DRAIN_SIZE))) &
        ((UINT64_C(1) << 48) - 1), false, branch));
    CHECK(!memcmp(output + length - sizeof(branch), branch, sizeof(branch)));
-   /* Native GPU0 B(-88): source = base+512+28, target = base+452.
-    * This checks relocation against a retained byte witness, rather than
-    * merely comparing two calls to the same address calculation. */
+
    const uint8_t native_backwards[] = {
       0x0f, 0x00, 0x54, 0xa8, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00,
    };

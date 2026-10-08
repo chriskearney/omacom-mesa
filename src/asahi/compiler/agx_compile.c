@@ -1005,17 +1005,7 @@ agx_emit_store_zs(agx_builder *b, nir_intrinsic_instr *instr)
    return agx_zs_emit(b, agx_src_index(&instr->src[0]), zs, base);
 }
 
-/* Unpack already-loaded normalized halves into `dest`. A byte format packs
- * two channels into each half; a 16-bit one occupies a half per channel and
- * is recollected into the pair the conversion consumes. Tile and device
- * traffic differ only in how the halves arrive, so both share this tail.
- *
- * `read_mask` names the channels anything reads: a pair with no read lane
- * needs no conversion. With `split_dest` false the channels are only cached
- * as the collect's sources, so readers take each `normflt` result where it
- * was written and the collected vector itself stays dead; the device
- * (vertex fetch) path uses that, like Apple's vertex programs, which read the
- * conversion results in place. */
+
 static void
 agx_unpack_normalized_halves_agx3(agx_builder *b, agx_index dest,
                                   agx_index *halves, enum agx_format format,
@@ -1226,12 +1216,7 @@ agx_emit_load(agx_builder *b, agx_index dest, nir_intrinsic_instr *instr)
       assert(nr >= 1 && nr <= 4 && packed_count == 0);
       assert(dest.size == AGX_SIZE_16 || dest.size == AGX_SIZE_32);
 
-      /* Device memory provides raw bytes/halves, with no format conversion:
-       * agx3_fmt_to_width() has no normalized device witness, so a load left
-       * carrying one is refused at the packer and the draw is dropped. Keep
-       * the element width and index scaling intact and reuse the grounded
-       * normalized unpack the tile load already uses. Byte loads reserve an
-       * aligned 32-bit payload even for a single channel. */
+
       agx_index packed = norm8 ? agx_temp(b->shader, AGX_SIZE_32)
                               : agx_vec_temp(b->shader, AGX_SIZE_16, nr);
       agx_instr *load = agx_device_load_to(

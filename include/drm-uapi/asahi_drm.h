@@ -362,6 +362,12 @@ struct drm_asahi_get_params {
 	__u64 size;
 };
 
+/* HAL200 clients explicitly acknowledge the selected command ABI. Legacy
+ * kernels and legacy userspace retain zero flags. */
+enum drm_asahi_vm_create_flags {
+	DRM_ASAHI_VM_CREATE_HAL200 = (1U << 0),
+};
+
 /**
  * struct drm_asahi_vm_create - Arguments passed to DRM_IOCTL_ASAHI_VM_CREATE
  */
@@ -390,8 +396,8 @@ struct drm_asahi_vm_create {
 	/** @vm_id: Returned VM ID */
 	__u32 vm_id;
 
-	/** @pad: MBZ */
-	__u32 pad;
+	/** @flags: HAL200 acknowledgement; zero on legacy devices. */
+	__u32 flags;
 };
 
 /**

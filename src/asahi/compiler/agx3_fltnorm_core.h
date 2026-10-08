@@ -241,7 +241,7 @@ struct agx3_normflt_desc {
    bool two_lanes;     /* unpack both bytes; false = one lane */
    uint16_t wait_mask; /* bit i waits scoreboard slot i + 1 */
    bool snorm;        /* f40; sign-extend each byte before normalization */
-   bool is_16bit;     /* Neo native R/RG16 witnesses: f40 mode 2/3 */
+   bool is_16bit;
 };
 
 bool agx3_normflt_encode(enum agx_isa_encoding enc,

@@ -3291,11 +3291,7 @@ agx3_is_nested_loop_push(const agx_instr *I)
           agx3_cf_is_zero(I->src[0]) && agx3_cf_is_zero(I->src[1]);
 }
 
-/* Apple's plain arithmetic loops compute their persistent predicate before
- * independent FMAs. Limit this diagnostic to a single loop test and at most
- * eight FFMA instructions in one basic block. No memory, mask or flag-writing
- * operation is crossed. The pack walk additionally requires an empty
- * scoreboard before publishing the compare. */
+
 static const agx_instr *
 agx3_early_loop_compare(const agx_block *block, const agx_instr *first)
 {
@@ -3407,12 +3403,7 @@ agx3_try_control_flow(struct util_dynarray *emission,
        * is the number of exec-mask levels a break exits and is not this
        * depth. The linear pack walk tracks each native nested-loop push and
        * its matching backedge pop. */
-      /* A compare's slot is busy only through its CND. The optional early
-       * integer predicate crosses only flag-preserving FFMA instructions.
-       * Apple's seven- and
-       * eight-deep nested loops (compiler/test/probes/g16g-nested-loops.metal)
-       * test every level through flag slot 1, so deeper nests wrap around
-       * the six slots rather than being refused. */
+
       const unsigned flag_slot =
          is_break_if || is_while ? (loop_depth - 1) % 6 : 0;
       if (!compare_prepared &&
@@ -7762,8 +7753,7 @@ agx3_pack_binary_unscheduled(agx_context *ctx, struct util_dynarray *emission)
             if (I->saturate || I->nr_dests != 1 || I->nr_srcs != 2 ||
                 !agx3_vary_reg32(I->dest[0]) || agx_channels(I->dest[0]) != 1)
                AGX3_REFUSE(I);
-            /* ADD and MUL commute. Preserve modifiers and GPR lifetime
-             * when placing the uniform in the witnessed first source. */
+
             const bool uniform_first = I->src[0].type == AGX_INDEX_UNIFORM;
             const agx_index uniform = I->src[uniform_first ? 0 : 1];
             const agx_index reg = I->src[uniform_first ? 1 : 0];
@@ -8122,14 +8112,7 @@ fail:
    return false;
 }
 
-/*
- * G15G (M3 base) needs Apple's scheduling stalls in front of every consumer
- * of an outstanding register-file producer; see agx3_g15g_stalls.h and
- * README-g15g-scheduling-stalls.md. The pass rewrites the finished part as
- * bytes, so every emitter above -- including the hand-assembled EOT
- * programs -- is covered, and it recomputes each b/bn displacement over the
- * padded stream. Offsets recorded into the shader info are remapped.
- */
+
 static bool
 agx3_apply_scheduling_stalls(agx_context *ctx, struct util_dynarray *emission,
                              unsigned initial_size)
