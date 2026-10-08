@@ -1035,6 +1035,9 @@ hk_image_init(struct hk_device *dev, struct hk_image *image,
       uint64_t modifier = DRM_FORMAT_MOD_INVALID;
 
       if (mod_explicit_info) {
+         if (mod_explicit_info->drmFormatModifierPlaneCount != image->plane_count)
+            return vk_error(dev,
+                            VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT);
          modifier = mod_explicit_info->drmFormatModifier;
       } else {
          const struct VkImageDrmFormatModifierListCreateInfoEXT *mod_list_info =
@@ -1067,8 +1070,12 @@ hk_image_init(struct hk_device *dev, struct hk_image *image,
 
       uint32_t linear_stride_B = 0;
       if (mod_explicit_info &&
-          image->vk.drm_format_mod == DRM_FORMAT_MOD_LINEAR)
+          image->vk.drm_format_mod == DRM_FORMAT_MOD_LINEAR) {
+         if (mod_explicit_info->pPlaneLayouts[plane].rowPitch > UINT32_MAX)
+            return vk_error(dev,
+                            VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT);
          linear_stride_B = mod_explicit_info->pPlaneLayouts[plane].rowPitch;
+      }
 
       bool compressed =
          hk_map_compression(dev, pCreateInfo, plane, image->vk.drm_format_mod);
@@ -1102,7 +1109,26 @@ hk_image_init(struct hk_device *dev, struct hk_image *image,
          .renderable = true,
       };
 
+      if (mod_explicit_info &&
+          image->vk.drm_format_mod == DRM_FORMAT_MOD_LINEAR &&
+          (linear_stride_B % 16 ||
+           linear_stride_B < util_format_get_stride(
+                                image->planes[plane].layout.format,
+                                image->planes[plane].layout.width_px)))
+         return vk_error(dev,
+                         VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT);
+
       ail_make_miptree(&image->planes[plane].layout);
+
+      if (mod_explicit_info) {
+         uint64_t offset_B = mod_explicit_info->pPlaneLayouts[plane].offset;
+         if (offset_B % HK_PLANE_ALIGN_B ||
+             offset_B > UINT64_MAX - image->planes[plane].layout.size_B)
+            return vk_error(dev,
+                            VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT);
+         image->planes[plane].explicit_layout = true;
+         image->planes[plane].layout_offset_B = offset_B;
+      }
    }
 
    return VK_SUCCESS;
@@ -1238,8 +1264,12 @@ hk_image_plane_add_req(struct hk_image_plane *plane, bool sparse,
    assert(util_is_power_of_two_or_zero64(plane_align_B));
 
    *align_B = MAX2(*align_B, plane_align_B);
-   *size_B = align64(*size_B, plane_align_B);
-   *size_B += plane->layout.size_B;
+   if (plane->explicit_layout) {
+      *size_B = MAX2(*size_B, plane->layout_offset_B + plane->layout.size_B);
+   } else {
+      *size_B = align64(*size_B, plane_align_B);
+      *size_B += plane->layout.size_B;
+   }
 }
 
 static void
@@ -1447,8 +1477,8 @@ hk_get_image_subresource_layout(UNUSED struct hk_device *dev,
    const uint8_t p = hk_image_aspects_to_plane(image, isr->aspectMask);
    const struct hk_image_plane *plane = &image->planes[p];
 
-   uint64_t offset_B = 0;
-   if (!image->disjoint) {
+   uint64_t offset_B = plane->layout_offset_B;
+   if (!plane->explicit_layout && !image->disjoint) {
       uint32_t align_B = 0;
       /* TODO: sparse? */
       for (unsigned plane = 0; plane < p; plane++)
@@ -1519,7 +1549,9 @@ static void
 hk_image_plane_bind(struct hk_device *dev, struct hk_image_plane *plane,
                     struct hk_device_memory *mem, uint64_t *offset_B)
 {
-   *offset_B = align64(*offset_B, HK_PLANE_ALIGN_B);
+   uint64_t binding_offset_B = plane->explicit_layout
+                                 ? *offset_B + plane->layout_offset_B
+                                 : align64(*offset_B, HK_PLANE_ALIGN_B);
 
    if (plane->va) {
 #if 0
@@ -1527,19 +1559,20 @@ hk_image_plane_bind(struct hk_device *dev, struct hk_image_plane *plane,
                              mem->bo,
                              plane->addr,
                              plane->va,
-                             *offset_B,
+                             binding_offset_B,
                              plane->nil.pte_kind);
 #endif
       UNREACHABLE("todo");
    } else {
-      plane->addr = mem->bo->va->addr + *offset_B;
-      plane->map = agx_bo_map(mem->bo) + *offset_B;
-      plane->rem = mem->bo->size - (*offset_B);
+      plane->addr = mem->bo->va->addr + binding_offset_B;
+      plane->map = agx_bo_map(mem->bo) + binding_offset_B;
+      plane->rem = mem->bo->size - binding_offset_B;
       plane->private_binding =
          !(mem->bo->flags & (AGX_BO_SHARED | AGX_BO_SHAREABLE));
    }
 
-   *offset_B += plane->layout.size_B;
+   if (!plane->explicit_layout)
+      *offset_B = binding_offset_B + plane->layout.size_B;
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
