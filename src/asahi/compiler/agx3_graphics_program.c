@@ -1147,7 +1147,12 @@ agx3_g17p_rt0_eot_program_generate(
                     desc->nr_gprs == 8 && desc->staging_halfs == 8 &&
                     (desc->attachment_count == 0 ||
                      desc->attachment_count == 1);
-   const bool rgba8_mrt = desc && desc->shader_binary_size == 120 &&
+   /* G15G emits a 136-byte two-RGBA8 EOT with the same two-target
+    * uniform and register ABI. Keep this size specific to G15G. */
+   const bool rgba8_mrt = desc &&
+                          (desc->shader_binary_size == 120 ||
+                           (chip == AGX_CHIP_G15G &&
+                            desc->shader_binary_size == 136)) &&
                           desc->nr_gprs == 8 &&
                           desc->staging_halfs == 16 &&
                           desc->attachment_count == 2 &&
@@ -1205,6 +1210,7 @@ agx3_g17p_rt0_eot_program_generate(
    const bool multi_mrt = raw32_mrt || mixed_mrt;
    if (!program || !agx_chip_uses_native_gallium(chip) || !desc ||
        (!rt0 && !dual_mrt && !multi_mrt) ||
+       (chip == AGX_CHIP_G15G && desc->scratch_size) ||
        (!mixed_mrt && high_offsets) ||
        !desc->pbe_argument_va ||
        desc->pbe_argument_va > UINT64_C(0xffffffffffff) -

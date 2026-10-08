@@ -4421,6 +4421,23 @@ agx_build_bg_eot(struct agx_batch *batch, bool store, bool partial_render)
    }
 
    if (agx_chip_uses_native_gallium(dev->chip)) {
+      if (!store) {
+         bool reload = false;
+         for (unsigned rt = 0; rt < PIPE_MAX_COLOR_BUFS; ++rt)
+            reload |= key.op[rt] == AGX_BG_LOAD;
+
+         /* An attachment with undefined contents may reload its allocated
+          * storage. Keep initialized targets intact while using the uniform
+          * reload operation required by the native MRT background program. */
+         if (reload) {
+            for (unsigned rt = 0; rt < PIPE_MAX_COLOR_BUFS; ++rt) {
+               if (batch->key.cbufs[rt].texture &&
+                   key.op[rt] == AGX_BG_EOT_NONE)
+                  key.op[rt] = AGX_BG_LOAD;
+            }
+         }
+      }
+
       /* Match each admitted tile layout to its complete background/EOT
        * program and argument layout. */
       if (!agx_gallium_g17p_tile_layout_supported(

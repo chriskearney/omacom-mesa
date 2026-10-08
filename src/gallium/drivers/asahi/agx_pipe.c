@@ -1138,6 +1138,13 @@ agx_clear(struct pipe_context *pctx, unsigned buffers,
       return;
 
    unsigned fastclear = buffers & ~(batch->draw | batch->load);
+   if (agx_chip_uses_native_gallium(agx_device(pctx->screen)->chip) &&
+       batch->key.nr_cbufs > 1) {
+      /* Native MRT background programs share one operation across targets.
+       * Draw colour clears with a write mask so other targets retain their
+       * contents, including when only some attachments are initialized. */
+      fastclear &= ~PIPE_CLEAR_COLOR;
+   }
    unsigned slowclear = buffers & ~fastclear;
 
    assert(scissor_state == NULL &&
@@ -2637,8 +2644,8 @@ agx_screen_create(int fd, struct renderonly *ro,
 
    agx_disk_cache_init(agx_screen);
 
-   /* TODO: Refactor readonly data? */
-   {
+   /* Native samplers are uploaded through the descriptor pool. */
+   if (!agx_chip_uses_native_gallium(agx_screen->dev.chip)) {
       struct agx_bo *bo =
          agx_bo_create(&agx_screen->dev, 16384, 0, 0, "Rodata");
 
