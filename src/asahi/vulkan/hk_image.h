@@ -51,6 +51,8 @@ hk_get_image_format_features(struct hk_physical_device *pdevice,
 
 struct hk_image_plane {
    struct ail_layout layout;
+   bool explicit_layout;
+   uint64_t layout_offset_B;
    uint64_t addr;
    struct agx_va *va;
 
