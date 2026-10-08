@@ -1116,17 +1116,20 @@ libvulkan_asahi = shared_library(
   install : true,
 )
 
-if with_tests
-  test('hk_explicit_plane_layout',
-    executable('hk-explicit-plane-layout',
+hk_explicit_plane_layout_test = executable('hk-explicit-plane-layout',
       files('tests/test-hk-explicit-plane-layout.c'),
       include_directories : [inc_gallium, inc_gallium_aux, inc_include,
                              inc_src, inc_asahi, inc_virtio_gpu, inc_virtio_vdrm],
       dependencies : [hk_deps],
       link_with : [libhk, libasahi_lib, libasahi_layout, libasahi_compiler],
-      c_args : ['-Wno-c2x-extensions', '-ffunction-sections', '-fdata-sections'],
+      c_args : ['-Wno-c2x-extensions', '-ffunction-sections', '-fdata-sections',
+                '-UNDEBUG'],
       link_args : ['-Wl,--gc-sections'],
-    ),
+      build_by_default : false,
+)
+
+if with_tests
+  test('hk_explicit_plane_layout', hk_explicit_plane_layout_test,
     suite : ['asahi'],
   )
 endif
