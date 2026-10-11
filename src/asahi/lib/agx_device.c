@@ -1193,8 +1193,11 @@ agx_open_device(void *memctx, struct agx_device *dev)
 
    /* The M3 owned parameter pool and render graph occupy the first 128 MiB.
     * Reserve the portion above the common 8 MiB alias start before allocating
-    * command streams, matching m3_runtime::new_vm. */
-   if (agx_chip_uses_g15s_runtime(dev->chip) &&
+    * command streams, matching m3_runtime::new_vm. G15C reserves the
+    * runtime's ranges from its table below instead. */
+   const bool m3_fixed_reservations =
+      dev->chip == AGX_CHIP_G15S || dev->chip == AGX_CHIP_G15G;
+   if (m3_fixed_reservations &&
        !util_vma_heap_alloc_addr(&dev->g17p_vdm_alias_heap,
                                 AGX_G17P_VDM_ALIAS_BASE,
                                 UINT64_C(0x08000000) - AGX_G17P_VDM_ALIAS_OFFSET_START)) {
@@ -1203,11 +1206,29 @@ agx_open_device(void *memctx, struct agx_device *dev)
    }
 
    /* Experimental M3 owns a fixed parameter-page list in this aperture. */
-   if (agx_chip_uses_g15s_runtime(dev->chip) &&
+   if (m3_fixed_reservations &&
        !util_vma_heap_alloc_addr(&dev->g17p_vdm_alias_heap,
                                 UINT64_C(0x1074000000), 0x28000)) {
       fprintf(stderr, "Failed to reserve M3 parameter page list\n");
       return false;
+   }
+
+   /* G15C: every range the T6031 runtime owns, in each heap it reaches
+    * (agx_va_runtime_hole.c holds the table). */
+   if (dev->chip == AGX_CHIP_G15C) {
+      const struct agx_va_heap_view views[] = {
+         {&dev->main_heap, user_start, user_size, dev->sparse_ro_offset},
+         {&dev->usc_heap, dev->shader_base, shader_size, 0},
+         {&dev->g17p_vdm_alias_heap, AGX_G17P_VDM_ALIAS_BASE,
+          AGX_G17P_VDM_ALIAS_SIZE, 0},
+      };
+      if (!agx_native_graphics(dev) ||
+          !agx_va_reserve_m3_runtime_ranges(dev->chip, views,
+                                            ARRAY_SIZE(views))) {
+         fprintf(stderr, "Failed to reserve the M3 runtime VA ranges "
+                         "(layout %s)\n", AGX_G15C_VA_LAYOUT);
+         return false;
+      }
    }
 
    /* util_vma_heap_init() defaults to alloc_high, which puts every shader and

@@ -143,17 +143,20 @@ enum agx_submission_model {
 
 #include "drm-uapi/asahi_drm.h"
 
-/* The Mac G15 parts this driver runs on the M3 runtime: G15S (M3 Pro) and
- * G15G (M3). G15G is the same generation as G15S: the AGX3b encoding, the G15
- * command stream, Gen9 descriptors, Gen4 samplers, the classic submission
- * model and the same 14.8.3 firmware interface. It follows every G15S
- * runtime choice; the differences are one cluster and the scheduling stalls
- * (agx_chip_needs_scheduling_stalls). Device admission of both stays opt-in
- * (agx_open_device). */
+/* The Mac G15 parts this driver runs on the M3 runtime: G15S (M3 Pro), G15G
+ * (M3) and G15C (M3 Max). G15G and G15C are the same generation as G15S: the
+ * AGX3b encoding, the G15 command stream, Gen9 descriptors, Gen4 samplers,
+ * the classic submission model and the 14.8.3 firmware interface. They
+ * follow every G15S runtime choice. G15G differs in having one cluster and
+ * the scheduling stalls (agx_chip_needs_scheduling_stalls); G15C in having
+ * four clusters, which none of these choices depends on, and in the runtime
+ * VA ranges it reserves from a table (agx_va_m3_runtime_ranges). Device
+ * admission of all three stays opt-in (agx_open_device). */
 static inline bool
 agx_chip_uses_g15s_runtime(enum agx_chip chip)
 {
-   return chip == AGX_CHIP_G15S || chip == AGX_CHIP_G15G;
+   return chip == AGX_CHIP_G15S || chip == AGX_CHIP_G15G ||
+          chip == AGX_CHIP_G15C;
 }
 
 /* Shared native shader-loading family. Device admission and render command
@@ -161,13 +164,14 @@ agx_chip_uses_g15s_runtime(enum agx_chip chip)
 static inline bool
 agx_chip_uses_hal200_ioto(enum agx_chip chip)
 {
-   /* G15S and G15G use the same IOTO/AGX3b shader loading convention. Their
-    * kernel firmware ABI remains distinct and device admission is opt-in. */
+   /* G15S, G15G and G15C use the same IOTO/AGX3b shader loading convention.
+    * Their kernel firmware ABI remains distinct and device admission is
+    * opt-in. */
    return agx_chip_uses_g15s_runtime(chip) || chip == AGX_CHIP_G16G ||
           chip == AGX_CHIP_G17P;
 }
 
-/* G15S, G15G and G16G share AGX3b shader encodings, native sample-loop ABI
+/* G15S, G15G, G15C and G16G share AGX3b shader encodings, native sample-loop ABI
  * and Gen9 texture operations. This selects shader lowerings, not firmware
  * packets, VM permissions, sparse support or layered render admission. */
 static inline bool

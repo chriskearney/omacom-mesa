@@ -2964,11 +2964,12 @@ init_driver_workarounds(struct zink_screen *screen)
    case VK_DRIVER_ID_MESA_LLVMPIPE:
    case VK_DRIVER_ID_MESA_TURNIP:
    case VK_DRIVER_ID_MESA_HONEYKRISP:
-      /* Preserve the G15S-qualified WSI policy, which G15G (0x8122) follows.
-       * The G16G baseline still uses the CPU present wait pending separate
-       * synchronization qualification. */
+      /* Preserve the G15S-qualified WSI policy, which G15G (0x8122) and
+       * G15C (0x6031) follow. The G16G baseline still uses the CPU present
+       * wait pending separate synchronization qualification. */
       if (screen->info.props.deviceID == 0x6030 ||
-          screen->info.props.deviceID == 0x8122)
+          screen->info.props.deviceID == 0x8122 ||
+          screen->info.props.deviceID == 0x6031)
          screen->driver_workarounds.implicit_sync = false;
       break;
    case VK_DRIVER_ID_MESA_V3DV:
@@ -3156,12 +3157,13 @@ init_driver_workarounds(struct zink_screen *screen)
       /* The Godot TPS corruption is isolated to merged depth resolves.
        * threaded_context keeps those as explicit blits for Honeykrisp.
        * G15S is qualified with color/pass lookahead, and G15G (0x8122)
-       * follows it; retain the G16G baseline until its replays are
-       * separately validated.
+       * and G15C (0x6031) follow it; retain the G16G baseline until its
+       * replays are separately validated.
        */
       screen->driver_workarounds.track_renderpasses =
          screen->info.props.deviceID == 0x6030 ||
-         screen->info.props.deviceID == 0x8122;
+         screen->info.props.deviceID == 0x8122 ||
+         screen->info.props.deviceID == 0x6031;
       break;
    default:
       break;
