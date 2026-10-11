@@ -1273,9 +1273,11 @@ hk_physical_device_init_pipeline_cache(struct hk_physical_device *pdev)
    const uint64_t compiler_flags = hk_physical_device_compiler_flags(pdev);
    _mesa_blake3_update(&blake3_ctx, &compiler_flags, sizeof(compiler_flags));
 
-   /* G15G scheduling stalls are a code-generation switch that
-    * ASAHI_G15G_UNSCHEDULED can turn off at runtime; keep the two kinds of
-    * binaries in separate caches so an A/B run never reuses the other. */
+   /* Scheduling stalls are a code-generation switch that
+    * ASAHI_G15G_UNSCHEDULED can turn off on G15G and
+    * ASAHI_G15C_SCHEDULING_STALLS can turn on on G15C at runtime; keep the
+    * two kinds of binaries in separate caches so an A/B run never reuses
+    * the other. */
    const uint8_t scheduling_stalls =
       agx_gather_device_key(&pdev->dev).scheduling_stalls;
    _mesa_blake3_update(&blake3_ctx, &scheduling_stalls,

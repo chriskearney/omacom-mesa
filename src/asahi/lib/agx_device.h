@@ -229,6 +229,9 @@ struct agx_device {
    /* G15G only: ASAHI_G15G_UNSCHEDULED=1 turns the scheduling-stall pass off
     * (agx_gather_device_key) for A/B tests. */
    bool g15g_unscheduled;
+   /* G15C only: ASAHI_G15C_SCHEDULING_STALLS=1 applies the G15G
+    * scheduling-stall pass (agx_gather_device_key) for A/B tests. */
+   bool g15c_scheduling_stalls;
    agx_device_ops_t ops;
 
    /* vdrm device */

@@ -802,8 +802,75 @@ agx_open_device(void *memctx, struct agx_device *dev)
                  dev->g15g_unscheduled ? "OFF (ASAHI_G15G_UNSCHEDULED=1)" : "on");
       }
    }
-   if (!m3_experimental && !m3_g15g_experimental && !m4_experimental &&
-       !agx_params_driver_supported(&dev->params)) {
+   /* G15C (M3 Max, T6031) on the same M3 runtime: one die, four clusters,
+    * USC 3, legacy HAL. Bring-up only: it opens with both
+    * ASAHI_M3_EXPERIMENTAL=1 and ASAHI_M3_G15C=1, so the M3 switch alone
+    * never admits it. The core masks are the kernel's; only an empty set is
+    * refused. Its shaders follow G15S and carry no scheduling stalls;
+    * ASAHI_G15C_SCHEDULING_STALLS=1 applies the G15G stall pass instead, for
+    * A/B tests on hardware. With ASAHI_M3_G15C=1 one line on stderr says
+    * whether the device was admitted, with what the kernel reported, or why
+    * it was refused. */
+   const bool g15c_opt_in = dev->chip == AGX_CHIP_G15C &&
+      debug_get_bool_option("ASAHI_M3_G15C", false);
+   const char *g15c_refusal = NULL;
+   if (g15c_opt_in) {
+      if (!debug_get_bool_option("ASAHI_M3_EXPERIMENTAL", false))
+         g15c_refusal = "ASAHI_M3_EXPERIMENTAL=1 is not set";
+      else if (dev->params.chip_id != 0x6031)
+         g15c_refusal = "the chip is not T6031 (0x6031)";
+      else if (dev->params.num_dies != 1)
+         g15c_refusal = "expected one die";
+      else if (dev->params.num_clusters_total != 4)
+         g15c_refusal = "expected four clusters";
+      else if (dev->params.usc_generation != 3)
+         g15c_refusal = "expected USC generation 3";
+      else if (dev->params.gpu_hal_generation != DRM_ASAHI_GPU_HAL_LEGACY)
+         g15c_refusal = "expected the legacy HAL";
+      else if (agx_get_num_cores(dev) == 0)
+         g15c_refusal = "the core masks are empty";
+   }
+   const bool m3_g15c_experimental = g15c_opt_in && !g15c_refusal;
+   dev->g15c_scheduling_stalls = m3_g15c_experimental &&
+      debug_get_bool_option("ASAHI_G15C_SCHEDULING_STALLS", false);
+   if (g15c_opt_in) {
+      static bool logged;
+      if (!logged) {
+         logged = true;
+         const uint64_t m[4] = {
+            dev->params.core_masks[0], dev->params.core_masks[1],
+            dev->params.core_masks[2], dev->params.core_masks[3],
+         };
+         if (m3_g15c_experimental) {
+            fprintf(stderr,
+                    "asahi: G15C admitted (ASAHI_M3_G15C=1): chip 0x%x, "
+                    "%u clusters x %u slots, %u cores (masks 0x%" PRIx64
+                    " 0x%" PRIx64 " 0x%" PRIx64 " 0x%" PRIx64
+                    "), revision 0x%x, features 0x%" PRIx64
+                    ", max %u kHz; scheduling stalls %s; VA layout %s\n",
+                    dev->params.chip_id, dev->params.num_clusters_total,
+                    dev->params.num_cores_per_cluster, agx_get_num_cores(dev),
+                    m[0], m[1], m[2], m[3], dev->params.gpu_revision,
+                    (uint64_t)dev->params.features,
+                    dev->params.max_frequency_khz,
+                    dev->g15c_scheduling_stalls
+                       ? "ON (ASAHI_G15C_SCHEDULING_STALLS=1)"
+                       : "off",
+                    AGX_G15C_VA_LAYOUT);
+         } else {
+            fprintf(stderr,
+                    "asahi: G15C refused (ASAHI_M3_G15C=1): %s; the kernel "
+                    "reports chip 0x%x, %u dies, %u clusters, USC %u, "
+                    "HAL %u, %u cores\n",
+                    g15c_refusal, dev->params.chip_id, dev->params.num_dies,
+                    dev->params.num_clusters_total,
+                    dev->params.usc_generation,
+                    dev->params.gpu_hal_generation, agx_get_num_cores(dev));
+         }
+      }
+   }
+   if (!m3_experimental && !m3_g15g_experimental && !m3_g15c_experimental &&
+       !m4_experimental && !agx_params_driver_supported(&dev->params)) {
       if (dev->chip == AGX_CHIP_UNKNOWN) {
          fprintf(stderr,
                  "Unsupported Apple GPU architecture G%u (variant 0x%x, %u "
@@ -1697,7 +1764,8 @@ agx_gather_device_key(struct agx_device *dev)
       .encoding = agx_chip_isa_encoding(dev->chip),
       .needs_g13x_coherency = u_tristate_make(g13x_coh),
       .soft_fault = agx_has_soft_fault(dev),
-      .scheduling_stalls = agx_chip_needs_scheduling_stalls(dev->chip) &&
-                           !dev->g15g_unscheduled,
+      .scheduling_stalls = (agx_chip_needs_scheduling_stalls(dev->chip) &&
+                            !dev->g15g_unscheduled) ||
+                           dev->g15c_scheduling_stalls,
    };
 }
