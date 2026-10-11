@@ -134,6 +134,38 @@ static const struct drm_asahi_params_global params_g15g = {
    .gpu_hal_generation = DRM_ASAHI_GPU_HAL_LEGACY,
 };
 
+/* T6031 / M3 Max on the same M3 runtime: one die, four clusters of ten core
+ * slots (the 40-core part, every core present), USC generation 3 and the
+ * legacy HAL, with the M3 runtime's user range. No optional feature is
+ * advertised: the runtime advertises one per SoC only once it has been
+ * validated there. The revision is B2 (0x12), the UABI value the T6030 and
+ * T8122 pairs give for the ADT chip-revision 0x12; Mesa uses it only for the
+ * device name and cache UUID. 1380 MHz is the top of the ADT's GPU ladder.
+ * Select with ASAHI_SHIM_CHIP=g15c; Mesa opens it only with
+ * ASAHI_M3_EXPERIMENTAL=1 and ASAHI_M3_G15C=1. Like the other M3 profiles it
+ * is for offline compilation and recording and never executes GPU work.
+ */
+static const struct drm_asahi_params_global params_g15c = {
+   .features = 0,
+   .gpu_generation = 15,
+   .gpu_variant = 'C',
+   .gpu_revision = 0x12, /* B2, UABI enum. */
+   .chip_id = 0x6031,
+   .num_dies = 1,
+   .num_clusters_total = 4,
+   .num_cores_per_cluster = 10,
+   .core_masks = {0x3ff, 0x3ff, 0x3ff, 0x3ff},
+   .vm_start = 0x4000,
+   .vm_end = 0x2ffffff8000ull,
+   .vm_kernel_min_size = 0x20000000,
+   .max_commands_per_submission = 64,
+   .max_attachments = 16,
+   .max_frequency_khz = 1380000,
+   .command_timestamp_frequency_hz = 1000000000,
+   .usc_generation = 3,
+   .gpu_hal_generation = DRM_ASAHI_GPU_HAL_LEGACY,
+};
+
 static const struct drm_asahi_params_global *
 shim_params(void)
 {
@@ -147,6 +179,8 @@ shim_params(void)
       return &params_g15s;
    if (chip && !strcmp(chip, "g15g"))
       return &params_g15g;
+   if (chip && !strcmp(chip, "g15c"))
+      return &params_g15c;
 
    return &params_g13g;
 }
