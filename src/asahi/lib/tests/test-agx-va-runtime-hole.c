@@ -4,6 +4,7 @@
  */
 
 #include "agx_va_runtime_hole.h"
+#include "util/macros.h"
 
 #include <assert.h>
 #include <inttypes.h>
@@ -372,6 +373,200 @@ test_g17p_vdm_command_alias_heap(void)
    util_vma_heap_finish(&heap);
 }
 
+/* The G15C table: well formed, and a superset of what G15S and G15G
+ * reserve in agx_open_device(). */
+static void
+test_g15c_runtime_table(void)
+{
+   unsigned count = 0;
+   const struct agx_va_range *ranges =
+      agx_va_m3_runtime_ranges(AGX_CHIP_G15C, &count);
+   assert(ranges && count > 0);
+
+   for (unsigned i = 0; i < count; ++i) {
+      assert(ranges[i].start < ranges[i].end);
+      assert(ranges[i].start % PAGE == 0 && ranges[i].end % PAGE == 0);
+      assert(ranges[i].name && ranges[i].name[0]);
+      for (unsigned j = 0; j < i; ++j)
+         assert(ranges[i].end <= ranges[j].start ||
+                ranges[j].end <= ranges[i].start);
+   }
+
+   const struct agx_va_range g15s_fixed[] = {
+      {AGX_G17P_VDM_ALIAS_BASE, UINT64_C(0x1008000000), "render graph"},
+      {UINT64_C(0x1074000000), UINT64_C(0x1074028000), "page list"},
+   };
+   for (unsigned k = 0; k < ARRAY_SIZE(g15s_fixed); ++k) {
+      bool covered = false;
+      for (unsigned i = 0; i < count; ++i)
+         covered |= ranges[i].start <= g15s_fixed[k].start &&
+                    g15s_fixed[k].end <= ranges[i].end;
+      assert(covered);
+   }
+
+   const enum agx_chip others[] = {
+      AGX_CHIP_G13G, AGX_CHIP_G15G, AGX_CHIP_G15S, AGX_CHIP_G15D,
+      AGX_CHIP_G16G, AGX_CHIP_G17P, AGX_CHIP_UNKNOWN,
+   };
+   for (unsigned i = 0; i < ARRAY_SIZE(others); ++i) {
+      count = 1;
+      assert(!agx_va_m3_runtime_ranges(others[i], &count) && count == 0);
+   }
+}
+
+/* The heaps agx_open_device() builds for the M3 runtime's user range
+ * [0x4000, 0x2ffffff8000): the USC window at 2^40, the main heap below the
+ * compact VDM limit with its sparse alias, and the low VDM alias heap. */
+struct m3_heaps {
+   struct util_vma_heap main, usc, vdm;
+   struct agx_va_heap_view views[3];
+};
+
+static void
+m3_heaps_init(struct m3_heaps *h)
+{
+   const uint64_t shader_base = UINT64_C(0x10000000000);
+   uint64_t user_start = shader_base / 2;
+   uint64_t user_size = AGX_G17P_VDM_USER_LIMIT - user_start;
+   assert(agx_va_split_user_window(user_start, user_size, &user_start,
+                                   &user_size));
+   assert(user_start == UINT64_C(0x8000000000));
+   assert(user_size == UINT64_C(0x800000000));
+
+   util_vma_heap_init(&h->main, user_start, user_size);
+   util_vma_heap_init(&h->usc, shader_base, UINT64_C(0x100000000));
+   assert(agx_g17p_vdm_alias_heap_init(&h->vdm));
+   h->usc.alloc_high = false;
+
+   h->views[0] = (struct agx_va_heap_view){&h->main, user_start, user_size,
+                                           user_size};
+   h->views[1] = (struct agx_va_heap_view){&h->usc, shader_base,
+                                           UINT64_C(0x100000000), 0};
+   h->views[2] = (struct agx_va_heap_view){&h->vdm, AGX_G17P_VDM_ALIAS_BASE,
+                                           AGX_G17P_VDM_ALIAS_SIZE, 0};
+}
+
+static void
+m3_heaps_finish(struct m3_heaps *h)
+{
+   util_vma_heap_finish(&h->main);
+   util_vma_heap_finish(&h->usc);
+   util_vma_heap_finish(&h->vdm);
+}
+
+static void
+test_g15c_device_heaps(void)
+{
+   struct m3_heaps h;
+   m3_heaps_init(&h);
+   const uint64_t main_free = h.main.free_size;
+   const uint64_t usc_free = h.usc.free_size;
+   const uint64_t vdm_free = h.vdm.free_size;
+
+   assert(agx_va_reserve_m3_runtime_ranges(AGX_CHIP_G15C, h.views, 3));
+
+   /* Main heap and its alias: no range reaches [0x8000000000, 0x9000000000). */
+   assert(h.main.free_size == main_free);
+
+   /* USC window: the top half belongs to the runtime. */
+   assert(h.usc.free_size == usc_free - UINT64_C(0x80000000));
+   assert(!util_vma_heap_alloc_addr(&h.usc, UINT64_C(0x10080000000), PAGE));
+   assert(!util_vma_heap_alloc_addr(&h.usc, UINT64_C(0x100fffffc000), PAGE));
+   assert(util_vma_heap_alloc(&h.usc, PAGE, PAGE) == UINT64_C(0x10000000000));
+   assert(util_vma_heap_alloc_addr(&h.usc, UINT64_C(0x1007fffc000), PAGE));
+
+   /* Low VDM heap: the same two reservations G15S and G15G make. */
+   assert(h.vdm.free_size ==
+          vdm_free - (UINT64_C(0x1008000000) - AGX_G17P_VDM_ALIAS_BASE) -
+             UINT64_C(0x28000));
+   assert(!util_vma_heap_alloc_addr(&h.vdm, AGX_G17P_VDM_ALIAS_BASE, PAGE));
+   assert(!util_vma_heap_alloc_addr(&h.vdm, UINT64_C(0x1007ffc000), PAGE));
+   assert(!util_vma_heap_alloc_addr(&h.vdm, UINT64_C(0x1074000000), PAGE));
+   assert(!util_vma_heap_alloc_addr(&h.vdm, UINT64_C(0x1074024000), PAGE));
+   assert(util_vma_heap_alloc(&h.vdm, PAGE, PAGE) == UINT64_C(0x1008000000));
+   assert(util_vma_heap_alloc_addr(&h.vdm, UINT64_C(0x1073ffc000), PAGE));
+   assert(util_vma_heap_alloc_addr(&h.vdm, UINT64_C(0x1074028000), PAGE));
+
+   m3_heaps_finish(&h);
+}
+
+static void
+test_m3_reservations_other_chips_and_failures(void)
+{
+   /* No table: nothing reserved, for G15S and G15G as before. */
+   const enum agx_chip unchanged[] = {AGX_CHIP_G15S, AGX_CHIP_G15G,
+                                      AGX_CHIP_G17P, AGX_CHIP_G13G};
+   for (unsigned i = 0; i < ARRAY_SIZE(unchanged); ++i) {
+      struct m3_heaps h;
+      m3_heaps_init(&h);
+      const uint64_t free_sizes[3] = {h.main.free_size, h.usc.free_size,
+                                      h.vdm.free_size};
+      assert(agx_va_reserve_m3_runtime_ranges(unchanged[i], h.views, 3));
+      assert(h.main.free_size == free_sizes[0] &&
+             h.usc.free_size == free_sizes[1] &&
+             h.vdm.free_size == free_sizes[2]);
+      m3_heaps_finish(&h);
+   }
+
+   /* A client allocation already inside a range: refuse the device. */
+   struct m3_heaps h;
+   m3_heaps_init(&h);
+   assert(util_vma_heap_alloc_addr(&h.vdm, UINT64_C(0x1074010000), PAGE));
+   assert(!agx_va_reserve_m3_runtime_ranges(AGX_CHIP_G15C, h.views, 3));
+   m3_heaps_finish(&h);
+
+   /* Malformed views. */
+   m3_heaps_init(&h);
+   struct agx_va_heap_view bad = h.views[1];
+   bad.size = 0;
+   assert(!agx_va_reserve_m3_runtime_ranges(AGX_CHIP_G15C, &bad, 1));
+   assert(!agx_va_reserve_m3_runtime_ranges(AGX_CHIP_G15C, NULL, 1));
+   assert(agx_va_reserve_m3_runtime_ranges(AGX_CHIP_G15C, NULL, 0));
+   m3_heaps_finish(&h);
+}
+
+/* A heap whose alias lands on a range reserves the range's preimage, and
+ * direct and aliased intersections that overlap are reserved once. */
+static void
+test_m3_reservation_alias_preimage(void)
+{
+   struct util_vma_heap heap;
+   /* Allocations in [0x5800000000, 0x7800000000) are also bound 0x1800000000
+    * higher, i.e. in [0x7000000000, 0x9000000000). */
+   const uint64_t start = UINT64_C(0x5800000000);
+   const uint64_t size = UINT64_C(0x2000000000);
+   const uint64_t alias = UINT64_C(0x1800000000);
+   util_vma_heap_init(&heap, start, size);
+   const struct agx_va_heap_view view = {&heap, start, size, alias};
+
+   assert(agx_va_reserve_m3_runtime_ranges(AGX_CHIP_G15C, &view, 1));
+
+   /* Direct: [0x7000000000, 0x7800000000) (heap end). Preimage of
+    * [0x7000000000, 0x8000000000): [0x5800000000, 0x6800000000). */
+   assert(!util_vma_heap_alloc_addr(&heap, UINT64_C(0x7000000000), PAGE));
+   assert(!util_vma_heap_alloc_addr(&heap, UINT64_C(0x77ffffc000), PAGE));
+   assert(!util_vma_heap_alloc_addr(&heap, start, PAGE));
+   assert(!util_vma_heap_alloc_addr(&heap, UINT64_C(0x67ffffc000), PAGE));
+   assert(heap.free_size == size - UINT64_C(0x800000000) -
+                               UINT64_C(0x1000000000));
+   assert(util_vma_heap_alloc_addr(&heap, UINT64_C(0x6800000000), PAGE));
+   assert(util_vma_heap_alloc_addr(&heap, UINT64_C(0x6fffffc000), PAGE));
+   util_vma_heap_finish(&heap);
+
+   /* [0x6000000000, 0x8000000000) aliased 0x800000000 higher: the direct
+    * part [0x7000000000, 0x8000000000) and the preimage [0x6800000000,
+    * 0x7800000000) overlap and are reserved as one interval. */
+   util_vma_heap_init(&heap, UINT64_C(0x6000000000), size);
+   const struct agx_va_heap_view overlapping = {
+      &heap, UINT64_C(0x6000000000), size, UINT64_C(0x800000000)};
+   assert(agx_va_reserve_m3_runtime_ranges(AGX_CHIP_G15C, &overlapping, 1));
+   assert(heap.free_size == size - UINT64_C(0x1800000000));
+   assert(!util_vma_heap_alloc_addr(&heap, UINT64_C(0x6800000000), PAGE));
+   assert(!util_vma_heap_alloc_addr(&heap, UINT64_C(0x7fffffc000), PAGE));
+   assert(util_vma_heap_alloc_addr(&heap, UINT64_C(0x67ffffc000), PAGE));
+   util_vma_heap_finish(&heap);
+}
+
 int
 main(void)
 {
@@ -383,6 +578,10 @@ main(void)
    test_other_chips_keep_existing_layout();
    test_g17p_user_window_fits_ppp_pointer_field();
    test_g17p_vdm_command_alias_heap();
-   puts("AGX VA layout: user-window split and G17 runtime-graph hole checks passed");
+   test_g15c_runtime_table();
+   test_g15c_device_heaps();
+   test_m3_reservations_other_chips_and_failures();
+   test_m3_reservation_alias_preimage();
+   puts("AGX VA layout: user-window split, G17 runtime-graph hole and G15C runtime range checks passed");
    return 0;
 }

@@ -8,6 +8,8 @@
 #include "util/macros.h"
 #include "util/u_math.h"
 
+#include <stdlib.h>
+
 struct agx_va_interval {
    uint64_t start;
    uint64_t end;
@@ -191,4 +193,130 @@ agx_va_reserve_runtime_graph_hole(
                     AGX_G17_RUNTIME_GRAPH_VA_END);
 
    return reserve_intervals(usc_heap, usc_interval, usc_count);
+}
+
+/*
+ * ==========================================================================
+ * G15C (T6031, M3 Max): the GPU VA ranges the kernel M3 runtime owns in
+ * every client VM. UPDATE THIS TABLE (and AGX_G15C_VA_LAYOUT) when the
+ * kernel's T6031 layout changes; nothing else in Mesa encodes it.
+ *
+ * Source: the driver-reserved ranges that m3_runtime::new_vm
+ * (drivers/gpu/drm/asahi/m3_runtime.rs) installs in each client VM. The
+ * kernel refuses a client bind that touches one. The client-GPU allocations
+ * of m3_pass_layout (the preemption buffers, TPC, tilemap, heap metadata,
+ * scene and scratch arenas, the auxiliary and legacy per-cluster arenas and
+ * the command aliases) lie inside them.
+ *
+ * Current values: integration/aurora 6c982dda3eba, where new_vm installs the
+ * same four ranges for every M3 SoC and m3_pass_layout is qualified for two
+ * clusters (QUALIFIED_CLUSTERS = 2; only the preemption buffers scale with
+ * the cluster count, and four clusters still fit their slots). The T6031
+ * four-cluster layout is written on the kernel branch
+ * max/t6031-gpu-20261011; if it moves or grows a range, copy the new list
+ * here.
+ *
+ * G15S and G15G reserve, in agx_open_device(), the two ranges their heaps
+ * reach. This table also covers the top half of the USC window, which
+ * their USC heap avoids only by allocating from the bottom.
+ * ==========================================================================
+ */
+static const struct agx_va_range agx_g15c_runtime_ranges[] = {
+   {UINT64_C(0x7000000000), UINT64_C(0x8000000000),
+    "runtime graph and command aliases"},
+   {UINT64_C(0x10080000000), UINT64_C(0x10100000000),
+    "auxiliary and legacy per-cluster arenas"},
+   {UINT64_C(0x1000000000), UINT64_C(0x1008000000),
+    "parameter pool and render graph"},
+   {UINT64_C(0x1074000000), UINT64_C(0x1074028000),
+    "parameter page list"},
+};
+
+#define AGX_VA_MAX_RUNTIME_RANGES 8
+static_assert(ARRAY_SIZE(agx_g15c_runtime_ranges) <= AGX_VA_MAX_RUNTIME_RANGES,
+              "interval storage below holds two per range");
+
+const struct agx_va_range *
+agx_va_m3_runtime_ranges(enum agx_chip chip, unsigned *count)
+{
+   if (chip == AGX_CHIP_G15C) {
+      if (count)
+         *count = ARRAY_SIZE(agx_g15c_runtime_ranges);
+      return agx_g15c_runtime_ranges;
+   }
+
+   if (count)
+      *count = 0;
+   return NULL;
+}
+
+static int
+compare_intervals(const void *a, const void *b)
+{
+   const struct agx_va_interval *x = a, *y = b;
+   return x->start < y->start ? -1 : x->start > y->start ? 1 : 0;
+}
+
+bool
+agx_va_reserve_m3_runtime_ranges(enum agx_chip chip,
+                                 const struct agx_va_heap_view *heaps,
+                                 unsigned heap_count)
+{
+   unsigned count = 0;
+   const struct agx_va_range *ranges = agx_va_m3_runtime_ranges(chip, &count);
+   if (!ranges)
+      return true;
+   if (count > AGX_VA_MAX_RUNTIME_RANGES || (heap_count && !heaps))
+      return false;
+
+   for (unsigned h = 0; h < heap_count; ++h) {
+      const struct agx_va_heap_view *view = &heaps[h];
+      uint64_t heap_end;
+      if (!view->heap || view->size == 0 ||
+          !range_end(view->start, view->size, &heap_end))
+         return false;
+
+      struct agx_va_interval intervals[2 * AGX_VA_MAX_RUNTIME_RANGES];
+      unsigned n = 0;
+      for (unsigned r = 0; r < count; ++r) {
+         if (ranges[r].start >= ranges[r].end)
+            return false;
+
+         add_intersection(intervals, &n, view->start, heap_end,
+                          ranges[r].start, ranges[r].end);
+
+         /* An allocation at a is also bound at a + alias_offset, so the
+          * preimage of the range must stay free too. */
+         if (view->alias_offset && ranges[r].end > view->alias_offset) {
+            const uint64_t preimage_start =
+               ranges[r].start > view->alias_offset
+                  ? ranges[r].start - view->alias_offset
+                  : 0;
+            add_intersection(intervals, &n, view->start, heap_end,
+                             preimage_start,
+                             ranges[r].end - view->alias_offset);
+         }
+      }
+
+      /* Ranges may touch or overlap once intersected; reserve each address
+       * once. */
+      qsort(intervals, n, sizeof(intervals[0]), compare_intervals);
+      unsigned merged = 0;
+      for (unsigned i = 0; i < n; ++i) {
+         if (merged && intervals[i].start <= intervals[merged - 1].end) {
+            intervals[merged - 1].end =
+               MAX2(intervals[merged - 1].end, intervals[i].end);
+         } else {
+            intervals[merged++] = intervals[i];
+         }
+      }
+
+      for (unsigned i = 0; i < merged; ++i) {
+         if (!util_vma_heap_alloc_addr(view->heap, intervals[i].start,
+                                       intervals[i].end - intervals[i].start))
+            return false;
+      }
+   }
+
+   return true;
 }

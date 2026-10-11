@@ -67,3 +67,42 @@ bool agx_va_reserve_runtime_graph_hole(
    enum agx_chip chip, struct util_vma_heap *main_heap, uint64_t main_start,
    uint64_t main_size, uint64_t sparse_ro_offset,
    struct util_vma_heap *usc_heap, uint64_t usc_start, uint64_t usc_size);
+
+/* A GPU VA range [start, end). */
+struct agx_va_range {
+   uint64_t start;
+   uint64_t end;
+   const char *name;
+};
+
+/* Names the kernel layout the G15C table in agx_va_runtime_hole.c copies,
+ * so a run's stderr records which one this build carries. Update it with
+ * the table. */
+#define AGX_G15C_VA_LAYOUT "m3-runtime-6c982dda3eba"
+
+/* The ranges the kernel M3 runtime owns in every client VM of a chip that
+ * reserves them through agx_va_reserve_m3_runtime_ranges(), or NULL with
+ * *count = 0. Only G15C has a table: G15S and G15G keep their two fixed
+ * reservations in agx_open_device(). The table is in agx_va_runtime_hole.c. */
+const struct agx_va_range *agx_va_m3_runtime_ranges(enum agx_chip chip,
+                                                    unsigned *count);
+
+/* One VA heap of a device: the heap, the window it was initialised with,
+ * and, when nonzero, the offset at which every allocation of the heap is
+ * bound a second time (the sparse read-only alias of the main heap). */
+struct agx_va_heap_view {
+   struct util_vma_heap *heap;
+   uint64_t start;
+   uint64_t size;
+   uint64_t alias_offset;
+};
+
+/* Reserve, in each heap, every address that falls in one of the chip's
+ * runtime-owned ranges, directly or through the heap's alias, so no client
+ * allocation is ever bound there. Returns true without reserving anything
+ * for a chip without a table, and false if a range cannot be reserved (it
+ * overlaps an allocation already made); the caller must then refuse the
+ * device. */
+bool agx_va_reserve_m3_runtime_ranges(enum agx_chip chip,
+                                      const struct agx_va_heap_view *heaps,
+                                      unsigned heap_count);
