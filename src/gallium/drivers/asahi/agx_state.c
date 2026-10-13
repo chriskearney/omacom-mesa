@@ -1666,8 +1666,8 @@ agx_nir_lower_clip_m1_1(nir_builder *b, nir_intrinsic_instr *intr,
    nir_def *c = nir_load_clip_z_coeff_agx(b);
 
    /* Lerp. If c = 0, reduces to z. If c = 1/2, reduces to (z + w)/2 */
-   nir_def *new_z = nir_ffma(b, z, nir_fsub(b, nir_imm_float(b, 1.0f), c),
-                            nir_fmul(b, w, c));
+   nir_def *new_z = nir_ffma(b, nir_fneg(b, z), c, nir_ffma(b, w, c, z));
+   new_z = nir_bcsel(b, nir_feq(b, z, w), w, new_z);
    nir_src_rewrite(&intr->src[0], nir_vector_insert_imm(b, pos, new_z, 2));
    return true;
 }
