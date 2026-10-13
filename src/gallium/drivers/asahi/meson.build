@@ -168,6 +168,18 @@ if with_tests and with_tools.contains('drm-shim')
 endif
 
 if with_tools.contains('drm-shim')
+  asahi_native_msaa_preserve_test = executable(
+    'asahi-native-msaa-preserve',
+    files('tests/test-agx-native-msaa-preserve.c'),
+    dependencies : [cc.find_library('EGL'), cc.find_library('GLESv2')],
+    build_by_default : false,
+  )
+  asahi_native_msaa_resolve_test = executable(
+    'asahi-native-msaa-resolve',
+    files('tests/test-agx-native-msaa-resolve.c'),
+    dependencies : [cc.find_library('EGL'), cc.find_library('GLESv2')],
+    build_by_default : false,
+  )
   asahi_native_integer_attrib_test = executable(
     'asahi-native-integer-attrib',
     files('tests/test-agx-native-integer-attrib.c'),

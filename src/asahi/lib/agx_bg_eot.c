@@ -276,7 +276,7 @@ agx_build_background_shader(struct agx_bg_eot_cache *cache,
          continue;
 
       unsigned nr = util_format_get_nr_components(key->tib.logical_format[rt]);
-      bool msaa = key->tib.nr_samples > 1;
+      bool msaa = key->tib.nr_samples > 1 && !key->single_sample_reload;
       bool layered = key->tib.layered;
       assert(nr > 0);
 
@@ -304,8 +304,11 @@ agx_build_end_of_tile_shader(struct agx_bg_eot_cache *cache,
    nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE,
                                                   &agx_nir_options, "agx_eot");
 
-   enum glsl_sampler_dim dim =
-      (key->tib.nr_samples > 1) ? GLSL_SAMPLER_DIM_MS : GLSL_SAMPLER_DIM_2D;
+   /* Direct resolves export to a single-sample image. Persistent attachments
+    * keep their multisample addressing so every stored sample survives reload. */
+   const bool msaa = key->tib.nr_samples > 1 &&
+                     (!agx_native_graphics(cache->dev) || key->multisample_store);
+   enum glsl_sampler_dim dim = msaa ? GLSL_SAMPLER_DIM_MS : GLSL_SAMPLER_DIM_2D;
 
    for (unsigned rt = 0; rt < ARRAY_SIZE(key->op); ++rt) {
       if (key->op[rt] == AGX_BG_EOT_NONE)

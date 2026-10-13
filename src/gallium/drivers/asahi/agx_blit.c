@@ -585,12 +585,14 @@ agx_g17p_direct_resolve_blit_shape(const struct pipe_blit_info *info,
 static bool
 agx_g17p_attach_direct_resolve(struct agx_context *ctx,
                                struct pipe_resource *msaa,
-                               struct pipe_resource *single)
+                               struct pipe_resource *single,
+                               bool wsi_seed)
 {
    struct agx_batch *batch =
       agx_writer_get(ctx, agx_resource(msaa)->bo->handle);
 
    if (!batch || !agx_batch_is_active(batch) || !batch->initialized ||
+       (!batch->key.resolve && !wsi_seed) ||
        (batch->key.resolve && batch->key.resolve != single) ||
        batch->key.nr_cbufs != 1 ||
        batch->key.cbufs[0].texture != msaa ||
@@ -599,6 +601,8 @@ agx_g17p_attach_direct_resolve(struct agx_context *ctx,
        batch->key.cbufs[0].last_layer != 0)
       return false;
 
+   /* API resolves must preserve the source's individual samples for later
+    * draws. Only a WSI seed may introduce a transient resolve binding. */
    if (!batch->key.resolve) {
       pipe_resource_reference(&batch->key.resolve, single);
       agx_batch_writes(batch, agx_resource(single), 0);
@@ -627,49 +631,6 @@ agx_g17p_staged_resolve_blit_shape(const struct pipe_blit_info *info)
           !info->sample0_only;
 }
 
-/* A partial or converting resolve cannot write its final destination directly
- * at EOT, while storing the multisample image for a later shader pass has no
- * grounded G17P PBE encoding. Resolve the complete live tile into a temporary
- * single-sample image first; the ordinary render blitter can then apply the
- * caller's rectangle, mask, scale, swizzle, and destination format exactly. */
-static bool
-agx_g17p_staged_resolve_blit(struct agx_context *ctx,
-                             const struct pipe_blit_info *info)
-{
-   struct pipe_resource *src = info->src.resource;
-   struct pipe_resource templ = {
-      .target = PIPE_TEXTURE_2D,
-      .format = src->format,
-      .width0 = src->width0,
-      .height0 = src->height0,
-      .depth0 = 1,
-      .array_size = 1,
-      .last_level = 0,
-      .nr_samples = 1,
-      .nr_storage_samples = 1,
-      .usage = PIPE_USAGE_DEFAULT,
-      .bind = PIPE_BIND_RENDER_TARGET | PIPE_BIND_SAMPLER_VIEW,
-   };
-   struct pipe_resource *resolved =
-      ctx->base.screen->resource_create(ctx->base.screen, &templ);
-   if (!resolved)
-      return false;
-
-   if (!agx_g17p_attach_direct_resolve(ctx, src, resolved)) {
-      pipe_resource_reference(&resolved, NULL);
-      return false;
-   }
-
-   struct pipe_blit_info staged = *info;
-   staged.src.resource = resolved;
-   staged.src.level = 0;
-   staged.src.format = src->format;
-   staged.src.box.z = 0;
-   staged.src.box.depth = 1;
-   agx_blit(&ctx->base, &staged);
-   pipe_resource_reference(&resolved, NULL);
-   return true;
-}
 
 bool
 agx_g17p_stencil_plane_blit_shape(const struct pipe_blit_info *info)
@@ -763,12 +724,7 @@ agx_blit(struct pipe_context *pipe, const struct pipe_blit_info *info)
    if (agx_chip_uses_native_gallium(agx_device(ctx->base.screen)->chip) &&
        agx_g17p_direct_resolve_blit_shape(info, true) &&
        agx_g17p_attach_direct_resolve(ctx, info->src.resource,
-                                      info->dst.resource))
-      return;
-
-   if (agx_chip_uses_native_gallium(agx_device(ctx->base.screen)->chip) &&
-       agx_g17p_staged_resolve_blit_shape(info) &&
-       agx_g17p_staged_resolve_blit(ctx, info))
+                                      info->dst.resource, false))
       return;
 
    if (asahi_compute_blit_supported(agx_device(ctx->base.screen)->chip,
@@ -800,7 +756,7 @@ agx_blit(struct pipe_context *pipe, const struct pipe_blit_info *info)
    if (agx_chip_uses_native_gallium(agx_device(ctx->base.screen)->chip) &&
        agx_g17p_direct_resolve_blit_shape(info, false))
       (void)agx_g17p_attach_direct_resolve(ctx, info->dst.resource,
-                                          info->src.resource);
+                                          info->src.resource, true);
 }
 
 static bool
