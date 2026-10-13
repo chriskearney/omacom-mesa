@@ -168,6 +168,12 @@ if with_tests and with_tools.contains('drm-shim')
 endif
 
 if with_tools.contains('drm-shim')
+  asahi_native_index_offset_test = executable(
+    'asahi-native-index-offset',
+    files('tests/test-agx-native-index-offset.c'),
+    dependencies : [cc.find_library('EGL'), cc.find_library('GLESv2')],
+    build_by_default : false,
+  )
   asahi_native_msaa_mrt_test = executable(
     'asahi-native-msaa-mrt',
     files('tests/test-agx-native-msaa-mrt.c'),

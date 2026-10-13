@@ -313,6 +313,42 @@ test_agx3_index_range(void)
 }
 
 static void
+test_native_misaligned_index_range(void)
+{
+   static const struct {
+      uint64_t address;
+      uint32_t bytes, first_index, expected;
+      enum agx_index_size size;
+      bool valid;
+   } cases[] = {
+      {0x1002, 8, 0, 2, AGX_INDEX_SIZE_U16, true},
+      {0x1000, 10, 1, 2, AGX_INDEX_SIZE_U16, true},
+      {0x1004, 8, 0, 1, AGX_INDEX_SIZE_U16, true},
+      {0x1003, 5, 0, 1, AGX_INDEX_SIZE_U8, true},
+      {0x1002, 6, 1, 1, AGX_INDEX_SIZE_U8, true},
+      {0x1002, 0, 0, 0, AGX_INDEX_SIZE_U16, false},
+      {0x1002, 2, 1, 0, AGX_INDEX_SIZE_U16, false},
+      {0x1000, UINT32_MAX, 0, 0x3fffffff, AGX_INDEX_SIZE_U8, true},
+      {0x1003, UINT32_MAX, 0, 0x40000000, AGX_INDEX_SIZE_U8, true},
+   };
+   for (unsigned i = 0; i < ARRAY_SIZE(cases); ++i) {
+      struct agx_draw draw = agx_draw_indexed(
+         1, 1, cases[i].first_index, 0, 0, cases[i].address, cases[i].bytes,
+         cases[i].size, false);
+      uint32_t word = 0xa5a5a5a5;
+      CHECK_EQ(agx_draw_index_buffer_size_word(draw, &word), cases[i].valid);
+      CHECK_EQ(word, cases[i].valid ? cases[i].expected : 0xa5a5a5a5);
+      if (cases[i].first_index == 0) {
+         draw = agx_draw_indexed_indirect(0x2000, cases[i].address,
+                                        cases[i].bytes, cases[i].size, false);
+         word = 0xa5a5a5a5;
+         CHECK_EQ(agx_draw_index_buffer_size_word(draw, &word), cases[i].valid);
+         CHECK_EQ(word, cases[i].valid ? cases[i].expected : 0xa5a5a5a5);
+      }
+   }
+}
+
+static void
 test_agx3_live_vdm_draw(void)
 {
    static const uint8_t nonindexed_g15[] = {
@@ -890,6 +926,7 @@ main(void)
    test_sampler_generations();
    test_agx3_cdm_launch();
    test_agx3_index_range();
+   test_native_misaligned_index_range();
    test_agx3_live_vdm_draw();
    test_agx3_live_vdm_barrier();
    test_agx3_cdm_stream_link();
