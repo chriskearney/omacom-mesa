@@ -118,13 +118,13 @@ resource_check_defer_buffer_barrier(struct zink_context *ctx, struct zink_resour
 static inline bool
 unordered_res_exec(const struct zink_context *ctx, const struct zink_resource *res, bool is_write)
 {
-   /* if all usage is unordered, keep unordered */
-   if (res->obj->unordered_read && res->obj->unordered_write)
-      return true;
    /* if testing write access but have any ordered read access, cannot promote */
    if (is_write && zink_batch_usage_matches(res->obj->bo->reads.u, ctx->bs) &&
        (res->obj->has_ordered_access || !res->obj->unordered_read))
       return false;
+   /* if all usage is unordered, keep unordered */
+   if (res->obj->unordered_read && res->obj->unordered_write)
+      return true;
    /* if write access is unordered or nonexistent, always promote */
    return res->obj->unordered_write || !zink_batch_usage_matches(res->obj->bo->writes.u, ctx->bs);
 }
