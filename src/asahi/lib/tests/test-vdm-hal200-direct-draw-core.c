@@ -68,6 +68,16 @@ check_indexed(void)
    assert(agx_vdm_hal200_u16_index_range(0x1002, 8, 0, 4,
                                          &relocated, &size_word));
    assert(relocated == 0x1002 && size_word == 2);
+   struct agx_vdm_hal200_indexed_draw_fields offset_draw = f;
+   offset_draw.index_buffer = 0x1002;
+   offset_draw.index_buffer_range_B = 8;
+   offset_draw.index_count = 4;
+   offset_draw.first_index = 0;
+   assert(agx_vdm_hal200_indexed_draw_pack(AGX_CHIP_G15S, &offset_draw,
+                                            &packed));
+   assert(packed.bytes[32] == 2 && packed.bytes[33] == 0 &&
+          packed.bytes[34] == 0 && packed.bytes[35] == 0);
+
    assert(agx_vdm_hal200_u16_index_range(0x1004, 8, 0, 4,
                                          &relocated, &size_word));
    assert(relocated == 0x1004 && size_word == 1);
@@ -238,6 +248,10 @@ check_native_indirect(void)
    misaligned.index_buffer = UINT64_C(0x123456789abe);
    misaligned.index_buffer_range_B = 8;
    assert(agx_vdm_hal200_indirect_draw_pack(AGX_CHIP_G17P, &misaligned,
+                                             &packed));
+   assert(word_at(packed.bytes, 7) == 2);
+
+   assert(agx_vdm_hal200_indirect_draw_pack(AGX_CHIP_G15S, &misaligned,
                                              &packed));
    assert(word_at(packed.bytes, 7) == 2);
 
