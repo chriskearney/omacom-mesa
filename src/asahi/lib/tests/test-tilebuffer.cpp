@@ -256,3 +256,40 @@ TEST(Tilebuffer, NativeWideMultisampleBoundary)
    agx_tilebuffer_set_samples(&deferred, 2);
    ASSERT_EQ(tib.tile_size, deferred.tile_size);
 }
+
+TEST(Tilebuffer, NativeRgba8MultisampleMrt)
+{
+   const enum pipe_format formats[] = {
+      PIPE_FORMAT_R8G8B8A8_UNORM, PIPE_FORMAT_R8G8B8A8_UNORM,
+      PIPE_FORMAT_R8G8B8A8_UNORM, PIPE_FORMAT_R8G8B8A8_UNORM,
+   };
+   for (unsigned samples : {1u, 2u, 4u}) {
+      for (unsigned count : {2u, 3u, 4u}) {
+         auto tib = agx_build_tilebuffer_layout_with_limits(
+            formats, count, samples, false, 32768, 2048, 248);
+         ASSERT_FALSE(agx_tilebuffer_spills(&tib));
+         ASSERT_LE(agx_tilebuffer_total_size(&tib), 32768u);
+         const unsigned mask = agx_tilebuffer_total_size(&tib) < 32768
+                                  ? BITFIELD_MASK(count) : 0;
+         ASSERT_EQ(mask, agx_g17p_rgba8_mrt_mask(&tib));
+
+         auto invalid = tib;
+         invalid.spilled[1] = true;
+         ASSERT_EQ(0u, agx_g17p_rgba8_mrt_mask(&invalid));
+         invalid = tib;
+         invalid._offset_B[1] += 4;
+         ASSERT_EQ(0u, agx_g17p_rgba8_mrt_mask(&invalid));
+         invalid = tib;
+         invalid.nr_samples = 8;
+         ASSERT_EQ(0u, agx_g17p_rgba8_mrt_mask(&invalid));
+         invalid = tib;
+         invalid.layered = true;
+         ASSERT_EQ(0u, agx_g17p_rgba8_mrt_mask(&invalid));
+         invalid = tib;
+         invalid.nr_samples = 4;
+         invalid.tile_size = 1024;
+         invalid.sample_size_B = 8;
+         ASSERT_EQ(0u, agx_g17p_rgba8_mrt_mask(&invalid));
+      }
+   }
+}

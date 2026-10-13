@@ -223,8 +223,10 @@ format_size_B(enum pipe_format format)
 unsigned
 agx_g17p_rgba8_mrt_mask(const struct agx_tilebuffer_layout *tib)
 {
-   if (!tib || tib->layered || tib->nr_samples != 1 ||
-       (tib->tile_size != 32 * 32 && tib->tile_size != 32 * 16))
+   if (!tib || tib->layered ||
+       (tib->nr_samples != 1 && tib->nr_samples != 2 && tib->nr_samples != 4) ||
+       (tib->tile_size != 32 * 32 && tib->tile_size != 32 * 16 &&
+        !(tib->nr_samples > 1 && tib->tile_size == 16 * 16)))
       return 0;
 
    unsigned count = 0, mask = 0;
@@ -241,8 +243,11 @@ agx_g17p_rgba8_mrt_mask(const struct agx_tilebuffer_layout *tib)
       mask |= BITFIELD_BIT(rt);
       ++count;
    }
+   /* Each sample repeats the attachment layout. The complete tile must fit
+    * below the imageblock's 32 KiB limit, including every sample. */
    return count && tib->sample_size_B == ALIGN_POT(4 * count, 8) &&
-          tib->sample_size_B * tib->tile_size < 32768 ? mask : 0;
+          tib->sample_size_B * tib->nr_samples * tib->tile_size < 32768
+             ? mask : 0;
 }
 
 unsigned

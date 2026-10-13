@@ -26,7 +26,9 @@
 int
 main(int argc, char **argv)
 {
-   CHECK(argc == 2, "choose fresh-fresh or fresh-valid");
+   CHECK(argc == 2 || argc == 3, "choose fresh-fresh or fresh-valid [samples]");
+   const unsigned samples = argc == 3 ? strtoul(argv[2], NULL, 10) : 1;
+   CHECK(samples == 1 || samples == 2 || samples == 4, "invalid sample count");
    const bool valid = !strcmp(argv[1], "fresh-valid");
    CHECK(valid || !strcmp(argv[1], "fresh-fresh"), "unknown case");
    int fd = open("/dev/dri/renderD128", O_RDWR | O_CLOEXEC);
@@ -51,7 +53,7 @@ main(int argc, char **argv)
       .width = 64,
       .height = 64,
       .layers = 1,
-      .samples = 1,
+      .samples = samples,
       .nr_cbufs = 2,
    };
    const struct pipe_resource templ = {
@@ -61,8 +63,8 @@ main(int argc, char **argv)
       .height0 = 64,
       .depth0 = 1,
       .array_size = 1,
-      .nr_samples = 1,
-      .nr_storage_samples = 1,
+      .nr_samples = samples,
+      .nr_storage_samples = samples,
       .usage = PIPE_USAGE_DEFAULT,
       .bind = PIPE_BIND_RENDER_TARGET | PIPE_BIND_SAMPLER_VIEW,
    };
@@ -73,7 +75,7 @@ main(int argc, char **argv)
          (struct pipe_surface){.texture = rt[i], .format = templ.format};
    }
    struct agx_resource *other = agx_resource(rt[1]);
-   if (valid) {
+   if (valid && samples == 1) {
       unsigned char pixels[64 * 64 * 4];
       for (unsigned i = 0; i < sizeof(pixels); i += 4) {
          pixels[i] = 0x31;
@@ -86,6 +88,10 @@ main(int argc, char **argv)
                             64 * 4, sizeof(pixels));
       CHECK(agx_resource_valid(other, 0), "RT1 upload did not initialize it");
    }
+   /* The shim tests descriptor compilation, without executing the reload.
+    * The GLES probe initializes and verifies both targets on hardware. */
+   if (valid && samples > 1)
+      BITSET_SET(other->data_valid, 0);
    void *saved = malloc(other->bo->size);
    CHECK(saved, "snapshot allocation failed");
    memcpy(saved, agx_bo_map(other->bo), other->bo->size);
@@ -113,7 +119,10 @@ main(int argc, char **argv)
          "partial background program was not generated");
    CHECK(agx_build_bg_eot(batch, true, false).usc,
          "end-of-tile program was not generated");
-   struct agx_bg_eot_key eot_key = {.tib = batch->tilebuffer_layout};
+   struct agx_bg_eot_key eot_key = {
+      .tib = batch->tilebuffer_layout,
+      .multisample_store = samples > 1,
+   };
    eot_key.op[0] = eot_key.op[1] = AGX_EOT_STORE;
    struct agx_bg_eot_shader *eot =
       agx_get_bg_eot_shader(&ctx->bg_eot, &eot_key);
@@ -130,7 +139,9 @@ main(int argc, char **argv)
       .shader_binary_size = eot->info.binary_size,
       .nr_gprs = eot->info.nr_gprs,
       .staging_halfs = eot->info.agx3_staging_halfs,
-      .imageblock = {.sample_size_B = 8, .nr_samples = 1, .tile_size_px = 1024},
+      .imageblock = {.sample_size_B = batch->tilebuffer_layout.sample_size_B,
+                     .nr_samples = samples,
+                     .tile_size_px = batch->tilebuffer_layout.tile_size},
    };
    struct agx3_g17p_rt0_eot_program program;
    CHECK(agx3_g17p_rt0_eot_program_generate(AGX_CHIP_G15S, &desc, &program) &&
@@ -145,8 +156,8 @@ main(int argc, char **argv)
          "unsupported EOT was admitted");
    pipe->flush(pipe, NULL, 0);
    CHECK(ctx->skipped_no_program == skipped, "flush dropped a shader");
-   printf("eot-shader=120 program=%u capacity=%zu guards=pass\n", eot_length,
-          sizeof(program.bytes));
+   printf("samples=%u eot-shader=120 program=%u capacity=%zu guards=pass\n",
+          samples, eot_length, sizeof(program.bytes));
    printf(
       "native-mrt-clear=%s case=%s draws=%u write-mask=0x%x bg-eot=accepted\n",
       "pass", argv[1], batch->draws, batch->draw);

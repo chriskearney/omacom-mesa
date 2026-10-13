@@ -136,9 +136,6 @@ bool agx_tilebuffer_supports_mask(struct agx_tilebuffer_layout *tib,
 
 void agx_tilebuffer_pack_usc(struct agx_tilebuffer_layout *tib);
 
-#ifdef __cplusplus
-} /* extern C */
-#endif
 
 /* Export registers of one sample's colours in a G17P fragment unrolled per
  * sample: eight halves for each location up to the last one written. */
@@ -244,7 +241,7 @@ bool agx_g17p_rt0_tile_layout_supported(
 /* Logical active attachment mask for compact RGBA8 storage in partition zero. */
 unsigned agx_g17p_rgba8_mrt_mask(const struct agx_tilebuffer_layout *tib);
 
-/* Dense, unspilled single-sample RGBA8 layouts with three to eight targets. */
+/* Dense, unspilled RGBA8 layouts with three to eight targets. */
 unsigned
 agx_g17p_wide_rgba8_mrt_count(const struct agx_tilebuffer_layout *tib);
 
@@ -266,3 +263,7 @@ agx_g17p_classify_mrt(const struct agx_tilebuffer_layout *tib);
 
 
 unsigned agx_tilebuffer_compact(const struct agx_tilebuffer_layout *, struct agx_tilebuffer_layout *, uint8_t map[AGX_MAX_RENDER_TARGETS]);
+
+#ifdef __cplusplus
+} /* extern C */
+#endif
