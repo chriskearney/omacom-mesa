@@ -59,9 +59,22 @@ check_indexed(void)
    assert(agx_vdm_hal200_u16_index_range(0x1000, 12, 0, 6,
                                          &relocated, &size_word));
    assert(relocated == 0x1000 && size_word == 2);
+   /* A 2-byte aligned start widens the window by the leading misalignment:
+    * bytes 0x1000..0x100f, so the last index at 0x100c stays in range. */
    assert(agx_vdm_hal200_u16_index_range(0x1000, 14, 1, 6,
                                          &relocated, &size_word));
+   assert(relocated == 0x1002 && size_word == 3);
+   /* GL glDrawElements(u16, count 4, offset 2) with a tight 8-byte range. */
+   assert(agx_vdm_hal200_u16_index_range(0x1002, 8, 0, 4,
+                                         &relocated, &size_word));
    assert(relocated == 0x1002 && size_word == 2);
+   assert(agx_vdm_hal200_u16_index_range(0x1004, 8, 0, 4,
+                                         &relocated, &size_word));
+   assert(relocated == 0x1004 && size_word == 1);
+   /* u8 at an odd start: bytes 0x1003..0x1007 need dwords 0x1000..0x1007. */
+   assert(agx_vdm_hal200_index_range(0x1003, 5, 0, 5, 1,
+                                     &relocated, &size_word));
+   assert(relocated == 0x1003 && size_word == 1);
    assert(agx_vdm_hal200_u16_index_range(0x1000, 2, 0, 1,
                                          &relocated, &size_word));
    assert(size_word == 0);
@@ -218,6 +231,15 @@ check_native_indirect(void)
                                       second - 1, &second));
       assert(second == 0);
    }
+
+   /* A 2-byte aligned u16 index buffer widens the dword window by one. */
+   struct agx_vdm_hal200_indirect_draw_fields misaligned = indexed;
+   misaligned.index_size_B = 2;
+   misaligned.index_buffer = UINT64_C(0x123456789abe);
+   misaligned.index_buffer_range_B = 8;
+   assert(agx_vdm_hal200_indirect_draw_pack(AGX_CHIP_G17P, &misaligned,
+                                             &packed));
+   assert(word_at(packed.bytes, 7) == 2);
 
    struct agx_vdm_hal200_indirect_draw_fields bad = indexed;
    bad.draw_state_context_offset |= 1;

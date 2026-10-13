@@ -234,16 +234,21 @@ agx_draw_index_buffer(struct agx_draw d)
    return ib;
 }
 
-/* Apple's AGX3 indexed records store the available index-buffer
- * range in dwords minus one.  Use a widened intermediate so a range near the
- * u32 ceiling cannot wrap while rounding up. */
+/* Native AGX3 indexed records store the available index-buffer
+ * range in dwords minus one, counted from the dword containing the index
+ * buffer address, so a start that is not dword aligned widens the window.
+ * Use a widened intermediate so a range near the u32 ceiling cannot wrap
+ * while rounding up. */
 static inline bool
 agx_draw_index_buffer_size_word(struct agx_draw d,
                                 uint32_t *size_word)
 {
    assert(d.indexed);
 
-   const uint64_t dwords = ((uint64_t)agx_draw_index_range_B(d) + 3) >> 2;
+   const uint32_t range_B = agx_draw_index_range_B(d);
+   const uint64_t dwords =
+      range_B ? ((agx_draw_index_buffer(d) & 3) + (uint64_t)range_B + 3) >> 2
+              : 0;
    if (dwords == 0 || dwords > (uint64_t)0xffffffffu)
       return false;
 
