@@ -934,6 +934,15 @@ agx_open_device(void *memctx, struct agx_device *dev)
       goto fail;
    }
 
+   if (!agx_params_native_kernel_abi_supported(&dev->params)) {
+      fprintf(stderr,
+              "Incompatible native AGX3 kernel ABI (features %#llx); "
+              "use the matched SiliconForest experimental driver or a "
+              "documented compatibility branch\n",
+              (unsigned long long)dev->params.features);
+      goto fail;
+   }
+
    const char *product = agx_chip_exact_product_name(dev->chip);
    if (product) {
       /* Match the M-series format with the exact GPU codename and revision. */
