@@ -155,7 +155,7 @@ int main(void)
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
    VkPipelineInputAssemblyStateCreateInfo ia = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-      .topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST};
+      .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
    VkPipelineRasterizationStateCreateInfo raster = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
       .rasterizerDiscardEnable = VK_TRUE, .polygonMode = VK_POLYGON_MODE_FILL,
@@ -173,6 +173,23 @@ int main(void)
    };
    VkPipeline pipeline;
    OK(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_info, NULL, &pipeline));
+   VkBufferCreateInfo bci = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                             .size = 64, .usage = VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT};
+   VkBuffer xfb_buffer;
+   OK(vkCreateBuffer(device, &bci, NULL, &xfb_buffer));
+   VkMemoryRequirements req;
+   vkGetBufferMemoryRequirements(device, xfb_buffer, &req);
+   uint32_t xfb_type = 0;
+   while (xfb_type < memory.memoryTypeCount && !(req.memoryTypeBits & (1u << xfb_type))) ++xfb_type;
+   REQUIRE(xfb_type < memory.memoryTypeCount);
+   VkMemoryAllocateInfo xai = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                               .allocationSize = req.size, .memoryTypeIndex = xfb_type};
+   VkDeviceMemory xfb_memory;
+   OK(vkAllocateMemory(device, &xai, NULL, &xfb_memory));
+   OK(vkBindBufferMemory(device, xfb_buffer, xfb_memory, 0));
+   PFN_vkCmdBindTransformFeedbackBuffersEXT bind_xfb = (PFN_vkCmdBindTransformFeedbackBuffersEXT)
+      vkGetDeviceProcAddr(device, "vkCmdBindTransformFeedbackBuffersEXT");
+   REQUIRE(bind_xfb);
    VkCommandPoolCreateInfo pci = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
                                   .queueFamilyIndex = family};
    VkCommandPool pool;
@@ -188,6 +205,8 @@ int main(void)
                                  .renderArea = {.extent = {1, 1}}, .layerCount = 1};
    vkCmdBeginRendering(cmd, &rendering);
    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+   const VkDeviceSize xfb_offset = 0;
+   bind_xfb(cmd, 0, 1, &xfb_buffer, &xfb_offset, NULL);
    begin(cmd, 0, 1, NULL, NULL);
    end(cmd, 0, 1, NULL, NULL);
    vkCmdEndRendering(cmd);
@@ -196,6 +215,8 @@ int main(void)
    vkDestroyPipeline(device, pipeline, NULL);
    vkDestroyPipelineLayout(device, layout, NULL);
    vkDestroyShaderModule(device, shader, NULL);
+   vkDestroyBuffer(device, xfb_buffer, NULL);
+   vkFreeMemory(device, xfb_memory, NULL);
    vkDestroyDevice(device, NULL);
    vkDestroyInstance(instance, NULL);
    puts("PASS host device setup, placed mapping guards/free and NULL XFB counters (no submissions)");
