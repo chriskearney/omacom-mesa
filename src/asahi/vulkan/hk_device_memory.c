@@ -429,7 +429,6 @@ hk_UnmapMemory2KHR(VkDevice device,
    if (mem == NULL || mem->map == NULL)
       return VK_SUCCESS;
 
-   mem->map_placed = false;
    if (mem->map_owned) {
       if (pMemoryUnmapInfo->flags & VK_MEMORY_UNMAP_RESERVE_BIT_EXT) {
          VK_FROM_HANDLE(hk_device, dev, device);
@@ -447,6 +446,7 @@ hk_UnmapMemory2KHR(VkDevice device,
       mem->map = NULL;
       mem->map_size = 0;
       mem->map_owned = false;
+      mem->map_placed = false;
       return VK_SUCCESS;
    }
 
@@ -475,6 +475,7 @@ hk_UnmapMemory2KHR(VkDevice device,
    }
 
    mem->map = NULL;
+   mem->map_placed = false;
 
    return VK_SUCCESS;
 }
