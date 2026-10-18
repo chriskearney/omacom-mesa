@@ -135,9 +135,12 @@ hk_g17p_compression_eligible(enum agx_chip chip, unsigned plane,
    for (const void *next = info->pNext; next;) {
       VkBaseInStructure ext;
       memcpy(&ext, next, sizeof(ext));
-      if (ext.sType == VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO &&
-          ((const VkExternalMemoryImageCreateInfo *)next)->handleTypes)
-         return false;
+      if (ext.sType == VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO) {
+         VkExternalMemoryImageCreateInfo external;
+         memcpy(&external, next, sizeof(external));
+         if (external.handleTypes)
+            return false;
+      }
       if (ext.sType == HK_G17P_WSI_IMAGE_CREATE_INFO_MESA)
          return false;
       next = ext.pNext;
