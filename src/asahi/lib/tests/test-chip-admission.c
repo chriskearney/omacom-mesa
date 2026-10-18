@@ -114,6 +114,17 @@ main(void)
    bad.features = DRM_ASAHI_FEATURE_EXACT_PRIOR_BARRIERS;
    assert(!agx_params_native_kernel_abi_supported(&bad));
    bad = (struct drm_asahi_params_global){
+      .gpu_generation = 17, .gpu_variant = 'P', .num_clusters_total = 1,
+      .chip_id = 0x8140, .num_dies = 1, .usc_generation = 3,
+      .gpu_hal_generation = DRM_ASAHI_GPU_HAL_200, .features = native,
+   };
+   assert(agx_params_driver_supported(&bad));
+   assert(agx_params_native_kernel_abi_supported(&bad));
+   bad.features = UINT64_C(0xfc00) | native;
+   assert(!agx_params_native_kernel_abi_supported(&bad));
+   bad.features = UINT64_C(0xfc00);
+   assert(!agx_params_native_kernel_abi_supported(&bad));
+   bad = (struct drm_asahi_params_global){
       .gpu_generation = 13, .gpu_variant = 'G', .num_clusters_total = 1,
    };
    assert(agx_params_native_kernel_abi_supported(&bad));

@@ -10,5 +10,5 @@ sf_mesa_meson=${MESON:-meson}
   -Dglvnd=disabled -Dllvm=enabled -Dbuild-tests=true \
   -Dtools=asahi,drm-shim -Dmesa-clc=enabled -Dprecomp-compiler=enabled \
   -Dvideo-codecs= -Dgallium-va=disabled
-"$sf_mesa_meson" compile -C "$sf_mesa_build" -j "${JOBS:-8}"
-"$sf_mesa_meson" test -C "$sf_mesa_build" --suite asahi --print-errorlogs
+python3 "$sf_mesa_source/tools/siliconforest/build-targets.py" "$sf_mesa_build"
+"$sf_mesa_meson" test -C "$sf_mesa_build" --no-rebuild --suite asahi --print-errorlogs
