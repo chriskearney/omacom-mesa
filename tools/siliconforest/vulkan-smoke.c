@@ -11,6 +11,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include "vulkan-smoke-vert.h"
 
 #define REQUIRE(x) do { if (!(x)) { \
    fprintf(stderr, "line %u: %s\n", __LINE__, #x); exit(1); } } while (0)
@@ -138,6 +139,40 @@ int main(void)
    PFN_vkCmdEndTransformFeedbackEXT end = (PFN_vkCmdEndTransformFeedbackEXT)
       vkGetDeviceProcAddr(device, "vkCmdEndTransformFeedbackEXT");
    REQUIRE(begin && end);
+   VkShaderModuleCreateInfo sci = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                                   .codeSize = sizeof(sf_smoke_vert_spv),
+                                   .pCode = sf_smoke_vert_spv};
+   VkShaderModule shader;
+   OK(vkCreateShaderModule(device, &sci, NULL, &shader));
+   VkPipelineLayoutCreateInfo lci = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+   VkPipelineLayout layout;
+   OK(vkCreatePipelineLayout(device, &lci, NULL, &layout));
+   VkPipelineShaderStageCreateInfo stage = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+      .stage = VK_SHADER_STAGE_VERTEX_BIT, .module = shader, .pName = "main",
+   };
+   VkPipelineVertexInputStateCreateInfo vi = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+   VkPipelineInputAssemblyStateCreateInfo ia = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+      .topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST};
+   VkPipelineRasterizationStateCreateInfo raster = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+      .rasterizerDiscardEnable = VK_TRUE, .polygonMode = VK_POLYGON_MODE_FILL,
+      .lineWidth = 1};
+   VkPipelineMultisampleStateCreateInfo ms = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+      .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT};
+   VkPipelineRenderingCreateInfo render_pipeline = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
+   VkGraphicsPipelineCreateInfo pipeline_info = {
+      .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+      .pNext = &render_pipeline, .stageCount = 1, .pStages = &stage,
+      .pVertexInputState = &vi, .pInputAssemblyState = &ia,
+      .pRasterizationState = &raster, .pMultisampleState = &ms, .layout = layout,
+   };
+   VkPipeline pipeline;
+   OK(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_info, NULL, &pipeline));
    VkCommandPoolCreateInfo pci = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
                                   .queueFamilyIndex = family};
    VkCommandPool pool;
@@ -152,11 +187,15 @@ int main(void)
    VkRenderingInfo rendering = {.sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
                                  .renderArea = {.extent = {1, 1}}, .layerCount = 1};
    vkCmdBeginRendering(cmd, &rendering);
+   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
    begin(cmd, 0, 1, NULL, NULL);
    end(cmd, 0, 1, NULL, NULL);
    vkCmdEndRendering(cmd);
    OK(vkEndCommandBuffer(cmd));
    vkDestroyCommandPool(device, pool, NULL);
+   vkDestroyPipeline(device, pipeline, NULL);
+   vkDestroyPipelineLayout(device, layout, NULL);
+   vkDestroyShaderModule(device, shader, NULL);
    vkDestroyDevice(device, NULL);
    vkDestroyInstance(instance, NULL);
    puts("PASS host device setup, placed mapping guards/free and NULL XFB counters (no submissions)");
