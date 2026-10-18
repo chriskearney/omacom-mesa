@@ -73,6 +73,16 @@ python3 -m venv ../mesa-venv
 MESON="$PWD/../mesa-venv/bin/meson" JOBS=8 tools/siliconforest/build.sh ../mesa-build
 ```
 
+The current source passes all **36 Asahi host suites** and Vulkan regression
+probes for four drm-shim identities, with Khronos validation enabled. To rerun
+those probes after the build:
+
+```sh
+python3 tools/siliconforest/check-kernel-abi.py PATH_TO_SILICONFOREST_LINUX
+VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation \
+  python3 tools/siliconforest/drm-smoke.py ../mesa-build
+```
+
 The script builds Asahi and Zink OpenGL, Honeykrisp Vulkan, tree-matched shader
 compiler tools and drm-shim, then runs the Asahi host suite. Do not reuse shader
 compiler binaries from an older Mesa tree. There are no binary releases or

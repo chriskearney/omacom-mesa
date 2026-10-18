@@ -66,6 +66,16 @@ public PR history alongside the new integration commits.
    No broad hardware-admission switch, known-bad barrier simplification, or
    forced compiler generation was added.
 
+8. **The full host run exposed inherited test and shim defects.** The compute
+   wire assertion still described an older 88-byte packet; it now checks the
+   actual 136-byte payload and the appended field offsets. The RT fixture read
+   a length in the same C argument list that an encoder modified it; reading
+   through a pointer inside the assertion sequences those operations without
+   changing expected bytes. All 611 checks remain. The generic drm-shim mmap
+   wrapper dropped the requested address, making placed mappings try address
+   zero; it now forwards that address. All 36 Asahi suites and the four host
+   Vulkan regression profiles pass, including Vulkan validation on the latter.
+
 ## Experimental and held work
 
 | Source | Treatment and reason |
