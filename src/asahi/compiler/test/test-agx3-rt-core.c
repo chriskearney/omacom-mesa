@@ -22,9 +22,10 @@ static unsigned failures;
 static unsigned checks;
 
 static void
-expect(const char *what, bool ok, const uint8_t *bytes, uint8_t len,
+expect(const char *what, bool ok, const uint8_t *bytes, const uint8_t *length,
        const char *expected_hex)
 {
+   const uint8_t len = *length;
    char got[2 * AGX3_RT_CORE_MAX_LENGTH + 1] = {0};
 
    checks++;
@@ -45,8 +46,9 @@ expect(const char *what, bool ok, const uint8_t *bytes, uint8_t len,
 }
 
 static void
-expect_refused(const char *what, bool ok, const uint8_t *bytes, uint8_t len)
+expect_refused(const char *what, bool ok, const uint8_t *bytes, const uint8_t *length)
 {
+   const uint8_t len = *length;
    checks++;
    if (ok) {
       fprintf(stderr, "%s: accepted, expected refusal\n", what);
@@ -89,11 +91,11 @@ main(void)
       expect("AGX3b intersect_ray",
              agx3_rt_intersect_ray(AGX_ISA_ENCODING_AGX3B, b_isect[i].reg, b,
                                    &len),
-             b, len, b_isect[i].hex);
+             b, &len, b_isect[i].hex);
       expect("AGX3c intersect_ray",
              agx3_rt_intersect_ray(AGX_ISA_ENCODING_AGX3C, c_isect[i].reg, b,
                                    &len),
-             b, len, c_isect[i].hex);
+             b, &len, c_isect[i].hex);
    }
 
    /* Every witnessed intersect_ray site, including the anonymous
@@ -122,13 +124,13 @@ main(void)
       expect("AGX3b intersect_ray site",
              agx3_rt_intersect_ray_witnessed_site(AGX_ISA_ENCODING_AGX3B, i, b,
                                                   &len),
-             b, len, b_sites[i]);
+             b, &len, b_sites[i]);
    }
    for (unsigned i = 0; i < 4; ++i) {
       expect("AGX3c intersect_ray site",
              agx3_rt_intersect_ray_witnessed_site(AGX_ISA_ENCODING_AGX3C, i, b,
                                                   &len),
-             b, len, c_sites[i]);
+             b, &len, c_sites[i]);
    }
 
    /* continue_ray: the full accepted ladders, byte-identical to the
@@ -150,13 +152,13 @@ main(void)
       expect("AGX3b continue_ray",
              agx3_rt_continue_ray(AGX_ISA_ENCODING_AGX3B, b_cont[i].reg, b,
                                   &len),
-             b, len, b_cont[i].hex);
+             b, &len, b_cont[i].hex);
    }
    for (unsigned i = 0; i < 7; ++i) {
       expect("AGX3c continue_ray",
              agx3_rt_continue_ray(AGX_ISA_ENCODING_AGX3C, c_cont[i].reg, b,
                                   &len),
-             b, len, c_cont[i].hex);
+             b, &len, c_cont[i].hex);
    }
 
    /* Full traversal native witnesses: entry versus in-loop is positional,
@@ -174,106 +176,106 @@ main(void)
          const bool ok = agx3_rt_traversal_barrier(
             enc, (enum agx3_rt_barrier_scope)scope, b, &len);
          if (scope == 1 || scope == 2)
-            expect("native traversal barrier", ok, b, len,
+            expect("native traversal barrier", ok, b, &len,
                    barrier_hex[family][scope - 1]);
          else
-            expect_refused("unwitnessed traversal barrier scope", ok, b, len);
+            expect_refused("unwitnessed traversal barrier scope", ok, b, &len);
       }
    }
    memset(b, 0xa5, sizeof(b));
    len = 0xa5;
    const bool agx2_barrier = agx3_rt_traversal_barrier(
       AGX_ISA_ENCODING_AGX2, AGX3_RT_BARRIER_ENTRY, b, &len);
-   expect_refused("AGX2 traversal barrier", agx2_barrier, b, len);
+   expect_refused("AGX2 traversal barrier", agx2_barrier, b, &len);
 
    /* The fixed forms: exact agx3_pack.c witnesses. */
    expect("AGX3b incStk", agx3_rt_inc_stk(AGX_ISA_ENCODING_AGX3B, b, &len), b,
-          len, "0700541280000000");
+          &len, "0700541280000000");
    expect("AGX3c incStk", agx3_rt_inc_stk(AGX_ISA_ENCODING_AGX3C, b, &len), b,
-          len, "9f04000000000000");
+          &len, "9f04000000000000");
    expect("AGX3b update barrier",
-          agx3_rt_update_barrier(AGX_ISA_ENCODING_AGX3B, b, &len), b, len,
+          agx3_rt_update_barrier(AGX_ISA_ENCODING_AGX3B, b, &len), b, &len,
           "070454080900");
    expect("AGX3c update barrier",
-          agx3_rt_update_barrier(AGX_ISA_ENCODING_AGX3C, b, &len), b, len,
+          agx3_rt_update_barrier(AGX_ISA_ENCODING_AGX3C, b, &len), b, &len,
           "170900060000");
    expect("AGX3b update_node",
-          agx3_rt_update_node(AGX_ISA_ENCODING_AGX3B, b, &len), b, len,
+          agx3_rt_update_node(AGX_ISA_ENCODING_AGX3B, b, &len), b, &len,
           "df055400");
    expect("AGX3c update_node",
-          agx3_rt_update_node(AGX_ISA_ENCODING_AGX3C, b, &len), b, len,
+          agx3_rt_update_node(AGX_ISA_ENCODING_AGX3C, b, &len), b, &len,
           "270001002200ad02");
    expect("AGX3c update_bvh",
-          agx3_rt_update_bvh(AGX_ISA_ENCODING_AGX3C, b, &len), b, len,
+          agx3_rt_update_bvh(AGX_ISA_ENCODING_AGX3C, b, &len), b, &len,
           "270021002280ac42");
 
    /* The complete expansions, byte-identical to agx3_pack_update_node and
     * agx3_pack_update_bvh_fixed_witness. */
    expect("AGX3b update_node expansion",
           agx3_rt_update_node_expansion(AGX_ISA_ENCODING_AGX3B, b, &len), b,
-          len, "070454080900df055400");
+          &len, "070454080900df055400");
    expect("AGX3c update_node expansion",
           agx3_rt_update_node_expansion(AGX_ISA_ENCODING_AGX3C, b, &len), b,
-          len, "170900060000270001002200ad02");
+          &len, "170900060000270001002200ad02");
    expect("AGX3c update_bvh expansion",
           agx3_rt_update_bvh_expansion(AGX_ISA_ENCODING_AGX3C, b, &len), b,
-          len, "170900060000270021002280ac42");
+          &len, "170900060000270021002280ac42");
 
    /* Fail-closed: unwitnessed state registers, cross-encoding ladders, the
     * unwitnessed AGX3b update_bvh, out-of-range sites, and AGX2. */
    expect_refused("intersect_ray b reg 2",
                   agx3_rt_intersect_ray(AGX_ISA_ENCODING_AGX3B, 2, b, &len), b,
-                  len);
+                  &len);
    expect_refused("intersect_ray b reg 8",
                   agx3_rt_intersect_ray(AGX_ISA_ENCODING_AGX3B, 8, b, &len), b,
-                  len);
+                  &len);
    expect_refused("intersect_ray c reg 4",
                   agx3_rt_intersect_ray(AGX_ISA_ENCODING_AGX3C, 4, b, &len), b,
-                  len);
+                  &len);
    expect_refused("intersect_ray on AGX2",
                   agx3_rt_intersect_ray(AGX_ISA_ENCODING_AGX2, 0, b, &len), b,
-                  len);
+                  &len);
    expect_refused("continue_ray b reg 1",
                   agx3_rt_continue_ray(AGX_ISA_ENCODING_AGX3B, 1, b, &len), b,
-                  len);
+                  &len);
    expect_refused("continue_ray b reg 12",
                   agx3_rt_continue_ray(AGX_ISA_ENCODING_AGX3B, 12, b, &len), b,
-                  len);
+                  &len);
    expect_refused("continue_ray c reg 4",
                   agx3_rt_continue_ray(AGX_ISA_ENCODING_AGX3C, 4, b, &len), b,
-                  len);
+                  &len);
    expect_refused("continue_ray c reg 6",
                   agx3_rt_continue_ray(AGX_ISA_ENCODING_AGX3C, 6, b, &len), b,
-                  len);
+                  &len);
    expect_refused("continue_ray on UNKNOWN",
                   agx3_rt_continue_ray(AGX_ISA_ENCODING_UNKNOWN, 0, b, &len),
-                  b, len);
+                  b, &len);
    expect_refused("update_bvh on AGX3b",
-                  agx3_rt_update_bvh(AGX_ISA_ENCODING_AGX3B, b, &len), b, len);
+                  agx3_rt_update_bvh(AGX_ISA_ENCODING_AGX3B, b, &len), b, &len);
    expect_refused("update_bvh expansion on AGX3b",
                   agx3_rt_update_bvh_expansion(AGX_ISA_ENCODING_AGX3B, b,
                                                &len),
-                  b, len);
+                  b, &len);
    expect_refused("intersect_ray b site 3",
                   agx3_rt_intersect_ray_witnessed_site(AGX_ISA_ENCODING_AGX3B,
                                                        3, b, &len),
-                  b, len);
+                  b, &len);
    expect_refused("intersect_ray c site 4",
                   agx3_rt_intersect_ray_witnessed_site(AGX_ISA_ENCODING_AGX3C,
                                                        4, b, &len),
-                  b, len);
+                  b, &len);
    expect_refused("intersect_ray site on AGX2",
                   agx3_rt_intersect_ray_witnessed_site(AGX_ISA_ENCODING_AGX2,
                                                        0, b, &len),
-                  b, len);
+                  b, &len);
    expect_refused("inc_stk on AGX2",
-                  agx3_rt_inc_stk(AGX_ISA_ENCODING_AGX2, b, &len), b, len);
+                  agx3_rt_inc_stk(AGX_ISA_ENCODING_AGX2, b, &len), b, &len);
    expect_refused("update barrier on AGX2",
                   agx3_rt_update_barrier(AGX_ISA_ENCODING_AGX2, b, &len), b,
-                  len);
+                  &len);
    expect_refused("update_node on UNKNOWN",
                   agx3_rt_update_node(AGX_ISA_ENCODING_UNKNOWN, b, &len), b,
-                  len);
+                  &len);
 
    /*
     * The incStk operand differential, measured on 2026-09-10 from Apple's own
@@ -332,36 +334,36 @@ main(void)
              agx3_rt_inc_stk_operands(AGX_ISA_ENCODING_AGX3B,
                                       g17p_inc_stk[i].f2,
                                       g17p_inc_stk[i].f24, b, &len),
-             b, len, g17p_inc_stk[i].hex);
+             b, &len, g17p_inc_stk[i].hex);
    }
 
    /* The fixed witness must remain reachable through the operand codec. */
    expect("incStk operands reproduce the fixed AGX3b witness",
           agx3_rt_inc_stk_operands(AGX_ISA_ENCODING_AGX3B, 36, 4, b, &len), b,
-          len, "0700541280000000");
+          &len, "0700541280000000");
 
    /* Fail-closed boundaries: no AGX3c operand witness, no odd f2, no
     * out-of-range f24. */
    expect_refused("incStk operands on AGX3c",
                   agx3_rt_inc_stk_operands(AGX_ISA_ENCODING_AGX3C, 40, 4, b,
                                            &len),
-                  b, len);
+                  b, &len);
    expect_refused("incStk operands on AGX2",
                   agx3_rt_inc_stk_operands(AGX_ISA_ENCODING_AGX2, 40, 4, b,
                                            &len),
-                  b, len);
+                  b, &len);
    expect_refused("incStk odd f2",
                   agx3_rt_inc_stk_operands(AGX_ISA_ENCODING_AGX3B, 41, 4, b,
                                            &len),
-                  b, len);
+                  b, &len);
    expect_refused("incStk f2 out of range",
                   agx3_rt_inc_stk_operands(AGX_ISA_ENCODING_AGX3B, 512, 4, b,
                                            &len),
-                  b, len);
+                  b, &len);
    expect_refused("incStk f24 out of range",
                   agx3_rt_inc_stk_operands(AGX_ISA_ENCODING_AGX3B, 40, 8192, b,
                                            &len),
-                  b, len);
+                  b, &len);
 
    /*
     * The ray-query intersect_ray differential, measured 2026-09-10 from
@@ -399,22 +401,22 @@ main(void)
                 AGX_ISA_ENCODING_AGX3B, g17p_query_sites[i].site,
                 g17p_query_sites[i].per_query, g17p_query_sites[i].context, b,
                 &len),
-             b, len, g17p_query_sites[i].hex);
+             b, &len, g17p_query_sites[i].hex);
    }
 
    /* Measured bounds: f5 is 13 bits, f77 is refused at 192. */
    expect_refused("intersect_ray query f5 above 13 bits",
                   agx3_rt_intersect_ray_query(AGX_ISA_ENCODING_AGX3B, 8192, 2,
                                               122, b, &len),
-                  b, len);
+                  b, &len);
    expect_refused("intersect_ray query f77 = 192",
                   agx3_rt_intersect_ray_query(AGX_ISA_ENCODING_AGX3B, 0, 192,
                                               122, b, &len),
-                  b, len);
+                  b, &len);
    expect_refused("intersect_ray query on AGX3c",
                   agx3_rt_intersect_ray_query(AGX_ISA_ENCODING_AGX3C, 0, 2,
                                               122, b, &len),
-                  b, len);
+                  b, &len);
    checks++;
    if (agx3_rt_intersect_ray_query(AGX_ISA_ENCODING_AGX3B, 0, 2, 122, NULL,
                                    &len) ||
