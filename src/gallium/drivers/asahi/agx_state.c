@@ -593,11 +593,14 @@ agx_create_sampler_state(struct pipe_context *pctx,
          fixup_border_zs(state->border_color_format, &border);
       const bool integer = util_format_is_pure_integer(format);
 
-      /* A depth comparison uses the border depth clamped to [0, 1] for every
-       * depth format, Z32F included. The hardware's sampled comparison
-       * clamps it itself, but a gathered comparison takes the raw border. */
+      /* A fixed-point depth comparison uses the border depth clamped to
+       * [0, 1]; a floating-point one uses it unclamped. Z24 is clamped
+       * above, before its promotion to Z32F. */
+      const struct util_format_description *zdesc =
+         util_format_description(format);
       if (state->compare_mode == PIPE_TEX_COMPARE_R_TO_TEXTURE &&
-          util_format_has_depth(util_format_description(format)))
+          util_format_has_depth(zdesc) &&
+          zdesc->channel[0].type != UTIL_FORMAT_TYPE_FLOAT)
          border.f[0] = SATURATE(border.f[0]);
 
       if (!agx_gallium_classify_standard_border(
