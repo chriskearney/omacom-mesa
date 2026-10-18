@@ -31,7 +31,12 @@ def main():
             assert run('git', 'rev-parse', 'refs/tags/' + source['tag']) == source['commit']
     if args.check_git:
         for profile in data['profiles']:
-            assert run('git', 'rev-parse', profile['branch']) == profile['commit']
+            local = subprocess.run(['git', 'rev-parse', '--verify', '--quiet',
+                                    'refs/heads/' + profile['branch']],
+                                   cwd=ROOT, text=True, capture_output=True)
+            actual = local.stdout.strip() if local.returncode == 0 else run(
+                'git', 'rev-parse', 'refs/remotes/origin/' + profile['branch'])
+            assert actual == profile['commit']
             assert run('git', 'rev-parse', profile['commit'] + '^') == profile['source_commit']
             paths = run('git', 'diff-tree', '--no-commit-id', '--name-only', '-r', profile['commit']).splitlines()
             assert set(paths) <= {'AGENTS.md', 'README.md', '.github/workflows/macos.yml'}, paths

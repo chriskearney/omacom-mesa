@@ -1,7 +1,7 @@
 # SiliconForest Mesa validation — 2026-10-18
 
 Validated source: **`3cca5b305cda31558540dbba86f0074568a4cb27`**.
-The following documentation/evidence commit does not change driver source.
+Later documentation and provenance-helper commits do not change driver source.
 Machine-readable results and exact driver subtree IDs are in
 [SILICONFOREST-VALIDATION.json](SILICONFOREST-VALIDATION.json).
 
