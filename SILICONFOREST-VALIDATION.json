@@ -262,12 +262,12 @@
   },
   "hardware_qualified": false,
   "system_install_performed": false,
-  "private_sources_published": false,
   "not_run": [
     "physical Apple GPU execution",
     "full Vulkan/OpenGL CTS",
     "Mesa-wide test suite",
     "compatibility and experimental branch builds",
     "virtio GPU execution"
-  ]
+  ],
+  "private_sources_in_this_repository": false
 }
