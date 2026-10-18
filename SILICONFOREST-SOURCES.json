@@ -1,0 +1,2829 @@
+{
+  "schema_version": 1,
+  "discovered_on": "2026-10-18",
+  "repository": "https://github.com/iconidentify/siliconforested-mesa",
+  "default_branch": "siliconforest/next",
+  "source_snapshots": [
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-native",
+      "source_kind": "branch",
+      "source_name": "agx3b",
+      "commit": "dba15302aa0554b52ec6ca5103bd0391035e0fdc",
+      "tag": "sources/2026-10-18/aurora-native/agx3b",
+      "url": "https://github.com/aurora-silicon/mesa/tree/dba15302aa0554b52ec6ca5103bd0391035e0fdc",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-native",
+      "source_kind": "branch",
+      "source_name": "agx3b-rebase",
+      "commit": "af3d9c6fc84f6e5bc6ee23f1eb0b47a5ee466826",
+      "tag": "sources/2026-10-18/aurora-native/agx3b-rebase",
+      "url": "https://github.com/aurora-silicon/mesa/tree/af3d9c6fc84f6e5bc6ee23f1eb0b47a5ee466826",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-native",
+      "source_kind": "branch",
+      "source_name": "aurora/gl-zink-int-resolve",
+      "commit": "c0460a38d6bcc6639bbe550524e141cb7a3d878e",
+      "tag": "sources/2026-10-18/aurora-native/aurora/gl-zink-int-resolve",
+      "url": "https://github.com/aurora-silicon/mesa/tree/c0460a38d6bcc6639bbe550524e141cb7a3d878e",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-native",
+      "source_kind": "branch",
+      "source_name": "aurora/zink-depth-write-transition",
+      "commit": "af7fdc46c4c1578073bb20f763a4636c0c9f9255",
+      "tag": "sources/2026-10-18/aurora-native/aurora/zink-depth-write-transition",
+      "url": "https://github.com/aurora-silicon/mesa/tree/af7fdc46c4c1578073bb20f763a4636c0c9f9255",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-native",
+      "source_kind": "branch",
+      "source_name": "j514s/g15s-20261017",
+      "commit": "cf8ec613be202d8bfc5440e61e9aa6c60700fad7",
+      "tag": "sources/2026-10-18/aurora-native/j514s/g15s-20261017",
+      "url": "https://github.com/aurora-silicon/mesa/tree/cf8ec613be202d8bfc5440e61e9aa6c60700fad7",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-native",
+      "source_kind": "branch",
+      "source_name": "j514s/g15s-store-forwarding",
+      "commit": "59fa024a8a6e7199f44b8cd52ca05a4e606d3ae0",
+      "tag": "sources/2026-10-18/aurora-native/j514s/g15s-store-forwarding",
+      "url": "https://github.com/aurora-silicon/mesa/tree/59fa024a8a6e7199f44b8cd52ca05a4e606d3ae0",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-native",
+      "source_kind": "branch",
+      "source_name": "main",
+      "commit": "ab0ab2209c4ea834168ec0d23da4d5edfc386015",
+      "tag": "sources/2026-10-18/aurora-native/main",
+      "url": "https://github.com/aurora-silicon/mesa/tree/ab0ab2209c4ea834168ec0d23da4d5edfc386015",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-native",
+      "source_kind": "branch",
+      "source_name": "satchlj/u-queue-sched-from-worker-upstream",
+      "commit": "1f2f6f665c775489434b32067d8eef281342dcbf",
+      "tag": "sources/2026-10-18/aurora-native/satchlj/u-queue-sched-from-worker-upstream",
+      "url": "https://github.com/aurora-silicon/mesa/tree/1f2f6f665c775489434b32067d8eef281342dcbf",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-native",
+      "source_kind": "branch",
+      "source_name": "test/public-release-6a227f",
+      "commit": "5a2ee8e8486658fa0665e47bae658e43f611a4d4",
+      "tag": "sources/2026-10-18/aurora-native/test/public-release-6a227f",
+      "url": "https://github.com/aurora-silicon/mesa/tree/5a2ee8e8486658fa0665e47bae658e43f611a4d4",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-native",
+      "source_kind": "branch",
+      "source_name": "test/public-release-a0bcbcb",
+      "commit": "71fb27eb324b8351880b57b1a4f0546bb136b359",
+      "tag": "sources/2026-10-18/aurora-native/test/public-release-a0bcbcb",
+      "url": "https://github.com/aurora-silicon/mesa/tree/71fb27eb324b8351880b57b1a4f0546bb136b359",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-native",
+      "source_kind": "branch",
+      "source_name": "test/steam-ui-recovery-4e3544d1",
+      "commit": "62f2bdb11f890f12042039d6ee7ce192909e200e",
+      "tag": "sources/2026-10-18/aurora-native/test/steam-ui-recovery-4e3544d1",
+      "url": "https://github.com/aurora-silicon/mesa/tree/62f2bdb11f890f12042039d6ee7ce192909e200e",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-native",
+      "source_kind": "branch",
+      "source_name": "test/zink-instance-metadata-5a",
+      "commit": "8654b756f7c25e3f6eeb401e841e8c754996970a",
+      "tag": "sources/2026-10-18/aurora-native/test/zink-instance-metadata-5a",
+      "url": "https://github.com/aurora-silicon/mesa/tree/8654b756f7c25e3f6eeb401e841e8c754996970a",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-native",
+      "source_kind": "branch",
+      "source_name": "test/zink-instance-metadata-c62",
+      "commit": "f167fe164a7e7330ad99c88f50b213bd5a78a3d8",
+      "tag": "sources/2026-10-18/aurora-native/test/zink-instance-metadata-c62",
+      "url": "https://github.com/aurora-silicon/mesa/tree/f167fe164a7e7330ad99c88f50b213bd5a78a3d8",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://gitlab.freedesktop.org/asahi/mesa",
+      "source_key": "asahi",
+      "source_kind": "branch",
+      "source_name": "main",
+      "commit": "01ac84e119f468a3267714b0b4a339316a3083f4",
+      "tag": "sources/2026-10-18/asahi/main",
+      "url": "https://gitlab.freedesktop.org/asahi/mesa/-/tree/01ac84e119f468a3267714b0b4a339316a3083f4",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-pr",
+      "source_kind": "pull-request",
+      "source_name": "1",
+      "commit": "dba15302aa0554b52ec6ca5103bd0391035e0fdc",
+      "tag": "sources/2026-10-18/aurora-pr/1",
+      "url": "https://github.com/aurora-silicon/mesa/pull/1",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-pr",
+      "source_kind": "pull-request",
+      "source_name": "10",
+      "commit": "ba289e643e0b361747988280a459b73c34c2cad9",
+      "tag": "sources/2026-10-18/aurora-pr/10",
+      "url": "https://github.com/aurora-silicon/mesa/pull/10",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-pr",
+      "source_kind": "pull-request",
+      "source_name": "11",
+      "commit": "e5894662507898b5fc8c3a53ddd818339b1b23c9",
+      "tag": "sources/2026-10-18/aurora-pr/11",
+      "url": "https://github.com/aurora-silicon/mesa/pull/11",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-pr",
+      "source_kind": "pull-request",
+      "source_name": "12",
+      "commit": "20d9eaabb95da05fdeead03d47ff31bfc078d6eb",
+      "tag": "sources/2026-10-18/aurora-pr/12",
+      "url": "https://github.com/aurora-silicon/mesa/pull/12",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-pr",
+      "source_kind": "pull-request",
+      "source_name": "13",
+      "commit": "daad9e033ef7d5e3841e25c354b28792603ea348",
+      "tag": "sources/2026-10-18/aurora-pr/13",
+      "url": "https://github.com/aurora-silicon/mesa/pull/13",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-pr",
+      "source_kind": "pull-request",
+      "source_name": "14",
+      "commit": "b501b851204a44e3d43787f1e3e7428f50e0a389",
+      "tag": "sources/2026-10-18/aurora-pr/14",
+      "url": "https://github.com/aurora-silicon/mesa/pull/14",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-pr",
+      "source_kind": "pull-request",
+      "source_name": "15",
+      "commit": "1a9caf5ed079f04ba651b1d567da6d97b4b45eb2",
+      "tag": "sources/2026-10-18/aurora-pr/15",
+      "url": "https://github.com/aurora-silicon/mesa/pull/15",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-pr",
+      "source_kind": "pull-request",
+      "source_name": "16",
+      "commit": "1906d2fab053e669ef1bc4bfc6f5802c73bdfdbd",
+      "tag": "sources/2026-10-18/aurora-pr/16",
+      "url": "https://github.com/aurora-silicon/mesa/pull/16",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-pr",
+      "source_kind": "pull-request",
+      "source_name": "17",
+      "commit": "2998b2443c60045e9f975e1d2ee208c45c63ad05",
+      "tag": "sources/2026-10-18/aurora-pr/17",
+      "url": "https://github.com/aurora-silicon/mesa/pull/17",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-pr",
+      "source_kind": "pull-request",
+      "source_name": "18",
+      "commit": "de2d1fe7fbb6c3ceee46cedcd3a07779ef57e01b",
+      "tag": "sources/2026-10-18/aurora-pr/18",
+      "url": "https://github.com/aurora-silicon/mesa/pull/18",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-pr",
+      "source_kind": "pull-request",
+      "source_name": "19",
+      "commit": "202fac410aae60fa0e21ecc98382feedfdca7c1e",
+      "tag": "sources/2026-10-18/aurora-pr/19",
+      "url": "https://github.com/aurora-silicon/mesa/pull/19",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-pr",
+      "source_kind": "pull-request",
+      "source_name": "2",
+      "commit": "e5d05c5533d17931b475ac60e1d7a944f10b8736",
+      "tag": "sources/2026-10-18/aurora-pr/2",
+      "url": "https://github.com/aurora-silicon/mesa/pull/2",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-pr",
+      "source_kind": "pull-request",
+      "source_name": "20",
+      "commit": "ad8b84816c7e5dede5f459b884431833418ee851",
+      "tag": "sources/2026-10-18/aurora-pr/20",
+      "url": "https://github.com/aurora-silicon/mesa/pull/20",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-pr",
+      "source_kind": "pull-request",
+      "source_name": "21",
+      "commit": "b5b65a509dd5af33fe67e5f72d458cc44b1c8c0f",
+      "tag": "sources/2026-10-18/aurora-pr/21",
+      "url": "https://github.com/aurora-silicon/mesa/pull/21",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-pr",
+      "source_kind": "pull-request",
+      "source_name": "22",
+      "commit": "5f6b2eb41661ac9b26a7153957d368ba91af9676",
+      "tag": "sources/2026-10-18/aurora-pr/22",
+      "url": "https://github.com/aurora-silicon/mesa/pull/22",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-pr",
+      "source_kind": "pull-request",
+      "source_name": "23",
+      "commit": "cf8ec613be202d8bfc5440e61e9aa6c60700fad7",
+      "tag": "sources/2026-10-18/aurora-pr/23",
+      "url": "https://github.com/aurora-silicon/mesa/pull/23",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-pr",
+      "source_kind": "pull-request",
+      "source_name": "24",
+      "commit": "59fa024a8a6e7199f44b8cd52ca05a4e606d3ae0",
+      "tag": "sources/2026-10-18/aurora-pr/24",
+      "url": "https://github.com/aurora-silicon/mesa/pull/24",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-pr",
+      "source_kind": "pull-request",
+      "source_name": "25",
+      "commit": "aab698d2ef34e2aef38ba4d2bfcfa3abc5ded4c5",
+      "tag": "sources/2026-10-18/aurora-pr/25",
+      "url": "https://github.com/aurora-silicon/mesa/pull/25",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-pr",
+      "source_kind": "pull-request",
+      "source_name": "3",
+      "commit": "6c88433503ad8573de36af9e00a132f86fbe8323",
+      "tag": "sources/2026-10-18/aurora-pr/3",
+      "url": "https://github.com/aurora-silicon/mesa/pull/3",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-pr",
+      "source_kind": "pull-request",
+      "source_name": "4",
+      "commit": "e3ee5c8a2a3649a807c8e0cc92c4be8e9333a714",
+      "tag": "sources/2026-10-18/aurora-pr/4",
+      "url": "https://github.com/aurora-silicon/mesa/pull/4",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-pr",
+      "source_kind": "pull-request",
+      "source_name": "5",
+      "commit": "9761083c32aad2a57c2818af9756f0e33593469c",
+      "tag": "sources/2026-10-18/aurora-pr/5",
+      "url": "https://github.com/aurora-silicon/mesa/pull/5",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-pr",
+      "source_kind": "pull-request",
+      "source_name": "6",
+      "commit": "b6524dcf498a8064bf0a3df3bfcc313035198bec",
+      "tag": "sources/2026-10-18/aurora-pr/6",
+      "url": "https://github.com/aurora-silicon/mesa/pull/6",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-pr",
+      "source_kind": "pull-request",
+      "source_name": "7",
+      "commit": "af7fdc46c4c1578073bb20f763a4636c0c9f9255",
+      "tag": "sources/2026-10-18/aurora-pr/7",
+      "url": "https://github.com/aurora-silicon/mesa/pull/7",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-pr",
+      "source_kind": "pull-request",
+      "source_name": "8",
+      "commit": "6ff2d4aa9da581e3c5f9fdaa4b51416b116d5ace",
+      "tag": "sources/2026-10-18/aurora-pr/8",
+      "url": "https://github.com/aurora-silicon/mesa/pull/8",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-pr",
+      "source_kind": "pull-request",
+      "source_name": "9",
+      "commit": "d547992f258cc53a33e300443afcdba064fb59c5",
+      "tag": "sources/2026-10-18/aurora-pr/9",
+      "url": "https://github.com/aurora-silicon/mesa/pull/9",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/DjDeveloperr/mesa",
+      "source_key": "dj",
+      "source_kind": "branch",
+      "source_name": "aurora/honeykrisp-windows",
+      "commit": "bba64524945243d92e82fc1e69394aeea70a1d41",
+      "tag": "sources/2026-10-18/dj/aurora/honeykrisp-windows",
+      "url": "https://github.com/DjDeveloperr/mesa/tree/bba64524945243d92e82fc1e69394aeea70a1d41",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/DjDeveloperr/mesa",
+      "source_key": "dj",
+      "source_kind": "branch",
+      "source_name": "codex/honeykrisp-bg-eot-use-publish-873",
+      "commit": "c536934511d6b39ee729a1007792f441d7556771",
+      "tag": "sources/2026-10-18/dj/codex/honeykrisp-bg-eot-use-publish-873",
+      "url": "https://github.com/DjDeveloperr/mesa/tree/c536934511d6b39ee729a1007792f441d7556771",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/DjDeveloperr/mesa",
+      "source_key": "dj",
+      "source_kind": "branch",
+      "source_name": "codex/honeykrisp-d3dkmt-native-timeline",
+      "commit": "4a05883604a7e65f1dc6d9e1704b52e5e903be95",
+      "tag": "sources/2026-10-18/dj/codex/honeykrisp-d3dkmt-native-timeline",
+      "url": "https://github.com/DjDeveloperr/mesa/tree/4a05883604a7e65f1dc6d9e1704b52e5e903be95",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/DjDeveloperr/mesa",
+      "source_key": "dj",
+      "source_kind": "branch",
+      "source_name": "codex/honeykrisp-dirty-spans-809",
+      "commit": "4a08cc943a20db15b7cada4ef2e4b80e84311075",
+      "tag": "sources/2026-10-18/dj/codex/honeykrisp-dirty-spans-809",
+      "url": "https://github.com/DjDeveloperr/mesa/tree/4a08cc943a20db15b7cada4ef2e4b80e84311075",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/DjDeveloperr/mesa",
+      "source_key": "dj",
+      "source_kind": "branch",
+      "source_name": "codex/honeykrisp-end-record-dirty-875",
+      "commit": "9f3c6bbf318cdfcc0a8ae43071b377d7ddb84089",
+      "tag": "sources/2026-10-18/dj/codex/honeykrisp-end-record-dirty-875",
+      "url": "https://github.com/DjDeveloperr/mesa/tree/9f3c6bbf318cdfcc0a8ae43071b377d7ddb84089",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/DjDeveloperr/mesa",
+      "source_key": "dj",
+      "source_kind": "branch",
+      "source_name": "codex/honeykrisp-host-release-819",
+      "commit": "4eae218daecdbfd9c8f90e6381cf9bba28a73985",
+      "tag": "sources/2026-10-18/dj/codex/honeykrisp-host-release-819",
+      "url": "https://github.com/DjDeveloperr/mesa/tree/4eae218daecdbfd9c8f90e6381cf9bba28a73985",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/DjDeveloperr/mesa",
+      "source_key": "dj",
+      "source_kind": "branch",
+      "source_name": "codex/honeykrisp-native-lazy-image",
+      "commit": "44d18765ff6bd3cae65fe20a334d01a8918ddbbf",
+      "tag": "sources/2026-10-18/dj/codex/honeykrisp-native-lazy-image",
+      "url": "https://github.com/DjDeveloperr/mesa/tree/44d18765ff6bd3cae65fe20a334d01a8918ddbbf",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/DjDeveloperr/mesa",
+      "source_key": "dj",
+      "source_kind": "branch",
+      "source_name": "codex/honeykrisp-private-producer-861",
+      "commit": "06a1565611a5d079307b08541217e5e15b5ce014",
+      "tag": "sources/2026-10-18/dj/codex/honeykrisp-private-producer-861",
+      "url": "https://github.com/DjDeveloperr/mesa/tree/06a1565611a5d079307b08541217e5e15b5ce014",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/DjDeveloperr/mesa",
+      "source_key": "dj",
+      "source_kind": "branch",
+      "source_name": "codex/honeykrisp-unaligned-mov-864",
+      "commit": "a52fe689421cfa521ce41338198adff02ba4bad9",
+      "tag": "sources/2026-10-18/dj/codex/honeykrisp-unaligned-mov-864",
+      "url": "https://github.com/DjDeveloperr/mesa/tree/a52fe689421cfa521ce41338198adff02ba4bad9",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/DjDeveloperr/mesa",
+      "source_key": "dj",
+      "source_kind": "branch",
+      "source_name": "codex/honeykrisp-wc-release-820",
+      "commit": "16c64076c9a5e72dd668d69ed46f0e5f823d2d80",
+      "tag": "sources/2026-10-18/dj/codex/honeykrisp-wc-release-820",
+      "url": "https://github.com/DjDeveloperr/mesa/tree/16c64076c9a5e72dd668d69ed46f0e5f823d2d80",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/DjDeveloperr/mesa",
+      "source_key": "dj",
+      "source_kind": "branch",
+      "source_name": "codex/honeykrisp-wc-submit-pools-816",
+      "commit": "4bca3916e17bf3875e936f04881dfa692e045d13",
+      "tag": "sources/2026-10-18/dj/codex/honeykrisp-wc-submit-pools-816",
+      "url": "https://github.com/DjDeveloperr/mesa/tree/4bca3916e17bf3875e936f04881dfa692e045d13",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/DjDeveloperr/mesa",
+      "source_key": "dj",
+      "source_kind": "branch",
+      "source_name": "m5-agx-g15-g17-failclosed",
+      "commit": "068c165a0c83cab4e4c6e9a3c89f63f7a4fa0c2c",
+      "tag": "sources/2026-10-18/dj/m5-agx-g15-g17-failclosed",
+      "url": "https://github.com/DjDeveloperr/mesa/tree/068c165a0c83cab4e4c6e9a3c89f63f7a4fa0c2c",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa-eryk-m4",
+      "source_key": "eryk-legacy",
+      "source_kind": "branch",
+      "source_name": "air/g15g-conservative",
+      "commit": "80c636d9decd71d39ec6e34e88ddcab06ceef77a",
+      "tag": "sources/2026-10-18/eryk-legacy/air/g15g-conservative",
+      "url": "https://github.com/aurora-silicon/mesa-eryk-m4/tree/80c636d9decd71d39ec6e34e88ddcab06ceef77a",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa-eryk-m4",
+      "source_key": "eryk-legacy",
+      "source_kind": "branch",
+      "source_name": "air/satchlj-mesa",
+      "commit": "3d7a02dc8d29ab0c23d63d066f1b8f03aa5838b6",
+      "tag": "sources/2026-10-18/eryk-legacy/air/satchlj-mesa",
+      "url": "https://github.com/aurora-silicon/mesa-eryk-m4/tree/3d7a02dc8d29ab0c23d63d066f1b8f03aa5838b6",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa-eryk-m4",
+      "source_key": "eryk-legacy",
+      "source_kind": "branch",
+      "source_name": "eryk_m3m4_merged_mesa",
+      "commit": "de9892d079dd17b92ba89f72bcb7086a97b2f423",
+      "tag": "sources/2026-10-18/eryk-legacy/eryk_m3m4_merged_mesa",
+      "url": "https://github.com/aurora-silicon/mesa-eryk-m4/tree/de9892d079dd17b92ba89f72bcb7086a97b2f423",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa-eryk-m4",
+      "source_key": "eryk-legacy",
+      "source_kind": "branch",
+      "source_name": "experiment/m3-input-coalescing-20260930",
+      "commit": "9648e92347cedad62f23fa619900639d8fb3e97a",
+      "tag": "sources/2026-10-18/eryk-legacy/experiment/m3-input-coalescing-20260930",
+      "url": "https://github.com/aurora-silicon/mesa-eryk-m4/tree/9648e92347cedad62f23fa619900639d8fb3e97a",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa-eryk-m4",
+      "source_key": "eryk-legacy",
+      "source_kind": "branch",
+      "source_name": "experiment/m3-native-opengl-20261001",
+      "commit": "e4e593e64092b22612fc5a94d76ba5a00f03e5aa",
+      "tag": "sources/2026-10-18/eryk-legacy/experiment/m3-native-opengl-20261001",
+      "url": "https://github.com/aurora-silicon/mesa-eryk-m4/tree/e4e593e64092b22612fc5a94d76ba5a00f03e5aa",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa-eryk-m4",
+      "source_key": "eryk-legacy",
+      "source_kind": "branch",
+      "source_name": "experiment/m3-native-scheduling-20260930",
+      "commit": "c18be39455009a1da16b42ed32a22d900f034862",
+      "tag": "sources/2026-10-18/eryk-legacy/experiment/m3-native-scheduling-20260930",
+      "url": "https://github.com/aurora-silicon/mesa-eryk-m4/tree/c18be39455009a1da16b42ed32a22d900f034862",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa-eryk-m4",
+      "source_key": "eryk-legacy",
+      "source_kind": "branch",
+      "source_name": "experiment/m3-neo-compiler",
+      "commit": "f75416658d34a144faa96f48b7e9d3edf6946b4f",
+      "tag": "sources/2026-10-18/eryk-legacy/experiment/m3-neo-compiler",
+      "url": "https://github.com/aurora-silicon/mesa-eryk-m4/tree/f75416658d34a144faa96f48b7e9d3edf6946b4f",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa-eryk-m4",
+      "source_key": "eryk-legacy",
+      "source_kind": "branch",
+      "source_name": "experiment/m3-vertex-inputs-20260930",
+      "commit": "b5822dbc3f5839882d6dadf8b0b1d503ebd91288",
+      "tag": "sources/2026-10-18/eryk-legacy/experiment/m3-vertex-inputs-20260930",
+      "url": "https://github.com/aurora-silicon/mesa-eryk-m4/tree/b5822dbc3f5839882d6dadf8b0b1d503ebd91288",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa-eryk-m4",
+      "source_key": "eryk-legacy",
+      "source_kind": "branch",
+      "source_name": "experiment/m3-vertex-preamble-20260930",
+      "commit": "8494fc7097cbed5b11ac018ffd397db2cb3b5dcf",
+      "tag": "sources/2026-10-18/eryk-legacy/experiment/m3-vertex-preamble-20260930",
+      "url": "https://github.com/aurora-silicon/mesa-eryk-m4/tree/8494fc7097cbed5b11ac018ffd397db2cb3b5dcf",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa-eryk-m4",
+      "source_key": "eryk-legacy",
+      "source_kind": "branch",
+      "source_name": "experiment/m3-vertex-reassociation-20260930",
+      "commit": "8932ba7445b4488550c60b2e13a245045c108aa6",
+      "tag": "sources/2026-10-18/eryk-legacy/experiment/m3-vertex-reassociation-20260930",
+      "url": "https://github.com/aurora-silicon/mesa-eryk-m4/tree/8932ba7445b4488550c60b2e13a245045c108aa6",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa-eryk-m4",
+      "source_key": "eryk-legacy",
+      "source_kind": "branch",
+      "source_name": "experiment/m3-zink-saturating-ubo-20260930",
+      "commit": "ad8ce80a9978b1af56cd16603389f897bbae0f04",
+      "tag": "sources/2026-10-18/eryk-legacy/experiment/m3-zink-saturating-ubo-20260930",
+      "url": "https://github.com/aurora-silicon/mesa-eryk-m4/tree/ad8ce80a9978b1af56cd16603389f897bbae0f04",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa-eryk-m4",
+      "source_key": "eryk-legacy",
+      "source_kind": "branch",
+      "source_name": "experiment/m3-zink-ubo-association-20260930",
+      "commit": "f182d8d9401a9f08c51b2d8e471d5b51fbf6abed",
+      "tag": "sources/2026-10-18/eryk-legacy/experiment/m3-zink-ubo-association-20260930",
+      "url": "https://github.com/aurora-silicon/mesa-eryk-m4/tree/f182d8d9401a9f08c51b2d8e471d5b51fbf6abed",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa-eryk-m4",
+      "source_key": "eryk-legacy",
+      "source_kind": "branch",
+      "source_name": "j613-d3-index-alignment",
+      "commit": "309170e02c764bf08bd9d58a902e860b0862c60f",
+      "tag": "sources/2026-10-18/eryk-legacy/j613-d3-index-alignment",
+      "url": "https://github.com/aurora-silicon/mesa-eryk-m4/tree/309170e02c764bf08bd9d58a902e860b0862c60f",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa-eryk-m4",
+      "source_key": "eryk-legacy",
+      "source_kind": "branch",
+      "source_name": "m3-j516s-fixes",
+      "commit": "16b77e7d31885b320f6e5ed225fef38890d388c6",
+      "tag": "sources/2026-10-18/eryk-legacy/m3-j516s-fixes",
+      "url": "https://github.com/aurora-silicon/mesa-eryk-m4/tree/16b77e7d31885b320f6e5ed225fef38890d388c6",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa-eryk-m4",
+      "source_key": "eryk-legacy",
+      "source_kind": "branch",
+      "source_name": "m3-wayland",
+      "commit": "a9a2aa7e00df758a1edc0836c9638af558b8b38a",
+      "tag": "sources/2026-10-18/eryk-legacy/m3-wayland",
+      "url": "https://github.com/aurora-silicon/mesa-eryk-m4/tree/a9a2aa7e00df758a1edc0836c9638af558b8b38a",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa-eryk-m4",
+      "source_key": "eryk-legacy",
+      "source_kind": "branch",
+      "source_name": "m4-asahi-port",
+      "commit": "08b19ec3a2e422a7252fdfe77c185450fccf86da",
+      "tag": "sources/2026-10-18/eryk-legacy/m4-asahi-port",
+      "url": "https://github.com/aurora-silicon/mesa-eryk-m4/tree/08b19ec3a2e422a7252fdfe77c185450fccf86da",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa-eryk-m4",
+      "source_key": "eryk-legacy",
+      "source_kind": "branch",
+      "source_name": "satchlj/j613-d3-index-alignment",
+      "commit": "cb7292a7a07c546f617516f8786fa00a0ff9d85d",
+      "tag": "sources/2026-10-18/eryk-legacy/satchlj/j613-d3-index-alignment",
+      "url": "https://github.com/aurora-silicon/mesa-eryk-m4/tree/cb7292a7a07c546f617516f8786fa00a0ff9d85d",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa-eryk-m4",
+      "source_key": "eryk-legacy",
+      "source_kind": "branch",
+      "source_name": "satchlj/j613-mesa-14x",
+      "commit": "b5e0e363cbd3863e8fd78949788a6b0899c80863",
+      "tag": "sources/2026-10-18/eryk-legacy/satchlj/j613-mesa-14x",
+      "url": "https://github.com/aurora-silicon/mesa-eryk-m4/tree/b5e0e363cbd3863e8fd78949788a6b0899c80863",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa-eryk-m4",
+      "source_key": "eryk-legacy",
+      "source_kind": "branch",
+      "source_name": "satchlj/j613-mesa-25g83",
+      "commit": "703ff5fcebd6099b9b7eb3b7f82f116b63d7b7dd",
+      "tag": "sources/2026-10-18/eryk-legacy/satchlj/j613-mesa-25g83",
+      "url": "https://github.com/aurora-silicon/mesa-eryk-m4/tree/703ff5fcebd6099b9b7eb3b7f82f116b63d7b7dd",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://gitlab.freedesktop.org/mesa/mesa",
+      "source_key": "fdo-mr",
+      "source_kind": "merge-request",
+      "source_name": "37668",
+      "commit": "d0632ad19c4b3ce4b2f051108089a69d9dac3228",
+      "tag": "sources/2026-10-18/fdo-mr/37668",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/37668",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://gitlab.freedesktop.org/mesa/mesa",
+      "source_key": "fdo-mr",
+      "source_kind": "merge-request",
+      "source_name": "40238",
+      "commit": "6a5a9c268f9efe48e0ef43fd59693a0528d25e71",
+      "tag": "sources/2026-10-18/fdo-mr/40238",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/40238",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://gitlab.freedesktop.org/mesa/mesa",
+      "source_key": "fdo-mr",
+      "source_kind": "merge-request",
+      "source_name": "42872",
+      "commit": "7e6d5c2d31681ce1b2a004b0d602679555fd5e12",
+      "tag": "sources/2026-10-18/fdo-mr/42872",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/42872",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://gitlab.freedesktop.org/mesa/mesa",
+      "source_key": "fdo-mr",
+      "source_kind": "merge-request",
+      "source_name": "44041",
+      "commit": "de9d045a965d1a2bc4aca030dcf071d5ff33ebb3",
+      "tag": "sources/2026-10-18/fdo-mr/44041",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/44041",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://gitlab.freedesktop.org/mesa/mesa",
+      "source_key": "fdo-mr",
+      "source_kind": "merge-request",
+      "source_name": "44475",
+      "commit": "e22cd9bd50daa4671b41a81ee72c8238a0604a8f",
+      "tag": "sources/2026-10-18/fdo-mr/44475",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/44475",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://gitlab.freedesktop.org/mesa/mesa",
+      "source_key": "fdo-mr",
+      "source_kind": "merge-request",
+      "source_name": "44931",
+      "commit": "a2a5472089a029c067a2e3e35adc420643603065",
+      "tag": "sources/2026-10-18/fdo-mr/44931",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/44931",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://gitlab.freedesktop.org/mesa/mesa",
+      "source_key": "fdo-mr",
+      "source_kind": "merge-request",
+      "source_name": "44932",
+      "commit": "19302a666120d54ff46acfc0cc277d4ff6f29ced",
+      "tag": "sources/2026-10-18/fdo-mr/44932",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/44932",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://gitlab.freedesktop.org/mesa/mesa",
+      "source_key": "freedesktop",
+      "source_kind": "branch",
+      "source_name": "main",
+      "commit": "c823a83e8f373a5c36c2b9ed1d7dc98a4f3360ee",
+      "tag": "sources/2026-10-18/freedesktop/main",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/tree/c823a83e8f373a5c36c2b9ed1d7dc98a4f3360ee",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "26.2",
+      "commit": "3ece74a2766aa958d70c7bf67e37b4eecfa3c274",
+      "tag": "sources/2026-10-18/joshua/26.2",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/3ece74a2766aa958d70c7bf67e37b4eecfa3c274",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/aurora-main-stack-test",
+      "commit": "6ed78420d2e5ea84b7e51047d96dba2457f0e183",
+      "tag": "sources/2026-10-18/joshua/agent/aurora-main-stack-test",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/6ed78420d2e5ea84b7e51047d96dba2457f0e183",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/depth-fix",
+      "commit": "6ec6e59c99b4dbc3d1af9658e164ac94a7be5798",
+      "tag": "sources/2026-10-18/joshua/agent/depth-fix",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/6ec6e59c99b4dbc3d1af9658e164ac94a7be5798",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/div-window",
+      "commit": "1a86b3d5fef8c848f715ab1166d96c6342d810eb",
+      "tag": "sources/2026-10-18/joshua/agent/div-window",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/1a86b3d5fef8c848f715ab1166d96c6342d810eb",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/fdiv-window",
+      "commit": "bbc9dd05e56598009f816c91f82b5bfc886847ce",
+      "tag": "sources/2026-10-18/joshua/agent/fdiv-window",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/bbc9dd05e56598009f816c91f82b5bfc886847ce",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/fdiv-window-v2",
+      "commit": "f0cfa56a2101e51748ad8d605636cc44a1f2eefa",
+      "tag": "sources/2026-10-18/joshua/agent/fdiv-window-v2",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/f0cfa56a2101e51748ad8d605636cc44a1f2eefa",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/heap-budget",
+      "commit": "143dd8b8bdbc58c8bcfa8f85c1e4ec3ef61b594d",
+      "tag": "sources/2026-10-18/joshua/agent/heap-budget",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/143dd8b8bdbc58c8bcfa8f85c1e4ec3ef61b594d",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/hk-bf16-cmat",
+      "commit": "6543eeb7df702b6bcaa4e02a18425571305d4e05",
+      "tag": "sources/2026-10-18/joshua/agent/hk-bf16-cmat",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/6543eeb7df702b6bcaa4e02a18425571305d4e05",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/hk-large-constants",
+      "commit": "e8091339371251f0710b1c125334e78cc8c342a2",
+      "tag": "sources/2026-10-18/joshua/agent/hk-large-constants",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/e8091339371251f0710b1c125334e78cc8c342a2",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/hk-large-constants-v3",
+      "commit": "fc8f604f68b0fee48a03acfe659b3b487ab95944",
+      "tag": "sources/2026-10-18/joshua/agent/hk-large-constants-v3",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/fc8f604f68b0fee48a03acfe659b3b487ab95944",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/hk-reserve-evict",
+      "commit": "4c1ca73cddb09baa0e15801e0330fdd47593e50e",
+      "tag": "sources/2026-10-18/joshua/agent/hk-reserve-evict",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/4c1ca73cddb09baa0e15801e0330fdd47593e50e",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/hk-transfer-barrier",
+      "commit": "bbbfa36dce7926e8b9212bda4eb4902b6a9c3561",
+      "tag": "sources/2026-10-18/joshua/agent/hk-transfer-barrier",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/bbbfa36dce7926e8b9212bda4eb4902b6a9c3561",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/jw16-pack64-fix",
+      "commit": "05c8145d76a2bd10bdac965c065b2edba5eefb60",
+      "tag": "sources/2026-10-18/joshua/agent/jw16-pack64-fix",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/05c8145d76a2bd10bdac965c065b2edba5eefb60",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/jw16-pack64x4-repro",
+      "commit": "c9fc9b7c254a0c8b27ffbfd85cff003dc851bbfa",
+      "tag": "sources/2026-10-18/joshua/agent/jw16-pack64x4-repro",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/c9fc9b7c254a0c8b27ffbfd85cff003dc851bbfa",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/jw16-turnover-batchopen",
+      "commit": "1ad4fc9eef7e3b41fc17fea58022ffa1da1d64f5",
+      "tag": "sources/2026-10-18/joshua/agent/jw16-turnover-batchopen",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/1ad4fc9eef7e3b41fc17fea58022ffa1da1d64f5",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/jw16-turnover-combined",
+      "commit": "2af675b3a66823078cc5b5e7e0c40304aa560d37",
+      "tag": "sources/2026-10-18/joshua/agent/jw16-turnover-combined",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/2af675b3a66823078cc5b5e7e0c40304aa560d37",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/lower-math-pins",
+      "commit": "64edca0c2e210228ed926bb3316f72761a354855",
+      "tag": "sources/2026-10-18/joshua/agent/lower-math-pins",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/64edca0c2e210228ed926bb3316f72761a354855",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/nir-f2f-chain",
+      "commit": "851e1236dc2ce8cf0250306c117de5cb74a13c2e",
+      "tag": "sources/2026-10-18/joshua/agent/nir-f2f-chain",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/851e1236dc2ce8cf0250306c117de5cb74a13c2e",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/pack64-lowering",
+      "commit": "2f0a0bf3a7c4d1739333435a118832a0f85c1feb",
+      "tag": "sources/2026-10-18/joshua/agent/pack64-lowering",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/2f0a0bf3a7c4d1739333435a118832a0f85c1feb",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/rcp-exact",
+      "commit": "ed28f1d8c2cbbd4e2ad17b5b7c47fed791d5f38a",
+      "tag": "sources/2026-10-18/joshua/agent/rcp-exact",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/ed28f1d8c2cbbd4e2ad17b5b7c47fed791d5f38a",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/v3-clean2",
+      "commit": "8b217d2f67cceb7ef14ae3245a6dc52318fced9b",
+      "tag": "sources/2026-10-18/joshua/agent/v3-clean2",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/8b217d2f67cceb7ef14ae3245a6dc52318fced9b",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/v3-dbg1",
+      "commit": "a7f3e6f5d378a77107a68830799d3a3656e569d7",
+      "tag": "sources/2026-10-18/joshua/agent/v3-dbg1",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/a7f3e6f5d378a77107a68830799d3a3656e569d7",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/v3-f2",
+      "commit": "61d4fc603a9b08cf0ae0ec9d4d630918641ec9cd",
+      "tag": "sources/2026-10-18/joshua/agent/v3-f2",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/61d4fc603a9b08cf0ae0ec9d4d630918641ec9cd",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/v3-f23",
+      "commit": "f77ca6f01768462656b0324329d2eb5426cef378",
+      "tag": "sources/2026-10-18/joshua/agent/v3-f23",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/f77ca6f01768462656b0324329d2eb5426cef378",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/v3-f3",
+      "commit": "a67af8f62faf0f5633b6a618cc138a5b4ec1d80a",
+      "tag": "sources/2026-10-18/joshua/agent/v3-f3",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/a67af8f62faf0f5633b6a618cc138a5b4ec1d80a",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/v3-f4",
+      "commit": "e19285ece8151c8f95af123e843c7c4a2c73ac80",
+      "tag": "sources/2026-10-18/joshua/agent/v3-f4",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/e19285ece8151c8f95af123e843c7c4a2c73ac80",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/v3-f5",
+      "commit": "bd9b251c7f5cc03ab4441c576d83ea2e3aa5f43f",
+      "tag": "sources/2026-10-18/joshua/agent/v3-f5",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/bd9b251c7f5cc03ab4441c576d83ea2e3aa5f43f",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/v3-f6",
+      "commit": "fb8f52370aacbc32b388a3c067bf4ab1c5b7df44",
+      "tag": "sources/2026-10-18/joshua/agent/v3-f6",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/fb8f52370aacbc32b388a3c067bf4ab1c5b7df44",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/v3-f7",
+      "commit": "d86867cd245c3f11ecb024055c26ee08dd1f8a12",
+      "tag": "sources/2026-10-18/joshua/agent/v3-f7",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/d86867cd245c3f11ecb024055c26ee08dd1f8a12",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/v3-f8",
+      "commit": "2ad8a95568f7ce2c860f66e19cc73d90f7c9c4ed",
+      "tag": "sources/2026-10-18/joshua/agent/v3-f8",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/2ad8a95568f7ce2c860f66e19cc73d90f7c9c4ed",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/v3-final",
+      "commit": "83be9b16b3d86fc05b5b96c2d77d6025ef0d74e6",
+      "tag": "sources/2026-10-18/joshua/agent/v3-final",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/83be9b16b3d86fc05b5b96c2d77d6025ef0d74e6",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/v3-final2",
+      "commit": "02765a81b1a51c381c16ad76ae0211c2c2956c86",
+      "tag": "sources/2026-10-18/joshua/agent/v3-final2",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/02765a81b1a51c381c16ad76ae0211c2c2956c86",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/v3-final3",
+      "commit": "69bde153405cf02d52b0c9810307a0c7d0085d52",
+      "tag": "sources/2026-10-18/joshua/agent/v3-final3",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/69bde153405cf02d52b0c9810307a0c7d0085d52",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/v3-fix1",
+      "commit": "553c69335243a806dcaa2c7b02352757cea9fa46",
+      "tag": "sources/2026-10-18/joshua/agent/v3-fix1",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/553c69335243a806dcaa2c7b02352757cea9fa46",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/w7q-addr-fold-g13g",
+      "commit": "a4648d3b8bce837fd22d2732da90b88120af6199",
+      "tag": "sources/2026-10-18/joshua/agent/w7q-addr-fold-g13g",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/a4648d3b8bce837fd22d2732da90b88120af6199",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/w7q-fold-test",
+      "commit": "88c7241d90955c9c974fa95d64e3288545be27f3",
+      "tag": "sources/2026-10-18/joshua/agent/w7q-fold-test",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/88c7241d90955c9c974fa95d64e3288545be27f3",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/w7q-fold-upstream",
+      "commit": "5bf49a11cb47e8a25934b07e0f0df01ec5de2744",
+      "tag": "sources/2026-10-18/joshua/agent/w7q-fold-upstream",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/5bf49a11cb47e8a25934b07e0f0df01ec5de2744",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agent/w7q-simdmat-addr",
+      "commit": "5ecb8b796d675e217625231559b3567971f5609f",
+      "tag": "sources/2026-10-18/joshua/agent/w7q-simdmat-addr",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/5ecb8b796d675e217625231559b3567971f5609f",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "agx-fold-g14",
+      "commit": "44841202b4fd041fc29b6ff77f585d4df6e70dd7",
+      "tag": "sources/2026-10-18/joshua/agx-fold-g14",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/44841202b4fd041fc29b6ff77f585d4df6e70dd7",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "apply-check/capture-va-on-main",
+      "commit": "11ae82d8d8c379c2ae895806b4409537c5ceb25b",
+      "tag": "sources/2026-10-18/joshua/apply-check/capture-va-on-main",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/11ae82d8d8c379c2ae895806b4409537c5ceb25b",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "asahi/hwmat-vec2-on",
+      "commit": "283bf35c055bdb947fde123e1045773973089b5e",
+      "tag": "sources/2026-10-18/joshua/asahi/hwmat-vec2-on",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/283bf35c055bdb947fde123e1045773973089b5e",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "asahi/local-offset-fold",
+      "commit": "57100f495c1552fbb358f8435f6fecc681ed374c",
+      "tag": "sources/2026-10-18/joshua/asahi/local-offset-fold",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/57100f495c1552fbb358f8435f6fecc681ed374c",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "cand/barrier-tail-stream",
+      "commit": "594460915d6ac9da1249a5075e10c6c316063900",
+      "tag": "sources/2026-10-18/joshua/cand/barrier-tail-stream",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/594460915d6ac9da1249a5075e10c6c316063900",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "cand/stream-create-invariant",
+      "commit": "eb13e00ffcd79b6916f9e09b59b6de93627dadcb",
+      "tag": "sources/2026-10-18/joshua/cand/stream-create-invariant",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/eb13e00ffcd79b6916f9e09b59b6de93627dadcb",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "capture-replay-va",
+      "commit": "c39d3c84165c23dde706ee6d49c19031bd66f6c5",
+      "tag": "sources/2026-10-18/joshua/capture-replay-va",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/c39d3c84165c23dde706ee6d49c19031bd66f6c5",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "capture-replay-va-main",
+      "commit": "11ae82d8d8c379c2ae895806b4409537c5ceb25b",
+      "tag": "sources/2026-10-18/joshua/capture-replay-va-main",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/11ae82d8d8c379c2ae895806b4409537c5ceb25b",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "diag/depth-v1-endbatch",
+      "commit": "a2fe1d72bc163a0ef3c53db6899aa57731f38aed",
+      "tag": "sources/2026-10-18/joshua/diag/depth-v1-endbatch",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/a2fe1d72bc163a0ef3c53db6899aa57731f38aed",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "diag/depth-v2-flushonly",
+      "commit": "f8b54be0fbaf13d93dd40a377f7e43bf2f8e29d7",
+      "tag": "sources/2026-10-18/joshua/diag/depth-v2-flushonly",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/f8b54be0fbaf13d93dd40a377f7e43bf2f8e29d7",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "diag/va-trace",
+      "commit": "ba7538699dbb630d7c073da321f3377292e7dce3",
+      "tag": "sources/2026-10-18/joshua/diag/va-trace",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/ba7538699dbb630d7c073da321f3377292e7dce3",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "hk/agx-wait-batching",
+      "commit": "1bd919b4c4002e4d2d7f3b58c0db6dbdb30cf9a4",
+      "tag": "sources/2026-10-18/joshua/hk/agx-wait-batching",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/1bd919b4c4002e4d2d7f3b58c0db6dbdb30cf9a4",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "hk/agx-wait-batching-clean",
+      "commit": "a752db371791d70c601ed1f7124dc718cf19f286",
+      "tag": "sources/2026-10-18/joshua/hk/agx-wait-batching-clean",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/a752db371791d70c601ed1f7124dc718cf19f286",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "hk/app-barrier",
+      "commit": "4c57f670384a259d3c14352ce62f0364ea454f0e",
+      "tag": "sources/2026-10-18/joshua/hk/app-barrier",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/4c57f670384a259d3c14352ce62f0364ea454f0e",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "hk/cdm-chain-batch",
+      "commit": "a4fca75aabca84d446fee0332add291671ae6fd3",
+      "tag": "sources/2026-10-18/joshua/hk/cdm-chain-batch",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/a4fca75aabca84d446fee0332add291671ae6fd3",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "hk/cdm-g13x-178",
+      "commit": "7a618d12e33266dd4737b2355269816e19d79f31",
+      "tag": "sources/2026-10-18/joshua/hk/cdm-g13x-178",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/7a618d12e33266dd4737b2355269816e19d79f31",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "hk/cdm-g13x-1f0",
+      "commit": "01c7905a8e6c271ec8215db7e2f8f273a96b8314",
+      "tag": "sources/2026-10-18/joshua/hk/cdm-g13x-1f0",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/01c7905a8e6c271ec8215db7e2f8f273a96b8314",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "hk/cdm-g13x-578",
+      "commit": "6bcbf06370955a3f52c8103fc236f55a0d45545f",
+      "tag": "sources/2026-10-18/joshua/hk/cdm-g13x-578",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/6bcbf06370955a3f52c8103fc236f55a0d45545f",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "hk/cdm-g13x-fffb",
+      "commit": "719b700e6f5464387baf9544096b0cb24036f4c5",
+      "tag": "sources/2026-10-18/joshua/hk/cdm-g13x-fffb",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/719b700e6f5464387baf9544096b0cb24036f4c5",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "hk/dispatch-attrib",
+      "commit": "77e122b17981976d62f04cac6492e35f2132eaf1",
+      "tag": "sources/2026-10-18/joshua/hk/dispatch-attrib",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/77e122b17981976d62f04cac6492e35f2132eaf1",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "hk/fdiv-fckey",
+      "commit": "7faf04c065c5376d2d58a1e5b33a60118109c99e",
+      "tag": "sources/2026-10-18/joshua/hk/fdiv-fckey",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/7faf04c065c5376d2d58a1e5b33a60118109c99e",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "hk/fma-ceiling-unroll",
+      "commit": "ff47eb2d630c0fe22612cf11a0c41e4efd614681",
+      "tag": "sources/2026-10-18/joshua/hk/fma-ceiling-unroll",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/ff47eb2d630c0fe22612cf11a0c41e4efd614681",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "hk/resid-bundle",
+      "commit": "81459499b30eedf7349cb970bd4dc5c47a2f543f",
+      "tag": "sources/2026-10-18/joshua/hk/resid-bundle",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/81459499b30eedf7349cb970bd4dc5c47a2f543f",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "hk/resid-nod8f",
+      "commit": "59f43347b45c0074e9f323d394d1bb95f3b6f3b9",
+      "tag": "sources/2026-10-18/joshua/hk/resid-nod8f",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/59f43347b45c0074e9f323d394d1bb95f3b6f3b9",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "hk/resid-noftz",
+      "commit": "2c3b45be21981ca833b75ab7247fb67e76c1fb74",
+      "tag": "sources/2026-10-18/joshua/hk/resid-noftz",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/2c3b45be21981ca833b75ab7247fb67e76c1fb74",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "hk/restore-simdmat-default",
+      "commit": "1b65ba39527412ad13fb09ab12fbb83701183042",
+      "tag": "sources/2026-10-18/joshua/hk/restore-simdmat-default",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/1b65ba39527412ad13fb09ab12fbb83701183042",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "hk/submit-latency",
+      "commit": "79e68a54a1d3c5385724d92efa3940135ecf26ec",
+      "tag": "sources/2026-10-18/joshua/hk/submit-latency",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/79e68a54a1d3c5385724d92efa3940135ecf26ec",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "hk/trig-invariance",
+      "commit": "acf98c13ebfa03b94e33c51a44c6f477764ce2aa",
+      "tag": "sources/2026-10-18/joshua/hk/trig-invariance",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/acf98c13ebfa03b94e33c51a44c6f477764ce2aa",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "hk/wb-screen-e1677564",
+      "commit": "9f05fc7931b443406c58c86d1a4a515d1980a563",
+      "tag": "sources/2026-10-18/joshua/hk/wb-screen-e1677564",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/9f05fc7931b443406c58c86d1a4a515d1980a563",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "honeykrisp-hk-turnover",
+      "commit": "be14a3b8e25261c9c60859f65bafc0be0a9a2bd9",
+      "tag": "sources/2026-10-18/joshua/honeykrisp-hk-turnover",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/be14a3b8e25261c9c60859f65bafc0be0a9a2bd9",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "honeykrisp-omarchy",
+      "commit": "7faf04c065c5376d2d58a1e5b33a60118109c99e",
+      "tag": "sources/2026-10-18/joshua/honeykrisp-omarchy",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/7faf04c065c5376d2d58a1e5b33a60118109c99e",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "honeykrisp-omarchy-v2",
+      "commit": "8479b8c117830a490318939e96ffd648d9728b82",
+      "tag": "sources/2026-10-18/joshua/honeykrisp-omarchy-v2",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/8479b8c117830a490318939e96ffd648d9728b82",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "honeykrisp-omarchy-v2-residual",
+      "commit": "cdcb92bcbe54ab5fb6e83bda14e9c767f6516c5b",
+      "tag": "sources/2026-10-18/joshua/honeykrisp-omarchy-v2-residual",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/cdcb92bcbe54ab5fb6e83bda14e9c767f6516c5b",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "honeykrisp-omarchy-v3",
+      "commit": "f144c7949b7d960f26677b671341d5a123057ddf",
+      "tag": "sources/2026-10-18/joshua/honeykrisp-omarchy-v3",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/f144c7949b7d960f26677b671341d5a123057ddf",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "jw16/appbar-on-dusc",
+      "commit": "5f17faf81e81473365229368a77d1fde9c5c0929",
+      "tag": "sources/2026-10-18/joshua/jw16/appbar-on-dusc",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/5f17faf81e81473365229368a77d1fde9c5c0929",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "jw16/coherent-exp",
+      "commit": "52586e526d65df8c5652d297da574b6cca2a3d08",
+      "tag": "sources/2026-10-18/joshua/jw16/coherent-exp",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/52586e526d65df8c5652d297da574b6cca2a3d08",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "jw16/hwmat-vec2-on",
+      "commit": "1432df0196b7600bb779dd07614fe0d64e85804a",
+      "tag": "sources/2026-10-18/joshua/jw16/hwmat-vec2-on",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/1432df0196b7600bb779dd07614fe0d64e85804a",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "jw16/omacom-pr",
+      "commit": "c56e08634bba83c00b7345494a4cef9bdf681686",
+      "tag": "sources/2026-10-18/joshua/jw16/omacom-pr",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/c56e08634bba83c00b7345494a4cef9bdf681686",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "jw16/submit-poll-on-flush17f",
+      "commit": "9d949d4ba48bfa7499505aabed59352f81bfb144",
+      "tag": "sources/2026-10-18/joshua/jw16/submit-poll-on-flush17f",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/9d949d4ba48bfa7499505aabed59352f81bfb144",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "jw16/transfer-cand",
+      "commit": "1432df0196b7600bb779dd07614fe0d64e85804a",
+      "tag": "sources/2026-10-18/joshua/jw16/transfer-cand",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/1432df0196b7600bb779dd07614fe0d64e85804a",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "jw16/usc-barrier-study",
+      "commit": "c32ffddc8bb6f360663aad2653cba5f9b5d8d2ae",
+      "tag": "sources/2026-10-18/joshua/jw16/usc-barrier-study",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/c32ffddc8bb6f360663aad2653cba5f9b5d8d2ae",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "main",
+      "commit": "2ff601ce5a6d42ecd35c3be5e9274c955770ebb1",
+      "tag": "sources/2026-10-18/joshua/main",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/2ff601ce5a6d42ecd35c3be5e9274c955770ebb1",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "main-plus-3-heads",
+      "commit": "4ff9fc5f15e86433281cce458d305fdfbe3e3859",
+      "tag": "sources/2026-10-18/joshua/main-plus-3-heads",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/4ff9fc5f15e86433281cce458d305fdfbe3e3859",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "map-placed-length",
+      "commit": "ddfb4cf114a6e72b690581ff6fb2fe8447d11ffa",
+      "tag": "sources/2026-10-18/joshua/map-placed-length",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/ddfb4cf114a6e72b690581ff6fb2fe8447d11ffa",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "termb/device-load-coh7",
+      "commit": "300456e3a8c14edefd4a0ea7e0572aa552ad9021",
+      "tag": "sources/2026-10-18/joshua/termb/device-load-coh7",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/300456e3a8c14edefd4a0ea7e0572aa552ad9021",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "tf-null-counter",
+      "commit": "b87e7456cdbb7abdea2f360cdcba0e2a56316f3f",
+      "tag": "sources/2026-10-18/joshua/tf-null-counter",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/b87e7456cdbb7abdea2f360cdcba0e2a56316f3f",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "upstream/correctness",
+      "commit": "728fe700bc04cc9b4aff7877eab443481996eb24",
+      "tag": "sources/2026-10-18/joshua/upstream/correctness",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/728fe700bc04cc9b4aff7877eab443481996eb24",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/joshuaswarren/mesa-1",
+      "source_key": "joshua",
+      "source_kind": "branch",
+      "source_name": "upstream/correctness-rebased",
+      "commit": "290f340682bd9a1a1b80e5654e1fe48bf87b88ee",
+      "tag": "sources/2026-10-18/joshua/upstream/correctness-rebased",
+      "url": "https://github.com/joshuaswarren/mesa-1/tree/290f340682bd9a1a1b80e5654e1fe48bf87b88ee",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/malik-na/mesa-eryk-m4",
+      "source_key": "naeem-legacy",
+      "source_kind": "branch",
+      "source_name": "m4-asahi-port",
+      "commit": "08b19ec3a2e422a7252fdfe77c185450fccf86da",
+      "tag": "sources/2026-10-18/naeem-legacy/m4-asahi-port",
+      "url": "https://github.com/malik-na/mesa-eryk-m4/tree/08b19ec3a2e422a7252fdfe77c185450fccf86da",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/malik-na/mesa-eryk-m4",
+      "source_key": "naeem-legacy",
+      "source_kind": "branch",
+      "source_name": "t6031/g15c-admission",
+      "commit": "cbb9423f45b48028e2510db2263b31b5945cb0e7",
+      "tag": "sources/2026-10-18/naeem-legacy/t6031/g15c-admission",
+      "url": "https://github.com/malik-na/mesa-eryk-m4/tree/cbb9423f45b48028e2510db2263b31b5945cb0e7",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/malik-na/mesa-omacom",
+      "source_key": "naeem",
+      "source_kind": "branch",
+      "source_name": "26.2",
+      "commit": "0ae52750c0ccc84fda91b5a45708325b189073c7",
+      "tag": "sources/2026-10-18/naeem/26.2",
+      "url": "https://github.com/malik-na/mesa-omacom/tree/0ae52750c0ccc84fda91b5a45708325b189073c7",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/malik-na/mesa-omacom",
+      "source_key": "naeem",
+      "source_kind": "branch",
+      "source_name": "fix/m3pro-clip-depth-20261013",
+      "commit": "186af1b099c9d6b61207e11fcb5ec712e40c63b9",
+      "tag": "sources/2026-10-18/naeem/fix/m3pro-clip-depth-20261013",
+      "url": "https://github.com/malik-na/mesa-omacom/tree/186af1b099c9d6b61207e11fcb5ec712e40c63b9",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/malik-na/mesa-omacom",
+      "source_key": "naeem",
+      "source_kind": "branch",
+      "source_name": "fix/native-chrome-glyph-20261012",
+      "commit": "99d5b9d16e779ad9a0879a71578da0a6536cf006",
+      "tag": "sources/2026-10-18/naeem/fix/native-chrome-glyph-20261012",
+      "url": "https://github.com/malik-na/mesa-omacom/tree/99d5b9d16e779ad9a0879a71578da0a6536cf006",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/malik-na/mesa-omacom",
+      "source_key": "naeem",
+      "source_kind": "branch",
+      "source_name": "fix/native-index-offset-integrated-20261013",
+      "commit": "d616d0650d6fa80f72a750a0121442ab917ed6cf",
+      "tag": "sources/2026-10-18/naeem/fix/native-index-offset-integrated-20261013",
+      "url": "https://github.com/malik-na/mesa-omacom/tree/d616d0650d6fa80f72a750a0121442ab917ed6cf",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/malik-na/mesa-omacom",
+      "source_key": "naeem",
+      "source_kind": "branch",
+      "source_name": "fix/native-msaa-mrt-20261013",
+      "commit": "d0c0cdb0624ab4b438b694808ac1776551be4bca",
+      "tag": "sources/2026-10-18/naeem/fix/native-msaa-mrt-20261013",
+      "url": "https://github.com/malik-na/mesa-omacom/tree/d0c0cdb0624ab4b438b694808ac1776551be4bca",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/malik-na/mesa-omacom",
+      "source_key": "naeem",
+      "source_kind": "branch",
+      "source_name": "fix/native-msaa-resolve-20261013",
+      "commit": "f287f282940ec0c8b0de50db2df1f98d423e84fa",
+      "tag": "sources/2026-10-18/naeem/fix/native-msaa-resolve-20261013",
+      "url": "https://github.com/malik-na/mesa-omacom/tree/f287f282940ec0c8b0de50db2df1f98d423e84fa",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/malik-na/mesa-omacom",
+      "source_key": "naeem",
+      "source_kind": "branch",
+      "source_name": "g15c-native",
+      "commit": "aab698d2ef34e2aef38ba4d2bfcfa3abc5ded4c5",
+      "tag": "sources/2026-10-18/naeem/g15c-native",
+      "url": "https://github.com/malik-na/mesa-omacom/tree/aab698d2ef34e2aef38ba4d2bfcfa3abc5ded4c5",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/malik-na/mesa-omacom",
+      "source_key": "naeem",
+      "source_kind": "branch",
+      "source_name": "g15c-usc-helper-landing",
+      "commit": "99fb0c2fe1df851dc702047710c1e56593a30cdd",
+      "tag": "sources/2026-10-18/naeem/g15c-usc-helper-landing",
+      "url": "https://github.com/malik-na/mesa-omacom/tree/99fb0c2fe1df851dc702047710c1e56593a30cdd",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/malik-na/mesa-omacom",
+      "source_key": "naeem",
+      "source_kind": "branch",
+      "source_name": "integration/aurora",
+      "commit": "6dfbc555b4128ee51139c5f78c5aba2594c9701b",
+      "tag": "sources/2026-10-18/naeem/integration/aurora",
+      "url": "https://github.com/malik-na/mesa-omacom/tree/6dfbc555b4128ee51139c5f78c5aba2594c9701b",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/malik-na/mesa-omacom",
+      "source_key": "naeem",
+      "source_kind": "branch",
+      "source_name": "m3/air-hal200",
+      "commit": "78908f4d18af2274b5df08c4ad9d953c25980b53",
+      "tag": "sources/2026-10-18/naeem/m3/air-hal200",
+      "url": "https://github.com/malik-na/mesa-omacom/tree/78908f4d18af2274b5df08c4ad9d953c25980b53",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/malik-na/mesa-omacom",
+      "source_key": "naeem",
+      "source_kind": "branch",
+      "source_name": "m3/legacy",
+      "commit": "59ec4e2e8f0e5c2356ccf2749408c1e472484a5c",
+      "tag": "sources/2026-10-18/naeem/m3/legacy",
+      "url": "https://github.com/malik-na/mesa-omacom/tree/59ec4e2e8f0e5c2356ccf2749408c1e472484a5c",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/malik-na/mesa-omacom",
+      "source_key": "naeem",
+      "source_kind": "branch",
+      "source_name": "m3max/g15c",
+      "commit": "ff120e88cfc047b69ed412b2276599e3b2a426de",
+      "tag": "sources/2026-10-18/naeem/m3max/g15c",
+      "url": "https://github.com/malik-na/mesa-omacom/tree/ff120e88cfc047b69ed412b2276599e3b2a426de",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/malik-na/mesa-omacom",
+      "source_key": "naeem",
+      "source_kind": "branch",
+      "source_name": "main",
+      "commit": "7cda7850edd103ace21aac37d416d2fdf7a282e1",
+      "tag": "sources/2026-10-18/naeem/main",
+      "url": "https://github.com/malik-na/mesa-omacom/tree/7cda7850edd103ace21aac37d416d2fdf7a282e1",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/malik-na/mesa-omacom",
+      "source_key": "naeem",
+      "source_kind": "branch",
+      "source_name": "review/aurora-mesa-foundation-20261012",
+      "commit": "b0f56952b7f06955b143fbfa90c07de4c5864964",
+      "tag": "sources/2026-10-18/naeem/review/aurora-mesa-foundation-20261012",
+      "url": "https://github.com/malik-na/mesa-omacom/tree/b0f56952b7f06955b143fbfa90c07de4c5864964",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/malik-na/mesa-omacom",
+      "source_key": "naeem",
+      "source_kind": "branch",
+      "source_name": "review/aurora-native-gl-foundation-20261012",
+      "commit": "2dc61e4b462639d29ca846a3ad2dfd1f28629c4e",
+      "tag": "sources/2026-10-18/naeem/review/aurora-native-gl-foundation-20261012",
+      "url": "https://github.com/malik-na/mesa-omacom/tree/2dc61e4b462639d29ca846a3ad2dfd1f28629c4e",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/malik-na/mesa-omacom",
+      "source_key": "naeem",
+      "source_kind": "branch",
+      "source_name": "review/m3pro-compression-series-20261012",
+      "commit": "1aad5104bdf4f67d97828230e4cbaf71d5a7811d",
+      "tag": "sources/2026-10-18/naeem/review/m3pro-compression-series-20261012",
+      "url": "https://github.com/malik-na/mesa-omacom/tree/1aad5104bdf4f67d97828230e4cbaf71d5a7811d",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/omacom/mesa",
+      "source_key": "omacom-pr",
+      "source_kind": "pull-request",
+      "source_name": "1",
+      "commit": "7faf04c065c5376d2d58a1e5b33a60118109c99e",
+      "tag": "sources/2026-10-18/omacom-pr/1",
+      "url": "https://github.com/omacom/mesa/pull/1",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/omacom/mesa",
+      "source_key": "omacom-pr",
+      "source_kind": "pull-request",
+      "source_name": "10",
+      "commit": "b87e7456cdbb7abdea2f360cdcba0e2a56316f3f",
+      "tag": "sources/2026-10-18/omacom-pr/10",
+      "url": "https://github.com/omacom/mesa/pull/10",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/omacom/mesa",
+      "source_key": "omacom-pr",
+      "source_kind": "pull-request",
+      "source_name": "11",
+      "commit": "44841202b4fd041fc29b6ff77f585d4df6e70dd7",
+      "tag": "sources/2026-10-18/omacom-pr/11",
+      "url": "https://github.com/omacom/mesa/pull/11",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/omacom/mesa",
+      "source_key": "omacom-pr",
+      "source_kind": "pull-request",
+      "source_name": "2",
+      "commit": "728fe700bc04cc9b4aff7877eab443481996eb24",
+      "tag": "sources/2026-10-18/omacom-pr/2",
+      "url": "https://github.com/omacom/mesa/pull/2",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/omacom/mesa",
+      "source_key": "omacom-pr",
+      "source_kind": "pull-request",
+      "source_name": "3",
+      "commit": "c56e08634bba83c00b7345494a4cef9bdf681686",
+      "tag": "sources/2026-10-18/omacom-pr/3",
+      "url": "https://github.com/omacom/mesa/pull/3",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/omacom/mesa",
+      "source_key": "omacom-pr",
+      "source_kind": "pull-request",
+      "source_name": "4",
+      "commit": "cdcb92bcbe54ab5fb6e83bda14e9c767f6516c5b",
+      "tag": "sources/2026-10-18/omacom-pr/4",
+      "url": "https://github.com/omacom/mesa/pull/4",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/omacom/mesa",
+      "source_key": "omacom-pr",
+      "source_kind": "pull-request",
+      "source_name": "5",
+      "commit": "8479b8c117830a490318939e96ffd648d9728b82",
+      "tag": "sources/2026-10-18/omacom-pr/5",
+      "url": "https://github.com/omacom/mesa/pull/5",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/omacom/mesa",
+      "source_key": "omacom-pr",
+      "source_kind": "pull-request",
+      "source_name": "6",
+      "commit": "f144c7949b7d960f26677b671341d5a123057ddf",
+      "tag": "sources/2026-10-18/omacom-pr/6",
+      "url": "https://github.com/omacom/mesa/pull/6",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/omacom/mesa",
+      "source_key": "omacom-pr",
+      "source_kind": "pull-request",
+      "source_name": "7",
+      "commit": "1aad5104bdf4f67d97828230e4cbaf71d5a7811d",
+      "tag": "sources/2026-10-18/omacom-pr/7",
+      "url": "https://github.com/omacom/mesa/pull/7",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/omacom/mesa",
+      "source_key": "omacom-pr",
+      "source_kind": "pull-request",
+      "source_name": "8",
+      "commit": "ddfb4cf114a6e72b690581ff6fb2fe8447d11ffa",
+      "tag": "sources/2026-10-18/omacom-pr/8",
+      "url": "https://github.com/omacom/mesa/pull/8",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/omacom/mesa",
+      "source_key": "omacom-pr",
+      "source_kind": "pull-request",
+      "source_name": "9",
+      "commit": "11ae82d8d8c379c2ae895806b4409537c5ceb25b",
+      "tag": "sources/2026-10-18/omacom-pr/9",
+      "url": "https://github.com/omacom/mesa/pull/9",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/omacom/mesa",
+      "source_key": "omacom",
+      "source_kind": "branch",
+      "source_name": "26.2",
+      "commit": "0ae52750c0ccc84fda91b5a45708325b189073c7",
+      "tag": "sources/2026-10-18/omacom/26.2",
+      "url": "https://github.com/omacom/mesa/tree/0ae52750c0ccc84fda91b5a45708325b189073c7",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/omacom/mesa",
+      "source_key": "omacom",
+      "source_kind": "branch",
+      "source_name": "main",
+      "commit": "7cda7850edd103ace21aac37d416d2fdf7a282e1",
+      "tag": "sources/2026-10-18/omacom/main",
+      "url": "https://github.com/omacom/mesa/tree/7cda7850edd103ace21aac37d416d2fdf7a282e1",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/iconidentify/mesa-omacom",
+      "source_key": "previous",
+      "source_kind": "branch",
+      "source_name": "26.2",
+      "commit": "0ae52750c0ccc84fda91b5a45708325b189073c7",
+      "tag": "sources/2026-10-18/previous/26.2",
+      "url": "https://github.com/iconidentify/mesa-omacom/tree/0ae52750c0ccc84fda91b5a45708325b189073c7",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/iconidentify/mesa-omacom",
+      "source_key": "previous",
+      "source_kind": "branch",
+      "source_name": "fix/m3pro-clip-depth-20261013",
+      "commit": "186af1b099c9d6b61207e11fcb5ec712e40c63b9",
+      "tag": "sources/2026-10-18/previous/fix/m3pro-clip-depth-20261013",
+      "url": "https://github.com/iconidentify/mesa-omacom/tree/186af1b099c9d6b61207e11fcb5ec712e40c63b9",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/iconidentify/mesa-omacom",
+      "source_key": "previous",
+      "source_kind": "branch",
+      "source_name": "fix/native-chrome-glyph-20261012",
+      "commit": "99d5b9d16e779ad9a0879a71578da0a6536cf006",
+      "tag": "sources/2026-10-18/previous/fix/native-chrome-glyph-20261012",
+      "url": "https://github.com/iconidentify/mesa-omacom/tree/99d5b9d16e779ad9a0879a71578da0a6536cf006",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/iconidentify/mesa-omacom",
+      "source_key": "previous",
+      "source_kind": "branch",
+      "source_name": "fix/native-index-offset-integrated-20261013",
+      "commit": "d616d0650d6fa80f72a750a0121442ab917ed6cf",
+      "tag": "sources/2026-10-18/previous/fix/native-index-offset-integrated-20261013",
+      "url": "https://github.com/iconidentify/mesa-omacom/tree/d616d0650d6fa80f72a750a0121442ab917ed6cf",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/iconidentify/mesa-omacom",
+      "source_key": "previous",
+      "source_kind": "branch",
+      "source_name": "fix/native-msaa-mrt-20261013",
+      "commit": "d0c0cdb0624ab4b438b694808ac1776551be4bca",
+      "tag": "sources/2026-10-18/previous/fix/native-msaa-mrt-20261013",
+      "url": "https://github.com/iconidentify/mesa-omacom/tree/d0c0cdb0624ab4b438b694808ac1776551be4bca",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/iconidentify/mesa-omacom",
+      "source_key": "previous",
+      "source_kind": "branch",
+      "source_name": "fix/native-msaa-resolve-20261013",
+      "commit": "f287f282940ec0c8b0de50db2df1f98d423e84fa",
+      "tag": "sources/2026-10-18/previous/fix/native-msaa-resolve-20261013",
+      "url": "https://github.com/iconidentify/mesa-omacom/tree/f287f282940ec0c8b0de50db2df1f98d423e84fa",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/iconidentify/mesa-omacom",
+      "source_key": "previous",
+      "source_kind": "branch",
+      "source_name": "integration/aurora",
+      "commit": "6dfbc555b4128ee51139c5f78c5aba2594c9701b",
+      "tag": "sources/2026-10-18/previous/integration/aurora",
+      "url": "https://github.com/iconidentify/mesa-omacom/tree/6dfbc555b4128ee51139c5f78c5aba2594c9701b",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/iconidentify/mesa-omacom",
+      "source_key": "previous",
+      "source_kind": "branch",
+      "source_name": "m3/air-hal200",
+      "commit": "78908f4d18af2274b5df08c4ad9d953c25980b53",
+      "tag": "sources/2026-10-18/previous/m3/air-hal200",
+      "url": "https://github.com/iconidentify/mesa-omacom/tree/78908f4d18af2274b5df08c4ad9d953c25980b53",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/iconidentify/mesa-omacom",
+      "source_key": "previous",
+      "source_kind": "branch",
+      "source_name": "m3/legacy",
+      "commit": "59ec4e2e8f0e5c2356ccf2749408c1e472484a5c",
+      "tag": "sources/2026-10-18/previous/m3/legacy",
+      "url": "https://github.com/iconidentify/mesa-omacom/tree/59ec4e2e8f0e5c2356ccf2749408c1e472484a5c",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/iconidentify/mesa-omacom",
+      "source_key": "previous",
+      "source_kind": "branch",
+      "source_name": "m3max/g15c",
+      "commit": "ff120e88cfc047b69ed412b2276599e3b2a426de",
+      "tag": "sources/2026-10-18/previous/m3max/g15c",
+      "url": "https://github.com/iconidentify/mesa-omacom/tree/ff120e88cfc047b69ed412b2276599e3b2a426de",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/iconidentify/mesa-omacom",
+      "source_key": "previous",
+      "source_kind": "branch",
+      "source_name": "main",
+      "commit": "7cda7850edd103ace21aac37d416d2fdf7a282e1",
+      "tag": "sources/2026-10-18/previous/main",
+      "url": "https://github.com/iconidentify/mesa-omacom/tree/7cda7850edd103ace21aac37d416d2fdf7a282e1",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/iconidentify/mesa-omacom",
+      "source_key": "previous",
+      "source_kind": "branch",
+      "source_name": "review/aurora-mesa-foundation-20261012",
+      "commit": "b0f56952b7f06955b143fbfa90c07de4c5864964",
+      "tag": "sources/2026-10-18/previous/review/aurora-mesa-foundation-20261012",
+      "url": "https://github.com/iconidentify/mesa-omacom/tree/b0f56952b7f06955b143fbfa90c07de4c5864964",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/iconidentify/mesa-omacom",
+      "source_key": "previous",
+      "source_kind": "branch",
+      "source_name": "review/aurora-native-gl-foundation-20261012",
+      "commit": "2dc61e4b462639d29ca846a3ad2dfd1f28629c4e",
+      "tag": "sources/2026-10-18/previous/review/aurora-native-gl-foundation-20261012",
+      "url": "https://github.com/iconidentify/mesa-omacom/tree/2dc61e4b462639d29ca846a3ad2dfd1f28629c4e",
+      "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/iconidentify/mesa-omacom",
+      "source_key": "previous",
+      "source_kind": "branch",
+      "source_name": "review/m3pro-compression-series-20261012",
+      "commit": "1aad5104bdf4f67d97828230e4cbaf71d5a7811d",
+      "tag": "sources/2026-10-18/previous/review/m3pro-compression-series-20261012",
+      "url": "https://github.com/iconidentify/mesa-omacom/tree/1aad5104bdf4f67d97828230e4cbaf71d5a7811d",
+      "disposition": "snapshot-only; consult integration decisions"
+    }
+  ],
+  "pull_requests": [
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "number": 25,
+      "title": "asahi, hk: G15C (M3 Max) on the native AGX3 path",
+      "author": "malik-na",
+      "state": "open",
+      "merged": false,
+      "head": "aab698d2ef34e2aef38ba4d2bfcfa3abc5ded4c5",
+      "head_branch": "g15c-native",
+      "base_branch": "j514s/g15s-20261017",
+      "url": "https://github.com/aurora-silicon/mesa/pull/25",
+      "updated_at": "2026-10-18T14:40:50Z"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "number": 24,
+      "title": "hk: keep image store forwarding to G17P",
+      "author": "erykwieliczko",
+      "state": "closed",
+      "merged": false,
+      "head": "59fa024a8a6e7199f44b8cd52ca05a4e606d3ae0",
+      "head_branch": "j514s/g15s-store-forwarding",
+      "base_branch": "agx3b",
+      "url": "https://github.com/aurora-silicon/mesa/pull/24",
+      "updated_at": "2026-10-17T21:26:39Z"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "number": 23,
+      "title": "asahi, hk: G15S (M3 Pro) on the native AGX3 path",
+      "author": "erykwieliczko",
+      "state": "open",
+      "merged": false,
+      "head": "cf8ec613be202d8bfc5440e61e9aa6c60700fad7",
+      "head_branch": "j514s/g15s-20261017",
+      "base_branch": "agx3b",
+      "url": "https://github.com/aurora-silicon/mesa/pull/23",
+      "updated_at": "2026-10-18T17:14:03Z"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "number": 22,
+      "title": "asahi/hk: enable sparse binding and residency on G17P",
+      "author": "DjDeveloperr",
+      "state": "closed",
+      "merged": true,
+      "head": "5f6b2eb41661ac9b26a7153957d368ba91af9676",
+      "head_branch": "claude/agx3b-sparse",
+      "base_branch": "agx3b",
+      "url": "https://github.com/aurora-silicon/mesa/pull/22",
+      "updated_at": "2026-10-17T09:38:59Z"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "number": 21,
+      "title": "hk: AS host commands, VK_EXT_ray_tracing_invocation_reorder and indirect ray dispatch on G17P",
+      "author": "DjDeveloperr",
+      "state": "closed",
+      "merged": true,
+      "head": "b5b65a509dd5af33fe67e5f72d458cc44b1c8c0f",
+      "head_branch": "claude/agx3b-rt-host-ser-indirect",
+      "base_branch": "agx3b",
+      "url": "https://github.com/aurora-silicon/mesa/pull/21",
+      "updated_at": "2026-10-17T09:39:00Z"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "number": 20,
+      "title": "asahi/hk: expose VK_EXT_texture_compression_astc_hdr on G17P",
+      "author": "DjDeveloperr",
+      "state": "closed",
+      "merged": true,
+      "head": "ad8b84816c7e5dede5f459b884431833418ee851",
+      "head_branch": "claude/agx3b-astc-hdr",
+      "base_branch": "agx3b",
+      "url": "https://github.com/aurora-silicon/mesa/pull/20",
+      "updated_at": "2026-10-17T09:39:01Z"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "number": 19,
+      "title": "asahi/hk: never reuse a G17P acceleration structure id within a device",
+      "author": "DjDeveloperr",
+      "state": "closed",
+      "merged": true,
+      "head": "202fac410aae60fa0e21ecc98382feedfdca7c1e",
+      "head_branch": "claude/agx3b-as-id-monotonic",
+      "base_branch": "agx3b",
+      "url": "https://github.com/aurora-silicon/mesa/pull/19",
+      "updated_at": "2026-10-17T09:39:02Z"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "number": 18,
+      "title": "asahi/hk: float32 atomics on G17P (VK_EXT_shader_atomic_float, float2)",
+      "author": "DjDeveloperr",
+      "state": "closed",
+      "merged": true,
+      "head": "de2d1fe7fbb6c3ceee46cedcd3a07779ef57e01b",
+      "head_branch": "claude/agx3b-float-atomics",
+      "base_branch": "agx3b",
+      "url": "https://github.com/aurora-silicon/mesa/pull/18",
+      "updated_at": "2026-10-17T09:39:03Z"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "number": 17,
+      "title": "hk: indirect acceleration structure builds and AS capture/replay on G17P",
+      "author": "DjDeveloperr",
+      "state": "closed",
+      "merged": true,
+      "head": "2998b2443c60045e9f975e1d2ee208c45c63ad05",
+      "head_branch": "claude/agx3b-rt-indirect-replay",
+      "base_branch": "agx3b",
+      "url": "https://github.com/aurora-silicon/mesa/pull/17",
+      "updated_at": "2026-10-17T09:39:04Z"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "number": 16,
+      "title": "hk: do not assert on dstSet in push descriptor writes",
+      "author": "DjDeveloperr",
+      "state": "closed",
+      "merged": true,
+      "head": "1906d2fab053e669ef1bc4bfc6f5802c73bdfdbd",
+      "head_branch": "claude/agx3b-push-dstset",
+      "base_branch": "agx3b",
+      "url": "https://github.com/aurora-silicon/mesa/pull/16",
+      "updated_at": "2026-10-17T09:39:05Z"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "number": 15,
+      "title": "asahi/hk: expose VK_KHR_compute_shader_derivatives on G17P",
+      "author": "DjDeveloperr",
+      "state": "closed",
+      "merged": true,
+      "head": "1a9caf5ed079f04ba651b1d567da6d97b4b45eb2",
+      "head_branch": "claude/agx3b-compute-derivatives",
+      "base_branch": "agx3b",
+      "url": "https://github.com/aurora-silicon/mesa/pull/15",
+      "updated_at": "2026-10-17T09:39:05Z"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "number": 14,
+      "title": "agx3: use the long texture form when the descriptor heap is not at zero",
+      "author": "DjDeveloperr",
+      "state": "closed",
+      "merged": true,
+      "head": "b501b851204a44e3d43787f1e3e7428f50e0a389",
+      "head_branch": "claude/agx3b-heap-base-ep4",
+      "base_branch": "agx3b",
+      "url": "https://github.com/aurora-silicon/mesa/pull/14",
+      "updated_at": "2026-10-17T09:39:06Z"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "number": 13,
+      "title": "hk: keep the G17P compute uniform layout for shaders without ray queries",
+      "author": "DjDeveloperr",
+      "state": "closed",
+      "merged": true,
+      "head": "daad9e033ef7d5e3841e25c354b28792603ea348",
+      "head_branch": "claude/agx3b-compute-texbase",
+      "base_branch": "agx3b",
+      "url": "https://github.com/aurora-silicon/mesa/pull/13",
+      "updated_at": "2026-10-17T09:39:07Z"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "number": 12,
+      "title": "asahi/hk: G17P hardware ray tracing and mesh shaders",
+      "author": "DjDeveloperr",
+      "state": "closed",
+      "merged": true,
+      "head": "20d9eaabb95da05fdeead03d47ff31bfc078d6eb",
+      "head_branch": "claude/agx3b-rt-mesh",
+      "base_branch": "agx3b",
+      "url": "https://github.com/aurora-silicon/mesa/pull/12",
+      "updated_at": "2026-10-17T09:39:08Z"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "number": 11,
+      "title": "agx: optimize G17P lowering, texture staging, and register allocation",
+      "author": "DjDeveloperr",
+      "state": "closed",
+      "merged": true,
+      "head": "e5894662507898b5fc8c3a53ddd818339b1b23c9",
+      "head_branch": "agx3b-opt",
+      "base_branch": "agx3b",
+      "url": "https://github.com/aurora-silicon/mesa/pull/11",
+      "updated_at": "2026-10-17T09:39:09Z"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "number": 10,
+      "title": "hk: honor plane offsets from VkImageDrmFormatModifierExplicitCreateInfoEXT",
+      "author": "sithglan",
+      "state": "open",
+      "merged": false,
+      "head": "ba289e643e0b361747988280a459b73c34c2cad9",
+      "head_branch": "hk-explicit-plane-offsets",
+      "base_branch": "main",
+      "url": "https://github.com/aurora-silicon/mesa/pull/10",
+      "updated_at": "2026-10-14T04:49:06Z"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "number": 9,
+      "title": "asahi: inherit VS interpolation qualifiers in the passthrough GS on G17P only",
+      "author": "RyanTheTide",
+      "state": "closed",
+      "merged": true,
+      "head": "d547992f258cc53a33e300443afcdba064fb59c5",
+      "head_branch": "aurora/agx2-passthrough-gs-interp",
+      "base_branch": "agx3b",
+      "url": "https://github.com/aurora-silicon/mesa/pull/9",
+      "updated_at": "2026-10-17T09:35:05Z"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "number": 8,
+      "title": "zink/sync: plug an extremely tricky hole in reordering logic (upstream backport)",
+      "author": "RyanTheTide",
+      "state": "closed",
+      "merged": false,
+      "head": "6ff2d4aa9da581e3c5f9fdaa4b51416b116d5ace",
+      "head_branch": "aurora/zink-upstream-sync-ordered-access",
+      "base_branch": "agx3b",
+      "url": "https://github.com/aurora-silicon/mesa/pull/8",
+      "updated_at": "2026-10-17T09:40:53Z"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "number": 7,
+      "title": "zink: preserve depth transitions and ordered access over latest DJ tip",
+      "author": "RyanTheTide",
+      "state": "open",
+      "merged": false,
+      "head": "af7fdc46c4c1578073bb20f763a4636c0c9f9255",
+      "head_branch": "aurora/zink-depth-write-transition",
+      "base_branch": "agx3b",
+      "url": "https://github.com/aurora-silicon/mesa/pull/7",
+      "updated_at": "2026-10-14T19:25:34Z"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "number": 6,
+      "title": "agx: brace a conditional expectation in the uniform ALU test",
+      "author": "RyanTheTide",
+      "state": "closed",
+      "merged": true,
+      "head": "b6524dcf498a8064bf0a3df3bfcc313035198bec",
+      "head_branch": "aurora/agx-werror-uniform-alu",
+      "base_branch": "agx3b",
+      "url": "https://github.com/aurora-silicon/mesa/pull/6",
+      "updated_at": "2026-10-17T09:35:06Z"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "number": 5,
+      "title": "asahi: keep the original render command size outside G17P",
+      "author": "RyanTheTide",
+      "state": "closed",
+      "merged": true,
+      "head": "9761083c32aad2a57c2818af9756f0e33593469c",
+      "head_branch": "aurora/asahi-legacy-render-size",
+      "base_branch": "agx3b",
+      "url": "https://github.com/aurora-silicon/mesa/pull/5",
+      "updated_at": "2026-10-17T09:35:07Z"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "number": 4,
+      "title": "vk/meta: pass the negated offset to the buffer-to-image fragment shader",
+      "author": "RyanTheTide",
+      "state": "closed",
+      "merged": false,
+      "head": "e3ee5c8a2a3649a807c8e0cc92c4be8e9333a714",
+      "head_branch": "aurora/meta-b2i-gfx-offset",
+      "base_branch": "agx3b",
+      "url": "https://github.com/aurora-silicon/mesa/pull/4",
+      "updated_at": "2026-10-17T09:40:55Z"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "number": 3,
+      "title": "nir/range_analysis: allow the 32-bit shift count of a narrow ishl",
+      "author": "RyanTheTide",
+      "state": "closed",
+      "merged": true,
+      "head": "6c88433503ad8573de36af9e00a132f86fbe8323",
+      "head_branch": "aurora/nir-nuw-ishl",
+      "base_branch": "agx3b",
+      "url": "https://github.com/aurora-silicon/mesa/pull/3",
+      "updated_at": "2026-10-17T09:35:08Z"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "number": 2,
+      "title": "agx: fix the -Werror build of the AGX drivers",
+      "author": "RyanTheTide",
+      "state": "closed",
+      "merged": true,
+      "head": "e5d05c5533d17931b475ac60e1d7a944f10b8736",
+      "head_branch": "aurora/agx-werror",
+      "base_branch": "agx3b",
+      "url": "https://github.com/aurora-silicon/mesa/pull/2",
+      "updated_at": "2026-10-17T09:35:09Z"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "number": 1,
+      "title": "agx: introduce agx3b support & HAL200",
+      "author": "DjDeveloperr",
+      "state": "open",
+      "merged": false,
+      "head": "dba15302aa0554b52ec6ca5103bd0391035e0fdc",
+      "head_branch": "agx3b",
+      "base_branch": "main",
+      "url": "https://github.com/aurora-silicon/mesa/pull/1",
+      "updated_at": "2026-10-16T02:04:22Z"
+    },
+    {
+      "repository": "https://github.com/omacom/mesa",
+      "number": 11,
+      "title": "honeykrisp: fold workgroup memory address deltas on G14 (stacked on #6)",
+      "author": "joshuaswarren",
+      "state": "open",
+      "merged": false,
+      "head": "44841202b4fd041fc29b6ff77f585d4df6e70dd7",
+      "head_branch": "agx-fold-g14",
+      "base_branch": "main",
+      "url": "https://github.com/omacom/mesa/pull/11",
+      "updated_at": "2026-10-15T12:50:21Z"
+    },
+    {
+      "repository": "https://github.com/omacom/mesa",
+      "number": 10,
+      "title": "honeykrisp: accept a NULL array of transform feedback counter buffers",
+      "author": "joshuaswarren",
+      "state": "open",
+      "merged": false,
+      "head": "b87e7456cdbb7abdea2f360cdcba0e2a56316f3f",
+      "head_branch": "tf-null-counter",
+      "base_branch": "main",
+      "url": "https://github.com/omacom/mesa/pull/10",
+      "updated_at": "2026-10-16T03:55:35Z"
+    },
+    {
+      "repository": "https://github.com/omacom/mesa",
+      "number": 9,
+      "title": "honeykrisp: give capture and replay buffers their own address range",
+      "author": "joshuaswarren",
+      "state": "open",
+      "merged": false,
+      "head": "11ae82d8d8c379c2ae895806b4409537c5ceb25b",
+      "head_branch": "capture-replay-va-main",
+      "base_branch": "main",
+      "url": "https://github.com/omacom/mesa/pull/9",
+      "updated_at": "2026-10-16T03:55:33Z"
+    },
+    {
+      "repository": "https://github.com/omacom/mesa",
+      "number": 8,
+      "title": "honeykrisp: map placed memory at the allocation size",
+      "author": "joshuaswarren",
+      "state": "open",
+      "merged": false,
+      "head": "ddfb4cf114a6e72b690581ff6fb2fe8447d11ffa",
+      "head_branch": "map-placed-length",
+      "base_branch": "main",
+      "url": "https://github.com/omacom/mesa/pull/8",
+      "updated_at": "2026-10-16T03:55:32Z"
+    },
+    {
+      "repository": "https://github.com/omacom/mesa",
+      "number": 7,
+      "title": "asahi: prepare clean M3 foundation and attachment compression",
+      "author": "iconidentify",
+      "state": "open",
+      "merged": false,
+      "head": "1aad5104bdf4f67d97828230e4cbaf71d5a7811d",
+      "head_branch": "review/m3pro-compression-series-20261012",
+      "base_branch": "main",
+      "url": "https://github.com/omacom/mesa/pull/7",
+      "updated_at": "2026-10-13T07:54:04Z"
+    },
+    {
+      "repository": "https://github.com/omacom/mesa",
+      "number": 6,
+      "title": "honeykrisp: M1 compute speedups and the deferred CDM barrier on G13G (stacked on #3, #4, #5)",
+      "author": "joshuaswarren",
+      "state": "open",
+      "merged": false,
+      "head": "f144c7949b7d960f26677b671341d5a123057ddf",
+      "head_branch": "honeykrisp-omarchy-v3",
+      "base_branch": "main",
+      "url": "https://github.com/omacom/mesa/pull/6",
+      "updated_at": "2026-10-15T13:00:52Z"
+    },
+    {
+      "repository": "https://github.com/omacom/mesa",
+      "number": 5,
+      "title": "honeykrisp: gate cooperative matrices and the tracked CDM barrier to G13 (stacked on #3 and #4)",
+      "author": "joshuaswarren",
+      "state": "open",
+      "merged": false,
+      "head": "8479b8c117830a490318939e96ffd648d9728b82",
+      "head_branch": "honeykrisp-omarchy-v2",
+      "base_branch": "main",
+      "url": "https://github.com/omacom/mesa/pull/5",
+      "updated_at": "2026-10-12T14:41:18Z"
+    },
+    {
+      "repository": "https://github.com/omacom/mesa",
+      "number": 4,
+      "title": "honeykrisp: partial-subgroup coopmat, narrow-pointer addressing, cache key and sin fixes (stacked on #3)",
+      "author": "joshuaswarren",
+      "state": "open",
+      "merged": false,
+      "head": "cdcb92bcbe54ab5fb6e83bda14e9c767f6516c5b",
+      "head_branch": "honeykrisp-omarchy-v2-residual",
+      "base_branch": "main",
+      "url": "https://github.com/omacom/mesa/pull/4",
+      "updated_at": "2026-10-12T14:41:16Z"
+    },
+    {
+      "repository": "https://github.com/omacom/mesa",
+      "number": 3,
+      "title": "honeykrisp: compute set for M1/M1 Max (coopmat, precise math, dependency-tracked CDM barrier, submit poll)",
+      "author": "joshuaswarren",
+      "state": "open",
+      "merged": false,
+      "head": "c56e08634bba83c00b7345494a4cef9bdf681686",
+      "head_branch": "jw16/omacom-pr",
+      "base_branch": "main",
+      "url": "https://github.com/omacom/mesa/pull/3",
+      "updated_at": "2026-10-12T14:41:13Z"
+    },
+    {
+      "repository": "https://github.com/omacom/mesa",
+      "number": 2,
+      "title": "AGX correctness series \u2014 fast-track for upstream submission",
+      "author": "joshuaswarren",
+      "state": "closed",
+      "merged": false,
+      "head": "728fe700bc04cc9b4aff7877eab443481996eb24",
+      "head_branch": "upstream/correctness",
+      "base_branch": "main",
+      "url": "https://github.com/omacom/mesa/pull/2",
+      "updated_at": "2026-09-30T23:06:11Z"
+    },
+    {
+      "repository": "https://github.com/omacom/mesa",
+      "number": 1,
+      "title": "Honeykrisp integration: AGX correctness fixes, VK_KHR_cooperative_matrix, G13G CDM trim",
+      "author": "joshuaswarren",
+      "state": "closed",
+      "merged": false,
+      "head": "7faf04c065c5376d2d58a1e5b33a60118109c99e",
+      "head_branch": "honeykrisp-omarchy",
+      "base_branch": "main",
+      "url": "https://github.com/omacom/mesa/pull/1",
+      "updated_at": "2026-10-08T13:55:51Z"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa-eryk-m4",
+      "number": 1,
+      "title": "kmsro/zink: close-on-exec render fd, implicit LINEAR imports on Honeykrisp",
+      "author": "iconidentify",
+      "state": "open",
+      "merged": false,
+      "head": "16b77e7d31885b320f6e5ed225fef38890d388c6",
+      "head_branch": "m3-j516s-fixes",
+      "base_branch": "m3-wayland",
+      "url": "https://github.com/aurora-silicon/mesa-eryk-m4/pull/1",
+      "updated_at": "2026-09-25T04:49:23Z"
+    }
+  ],
+  "upstream_asahi_open_merge_requests": [
+    {
+      "number": 45256,
+      "title": "nir,...: add NPOT vec6+",
+      "author": "pendingchaos",
+      "head": "5b7fd1e51a8d2fe48c06817d9a68f7b590d2cf85",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/45256",
+      "updated_at": "2026-10-16T08:01:15.015Z"
+    },
+    {
+      "number": 44975,
+      "title": "ci: Un-skip dEQP-VK.api.driver_properties.conformance_version",
+      "author": "Valentine",
+      "head": "be88e2b689ce69fca55c3209b9dce461f214be08",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/44975",
+      "updated_at": "2026-10-09T12:28:16.365Z"
+    },
+    {
+      "number": 44932,
+      "title": "hk: Optimize external BO implicit sync under virtio",
+      "author": "s0ullight",
+      "head": "19302a666120d54ff46acfc0cc277d4ff6f29ced",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/44932",
+      "updated_at": "2026-10-06T00:21:00.007Z"
+    },
+    {
+      "number": 44931,
+      "title": "hk: Add hk_geometry_heap_size_mb drirc option",
+      "author": "s0ullight",
+      "head": "a2a5472089a029c067a2e3e35adc420643603065",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/44931",
+      "updated_at": "2026-10-06T00:08:22.966Z"
+    },
+    {
+      "number": 44715,
+      "title": "Draft: remove TGSI from Gallium interface",
+      "author": "kusma",
+      "head": "abed9122a9b8a35495d99cd08a2cf217cd71bebe",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/44715",
+      "updated_at": "2026-09-30T23:15:35.999Z"
+    },
+    {
+      "number": 44699,
+      "title": "gallium: remove pipe_tess_spacing in favor of gl_tess_spacing",
+      "author": "rajaryan1492007",
+      "head": "888082fffef4725b4c06a3d250c4f51bdaa5f5c7",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/44699",
+      "updated_at": "2026-09-26T09:23:19.925Z"
+    },
+    {
+      "number": 44475,
+      "title": "agx: fix phi register shuffling order",
+      "author": "rowanG077",
+      "head": "e22cd9bd50daa4671b41a81ee72c8238a0604a8f",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/44475",
+      "updated_at": "2026-09-18T01:26:47.965Z"
+    },
+    {
+      "number": 44041,
+      "title": "asahi/hk: use a lighter CDM barrier between compute dispatches",
+      "author": "ericcurtin",
+      "head": "de9d045a965d1a2bc4aca030dcf071d5ff33ebb3",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/44041",
+      "updated_at": "2026-08-28T12:17:52.874Z"
+    },
+    {
+      "number": 43512,
+      "title": "asahi: implement fence_server_signal and semaphores",
+      "author": "karolherbst",
+      "head": "00a30690fcbf9ab4748364c53d28bdedca9f0aa1",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/43512",
+      "updated_at": "2026-08-09T09:42:49.766Z"
+    },
+    {
+      "number": 42872,
+      "title": "Asahi: Add support for GL_EXT_memory_object[_fd] and GL_EXT_semaphore[_fd] for OpenGL-Vulkan interop.",
+      "author": "kleinerm",
+      "head": "7e6d5c2d31681ce1b2a004b0d602679555fd5e12",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/42872",
+      "updated_at": "2026-10-09T19:18:28.001Z"
+    },
+    {
+      "number": 42492,
+      "title": "virtio: Add asserts that flush_lock has reset reqbuf_len",
+      "author": "dbaker",
+      "head": "0b812bd089be510036115ef827291de9bdfd5b63",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/42492",
+      "updated_at": "2026-07-27T16:43:42.506Z"
+    },
+    {
+      "number": 42482,
+      "title": "agx: Relax pressure scheduler bail condition + set lload/lstore missing bit",
+      "author": "xingjianll",
+      "head": "ccbcd3ab649be7fe504ee7fe1a4f8f591a658136",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/42482",
+      "updated_at": "2026-08-27T12:26:28.505Z"
+    },
+    {
+      "number": 41480,
+      "title": "poly: allow batching some dispatches with multidraw",
+      "author": "olivia",
+      "head": "7dc81d9dc89ea45de9f41e7b337cb2aad02f2382",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/41480",
+      "updated_at": "2026-08-31T11:02:37.406Z"
+    },
+    {
+      "number": 41297,
+      "title": "treewide: Add vk_memory_budget_percent driconf option",
+      "author": "CreativeCylon",
+      "head": "c9f8b12120ed34e64e35e95ca3b83ae590fb799a",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/41297",
+      "updated_at": "2026-05-13T08:25:04.817Z"
+    },
+    {
+      "number": 40569,
+      "title": "Draft: nir: Rename lower_vars_to_ssa to opt_vars_to_ssa",
+      "author": "gfxstrand",
+      "head": "cc16df49edbc7e7282145b965d311223cc9c125a",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/40569",
+      "updated_at": "2026-10-12T08:24:02.005Z"
+    },
+    {
+      "number": 40238,
+      "title": "hk: Enable VK_EXT_memory_budget",
+      "author": "austriancoder",
+      "head": "6a5a9c268f9efe48e0ef43fd59693a0528d25e71",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/40238",
+      "updated_at": "2026-03-05T22:19:45.149Z"
+    },
+    {
+      "number": 39905,
+      "title": "Draft: vulkan: Implement VK_KHR_shader_fma",
+      "author": "ajax",
+      "head": "47a466190a5c7abb8710973384cbcc19a9ee9213",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/39905",
+      "updated_at": "2026-08-11T12:02:36.640Z"
+    },
+    {
+      "number": 39755,
+      "title": "Draft: asahi: add support for interchange_compressed",
+      "author": "oliver.bestmann",
+      "head": "b8c1ab93c911724c26a5724dc2d9863ddf402c3a",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/39755",
+      "updated_at": "2026-07-12T16:57:53.890Z"
+    },
+    {
+      "number": 38294,
+      "title": "Draft: util: os_get_option_internal use getenv_s when possible",
+      "author": "lygstate",
+      "head": "feb779e89f7464791d466300dd9ef7e06477d3d6",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/38294",
+      "updated_at": "2025-11-13T20:59:14.256Z"
+    },
+    {
+      "number": 37668,
+      "title": "asahi: support SVM and cl_ext_buffer_device_address",
+      "author": "karolherbst",
+      "head": "d0632ad19c4b3ce4b2f051108089a69d9dac3228",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/37668",
+      "updated_at": "2025-10-24T18:22:58.494Z"
+    },
+    {
+      "number": 37287,
+      "title": "src/python: Add a wrapper script for running python",
+      "author": "dbaker",
+      "head": "e20bb631838329b1edb3b1d4e8f27529841610f9",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/37287",
+      "updated_at": "2026-05-14T16:56:09.370Z"
+    },
+    {
+      "number": 31989,
+      "title": "drm-shim: Add primary node support",
+      "author": "lcagustini",
+      "head": "d6fb563a3c7a19faef065421cc2b6f255efc0f36",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/31989",
+      "updated_at": "2025-02-16T20:44:30.145Z"
+    },
+    {
+      "number": 30451,
+      "title": "vulkan: Shader objects should default to robustness2",
+      "author": "gfxstrand",
+      "head": "5a2341a4337f581be175ca8af942244fb9f1cf8f",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/30451",
+      "updated_at": "2024-07-31T22:25:58.211Z"
+    },
+    {
+      "number": 29353,
+      "title": "mesa: Add values to PIPE_CAP_OCCLUSION_QUERY",
+      "author": "MTCoster",
+      "head": "71521567d67a8b19c7b05c0e623e4134611c99bb",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/29353",
+      "updated_at": "2024-05-26T09:48:09.709Z"
+    },
+    {
+      "number": 18294,
+      "title": "Draft: zink: drop rounding line-width to granularity",
+      "author": "kusma",
+      "head": "09ea42c575b24fdc00364cb19ba615387172dfb1",
+      "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/18294",
+      "updated_at": "2025-10-14T14:07:24.198Z"
+    }
+  ],
+  "profiles": [
+    {
+      "branch": "experimental/m5-recognition",
+      "commit": "9570664a2211ee3a029a9499331a4b2b882c82c0",
+      "source_commit": "068c165a0c83cab4e4c6e9a3c89f63f7a4fa0c2c",
+      "source_ref": "refs/remotes/discovery/dj/m5-agx-g15-g17-failclosed",
+      "note": "Public DJ M5/G15/G17 recognition and encoder research. Hardware admission remains fail-closed; this is not a runnable M5 driver. Newer private HAL300 work is kept local at the owner's instruction."
+    },
+    {
+      "branch": "experimental/m4",
+      "commit": "1e82eb965e4010eccacdb023340f3b5703e6ec8e",
+      "source_commit": "08b19ec3a2e422a7252fdfe77c185450fccf86da",
+      "source_ref": "refs/remotes/discovery/eryk-legacy/m4-asahi-port",
+      "note": "Eryk's M4 development and qualification evidence. This is a separate, older driver and firmware contract; it is not a universal or release-qualified M4 driver."
+    },
+    {
+      "branch": "compat/m3-air-hal200",
+      "commit": "012e74731643a9a8a1497c7b18fb99f70330d2d2",
+      "source_commit": "78908f4d18af2274b5df08c4ad9d953c25980b53",
+      "source_ref": "refs/remotes/discovery/previous/m3/air-hal200",
+      "note": "Previously maintained M3 Air T8122 HAL200 / macOS 26.6.2 OpenGL profile. This does not provide native Honeykrisp Vulkan. Requires its matching kernel, firmware and m1n1 handoffs."
+    },
+    {
+      "branch": "compat/m3-legacy",
+      "commit": "311afd88176f3006c8ecfc5565783f1f72493e0f",
+      "source_commit": "59ec4e2e8f0e5c2356ccf2749408c1e472484a5c",
+      "source_ref": "refs/remotes/discovery/previous/m3/legacy",
+      "note": "Previously maintained M3 legacy firmware profile. Requires the matching older boot/firmware/kernel contract; it is not interchangeable with the native M3 integration."
+    },
+    {
+      "branch": "compat/m3-pro-legacy",
+      "commit": "fa50dda542bcefac66792d368a5a90a5f142958e",
+      "source_commit": "d616d0650d6fa80f72a750a0121442ab917ed6cf",
+      "source_ref": "refs/remotes/discovery/previous/fix/native-index-offset-integrated-20261013",
+      "note": "Previously maintained native M3 Pro OpenGL profile on the older Mesa 26.1.4 foundation. Retained for existing boot-stack compatibility; consult the pinned source history before selecting it."
+    },
+    {
+      "branch": "experimental/m3-max-legacy",
+      "commit": "41d78aa1fe6fdc5fcac914afa0f0937df56d2188",
+      "source_commit": "ff120e88cfc047b69ed412b2276599e3b2a426de",
+      "source_ref": "refs/remotes/discovery/previous/m3max/g15c",
+      "note": "Earlier M3 Max experiments on the legacy Mesa foundation. New work should use the combined native branch with its matched experimental kernel instead."
+    }
+  ],
+  "scope_note": "Finite public-source discovery snapshot, not a claim to have found every private, deleted, unindexed or subsequently published branch. Source snapshots do not imply code approval or hardware qualification.",
+  "source_policy": "Public-source refs only. Private-source work stays local at the owner's instruction."
+}
