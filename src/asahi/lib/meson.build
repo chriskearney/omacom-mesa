@@ -198,6 +198,32 @@ if with_tests
     )
   endforeach
   test(
+    'asahi-chip-admission',
+    executable(
+      'asahi-chip-admission',
+      files('tests/test-chip-admission.c'),
+      include_directories : [inc_include, inc_src, inc_asahi],
+      dependencies : [idep_agx_pack, idep_mesautil],
+      link_with : [libasahi_lib],
+      c_args : [c_msvc_compat_args],
+      gnu_symbol_visibility : 'hidden',
+    ),
+    suite : ['asahi'],
+  )
+  test(
+    'asahi-usc-base-page',
+    executable(
+      'asahi-usc-base-page',
+      files('tests/test-usc-base-page.c'),
+      include_directories : [inc_asahi],
+      dependencies : [idep_agx_pack, idep_mesautil, idep_nir],
+      link_with : [libasahi_lib, libasahi_compiler, libasahi_layout],
+      c_args : [c_msvc_compat_args, no_override_init_args],
+      gnu_symbol_visibility : 'hidden',
+    ),
+    suite : ['asahi'],
+  )
+  test(
     'libasahi_tests',
     executable(
       'libasahi_tests',

@@ -247,6 +247,7 @@ agx_chip_driver_supported(enum agx_chip chip)
                 AGX_SAMPLER_GENERATION_GEN4_HAL200 &&
              agx_chip_submission_model(chip) == AGX_SUBMISSION_MODEL_DUAL;
    case AGX_CHIP_G15S:
+   case AGX_CHIP_G15C:
       return agx_chip_command_stream_generation(chip) ==
                 AGX_CS_GENERATION_G15 &&
              agx_chip_sampler_generation(chip) ==
@@ -280,6 +281,14 @@ agx_params_driver_supported(const struct drm_asahi_params_global *params)
        * (pre-HAL200) firmware interface. */
       return params->chip_id == 0x6030 && params->num_dies == 1 &&
              params->num_clusters_total == 2 &&
+             params->usc_generation == AGX_ISA_AGX3 &&
+             params->gpu_hal_generation == DRM_ASAHI_GPU_HAL_LEGACY;
+   case AGX_CHIP_G15C:
+      /* T6031/M3 Max: the same generation as T6030 with four clusters.
+       * Binned parts differ only in their core masks, which every consumer
+       * reads from the parameters, so the masks are not part of the check. */
+      return params->chip_id == 0x6031 && params->num_dies == 1 &&
+             params->num_clusters_total == 4 &&
              params->usc_generation == AGX_ISA_AGX3 &&
              params->gpu_hal_generation == DRM_ASAHI_GPU_HAL_LEGACY;
    default:

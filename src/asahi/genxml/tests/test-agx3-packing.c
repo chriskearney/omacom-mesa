@@ -856,6 +856,48 @@ test_agx3_cdm_barrier(void)
    CHECK_EQ(decoded.flags, 0);
    CHECK_EQ(agx3_cdm_barrier_pack(NULL, packed), false);
    CHECK_EQ(agx3_cdm_barrier_pack(&info, NULL), false);
+
+   /* The wide-visibility form: the G15 parts on the native path and G16G
+    * pack and decode it; other chips refuse it in both directions. */
+   const enum agx_chip wide[] = {
+      AGX_CHIP_G15S,
+      AGX_CHIP_G15C,
+      AGX_CHIP_G16G,
+   };
+   for (unsigned i = 0; i < sizeof(wide) / sizeof(wide[0]); ++i) {
+      struct agx3_cdm_barrier_info wide_info = {
+         .chip = wide[i],
+         .flags = 5,
+         .wide_visibility = true,
+      };
+      CHECK_EQ(agx3_cdm_barrier_pack(&wide_info, packed), true);
+      CHECK_EQ(agx3_cmdstream_load_le32(packed),
+               agx3_cdm_barrier_word(5) | AGX3_CDM_BARRIER_WIDE_VISIBILITY);
+      CHECK_EQ(agx3_cdm_barrier_unpack(wide[i], packed, sizeof(packed),
+                                       &decoded),
+               true);
+      CHECK_EQ(decoded.wide_visibility, true);
+      CHECK_EQ(decoded.flags, 5);
+   }
+
+   const enum agx_chip narrow[] = {
+      AGX_CHIP_G15G,
+      AGX_CHIP_G15D,
+      AGX_CHIP_G17P,
+   };
+   for (unsigned i = 0; i < sizeof(narrow) / sizeof(narrow[0]); ++i) {
+      struct agx3_cdm_barrier_info narrow_info = {
+         .chip = narrow[i],
+         .flags = 5,
+         .wide_visibility = true,
+      };
+      CHECK_EQ(agx3_cdm_barrier_pack(&narrow_info, packed), false);
+      agx3_cmdstream_store_le32(packed, agx3_cdm_barrier_word(5) |
+                                           AGX3_CDM_BARRIER_WIDE_VISIBILITY);
+      CHECK_EQ(agx3_cdm_barrier_unpack(narrow[i], packed, sizeof(packed),
+                                       &decoded),
+               false);
+   }
 }
 
 static void

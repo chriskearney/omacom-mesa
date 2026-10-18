@@ -912,6 +912,14 @@ agx_open_device(void *memctx, struct agx_device *dev)
                  "(USC %u, HAL %u; expected USC 3, HAL 200)\n",
                  dev->params.usc_generation,
                  dev->params.gpu_hal_generation);
+      } else if (dev->chip == AGX_CHIP_G15C) {
+         fprintf(stderr,
+                 "Apple G15C kernel parameters do not match Honeykrisp "
+                 "(chip %#x, %u dies, %u clusters, USC %u, HAL %u; expected "
+                 "chip 0x6031, 1 die, 4 clusters, USC 3, HAL 0)\n",
+                 dev->params.chip_id, dev->params.num_dies,
+                 dev->params.num_clusters_total, dev->params.usc_generation,
+                 dev->params.gpu_hal_generation);
       } else {
          fprintf(stderr,
                  "Apple %s uses the %s command stream, which this driver "
@@ -1233,7 +1241,9 @@ agx_open_device(void *memctx, struct agx_device *dev)
          dev->libagx_programs = libagx_g13g;
    } else if (dev->chip == AGX_CHIP_G17P) {
       dev->libagx_programs = libagx_g17p;
-   } else if (dev->chip == AGX_CHIP_G15S) {
+   } else if (dev->chip == AGX_CHIP_G15S || dev->chip == AGX_CHIP_G15C) {
+      /* G15C executes the same AGX3B encoding as G15S with no extra
+       * scheduling rules, so it runs the G15S build of the programs. */
       dev->libagx_programs = libagx_g15s;
    } else {
       dev->libagx_programs = NULL;
@@ -1383,8 +1393,7 @@ agx_open_device(void *memctx, struct agx_device *dev)
          goto fail;
       }
 
-      memset(map, 0, usc_base_size);
-      agx3_build_container_lead(map, dev->chip);
+      agx3_build_usc_base_page(map, usc_base_size, dev->chip);
       agx_bo_assert_range(usc_base, 0, usc_base_size);
 
    }

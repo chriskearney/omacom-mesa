@@ -126,6 +126,37 @@ static const struct drm_asahi_params_global params_g15s = {
    .gpu_hal_generation = DRM_ASAHI_GPU_HAL_LEGACY,
 };
 
+/*
+ * T6031 / M3 Max: the same G15 generation as T6030 with twice the clusters.
+ * One die, four clusters of ten cores (the 40-core part, every core present),
+ * revision B2 (0x12), AGX3 shaders on the legacy firmware interface, and the
+ * top GPU clock of the J516C, 1380 MHz. No optional feature is reported, so
+ * the driver takes its baseline submission paths; the ASAHI_SHIM_* feature
+ * switches add bits on top. Submissions go through the same packet rules and
+ * stream gate as G15S, and the same per-VM kernel range is refused for binds.
+ * Select with ASAHI_SHIM_CHIP=g15c.
+ */
+static const struct drm_asahi_params_global params_g15c = {
+   .features = 0,
+   .gpu_generation = 15,
+   .gpu_variant = 'C',
+   .gpu_revision = 0x12,
+   .chip_id = 0x6031,
+   .num_dies = 1,
+   .num_clusters_total = 4,
+   .num_cores_per_cluster = 10,
+   .core_masks = {0x3ff, 0x3ff, 0x3ff, 0x3ff},
+   .vm_start = 0x4000,
+   .vm_end = 0x2ffffff8000ull,
+   .vm_kernel_min_size = 0x20000000,
+   .max_commands_per_submission = 64,
+   .max_attachments = 16,
+   .max_frequency_khz = 1380000,
+   .command_timestamp_frequency_hz = 1000000000,
+   .usc_generation = 3,
+   .gpu_hal_generation = DRM_ASAHI_GPU_HAL_LEGACY,
+};
+
 /* QUEUE_LIMITS (group 2) of the M3 kernel. */
 static const struct drm_asahi_queue_limits queue_limits_g15s = {
    .max_queues = 58,
@@ -146,6 +177,8 @@ shim_params(void)
       return &params_g17p;
    if (chip && !strcmp(chip, "g15s"))
       return &params_g15s;
+   if (chip && !strcmp(chip, "g15c"))
+      return &params_g15c;
 
    return &params_g13g;
 }
@@ -154,6 +187,15 @@ static bool
 shim_g15s(void)
 {
    return shim_params() == &params_g15s;
+}
+
+/* Whether the selected identity is driven by the M3 (G15) kernel, whose
+ * submission gate and per-VM object range the shim mirrors. */
+static bool
+shim_g15_kernel(void)
+{
+   const struct drm_asahi_params_global *params = shim_params();
+   return params == &params_g15s || params == &params_g15c;
 }
 
 /* The queue's USC window, as QUEUE_CREATE set it. One queue base per run is
@@ -1024,6 +1066,23 @@ asahi_ioctl_vm_status_mirror(int fd, struct drm_asahi_get_params *gp)
    return 0;
 }
 
+/* The feature word GET_PARAMS reports: the identity's own bits plus the
+ * ASAHI_SHIM_* switches, so both old and capability-aware kernels can be
+ * tested without GPU execution. */
+static uint64_t
+shim_features(void)
+{
+   uint64_t features = shim_params()->features;
+   const char *per_command = getenv("ASAHI_SHIM_PER_COMMAND_INPUT_SYNCS");
+   if (per_command && !strcmp(per_command, "1"))
+      features |= DRM_ASAHI_FEATURE_PER_COMMAND_INPUT_SYNCS;
+   if (shim_env_on("ASAHI_SHIM_VM_STATUS"))
+      features |= DRM_ASAHI_FEATURE_VM_STATUS;
+   if (shim_env_on("ASAHI_SHIM_VM_STATUS_MIRROR"))
+      features |= DRM_ASAHI_FEATURE_VM_STATUS_MIRROR;
+   return features;
+}
+
 static int
 asahi_ioctl_get_param(int fd, unsigned long request, void *arg)
 {
@@ -1038,14 +1097,7 @@ asahi_ioctl_get_param(int fd, unsigned long request, void *arg)
        * differs by a field. */
       size_t size = MIN2((size_t)gp->size, sizeof(struct drm_asahi_params_global));
       struct drm_asahi_params_global params = *shim_params();
-      /* Test both old and capability-aware kernels without GPU execution. */
-      const char *per_command = getenv("ASAHI_SHIM_PER_COMMAND_INPUT_SYNCS");
-      if (per_command && !strcmp(per_command, "1"))
-         params.features |= DRM_ASAHI_FEATURE_PER_COMMAND_INPUT_SYNCS;
-      if (shim_env_on("ASAHI_SHIM_VM_STATUS"))
-         params.features |= DRM_ASAHI_FEATURE_VM_STATUS;
-      if (shim_env_on("ASAHI_SHIM_VM_STATUS_MIRROR"))
-         params.features |= DRM_ASAHI_FEATURE_VM_STATUS_MIRROR;
+      params.features = shim_features();
       const char *command_limit = getenv("ASAHI_SHIM_COMMAND_LIMIT");
       if (command_limit) {
          unsigned limit = strtoul(command_limit, NULL, 0);
@@ -1161,14 +1213,15 @@ asahi_ioctl_vm_bind_unlocked(int fd, unsigned long request, void *arg)
          return -EINVAL;
       }
 
-      if (params == &params_g15s &&
+      if (shim_g15_kernel() &&
           range_overlaps(start, op->range, SHIM_G15S_KERNEL_VA_START,
                          SHIM_G15S_KERNEL_VA_END -
                             SHIM_G15S_KERNEL_VA_START)) {
          fprintf(stderr,
                  "shim: gem_bind: Invalid map range %#llx..%#llx "
-                 "(overlaps the G15S kernel objects %#llx..%#llx)\n",
+                 "(overlaps the G15%c kernel objects %#llx..%#llx)\n",
                  (unsigned long long)start, (unsigned long long)end,
+                 (char)params->gpu_variant,
                  (unsigned long long)SHIM_G15S_KERNEL_VA_START,
                  (unsigned long long)SHIM_G15S_KERNEL_VA_END);
          return -EINVAL;
@@ -1388,13 +1441,13 @@ static unsigned g15s_rejected;
 static void __attribute__((destructor))
 report_g15s_gate(void)
 {
-   if (!shim_g15s())
+   if (!shim_g15_kernel())
       return;
 
    fprintf(stderr,
-           "shim: G15S gate: %u renders, %u computes, %u launches, %u "
+           "shim: G15%c gate: %u renders, %u computes, %u launches, %u "
            "indirect, %u barriers (%u wide), %u links; %u rejected\n",
-           g15s_stats.renders, g15s_stats.computes, g15s_stats.launches,
+           (char)shim_params()->gpu_variant, g15s_stats.renders, g15s_stats.computes, g15s_stats.launches,
            g15s_stats.indirect_launches, g15s_stats.barriers,
            g15s_stats.wide_barriers, g15s_stats.links, g15s_rejected);
 
@@ -1410,6 +1463,7 @@ g15s_submit_gate(int fd, const struct drm_asahi_submit *submit)
       .data = (void *)(intptr_t)fd,
       .read = shim_gpu_read,
    };
+   const uint64_t features = shim_features();
    unsigned commands = 0;
    size_t cursor = 0;
 
@@ -1431,7 +1485,7 @@ g15s_submit_gate(int fd, const struct drm_asahi_submit *submit)
          g15s_stats.renders++;
          ok = asahi_g15s_render_packet_validate(&render, header + 1,
                                                 header->size,
-                                                params_g15s.features) &&
+                                                features) &&
               asahi_g15s_vdm_gate(&memory, render.vdm_ctrl_stream_base);
       } else if (header->cmd_type == DRM_ASAHI_CMD_COMPUTE) {
          struct drm_asahi_cmd_compute compute = {0};
@@ -1440,7 +1494,7 @@ g15s_submit_gate(int fd, const struct drm_asahi_submit *submit)
          g15s_stats.computes++;
          ok = asahi_g15s_compute_packet_validate(&compute, header + 1,
                                                  header->size,
-                                                 params_g15s.features) &&
+                                                 features) &&
               asahi_g15s_cdm_gate(&memory, shim_usc_exec_base,
                                   compute.cdm_ctrl_stream_base, &g15s_stats);
       }
@@ -1453,7 +1507,7 @@ g15s_submit_gate(int fd, const struct drm_asahi_submit *submit)
       cursor += command_size;
    }
 
-   if (commands > params_g15s.max_commands_per_submission)
+   if (commands > shim_params()->max_commands_per_submission)
       return -EINVAL;
 
    return 0;
@@ -1467,7 +1521,7 @@ asahi_ioctl_submit_unlocked(int fd, unsigned long request, void *arg)
    asahi_log_submit(submit);
    dump_submit(fd, submit, submit_calls);
 
-   if (shim_g15s())
+   if (shim_g15_kernel())
       return g15s_submit_gate(fd, submit);
 
    /* The kernel's native-context gate runs for every render submission, not
@@ -1668,9 +1722,16 @@ drm_shim_driver_init(void)
    shim_device.driver_ioctls = driver_ioctls;
    shim_device.driver_ioctl_count = ARRAY_SIZE(driver_ioctls);
 
+   /* libdrm tells the bus from this link; without it drmGetDevices2() skips
+    * the node, and Vulkan and the Gallium loader find no device. */
+   drm_shim_override_link("../../../../../bus/platform",
+                          "/sys/dev/char/%d:%d/device/subsystem", DRM_MAJOR,
+                          render_node_minor);
+
    const char *chip = getenv("ASAHI_SHIM_CHIP");
    const bool g17p = chip && !strcmp(chip, "g17p");
    const bool g15s = chip && !strcmp(chip, "g15s");
+   const bool g15c = chip && !strcmp(chip, "g15c");
 
    drm_shim_override_file(g17p   ? "DRIVER=asahi\n"
                                    "OF_FULLNAME=/soc/agx\n"
@@ -1679,6 +1740,10 @@ drm_shim_driver_init(void)
                           : g15s ? "DRIVER=asahi\n"
                                    "OF_FULLNAME=/soc/agx\n"
                                    "OF_COMPATIBLE_0=apple,agx-g15s\n"
+                                   "OF_COMPATIBLE_N=1\n"
+                          : g15c ? "DRIVER=asahi\n"
+                                   "OF_FULLNAME=/soc/agx\n"
+                                   "OF_COMPATIBLE_0=apple,agx-g15c\n"
                                    "OF_COMPATIBLE_N=1\n"
                                  : "DRIVER=asahi\n"
                                    "OF_FULLNAME=/soc/agx\n"

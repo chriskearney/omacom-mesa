@@ -141,13 +141,15 @@ static const uint8_t sample_loop_footer[] = {
 /* "0f 00 54 <opcode> 00 x6 06 00 06 00 06 00" per record, then two terminals.
  * The opcodes count down by 0x10 from 0x10 * slots, so G17P's six slots are
  * 0x60..0x10 and the ten-slot table of G15 and G16 parts is 0xa0..0x10. */
+static const uint8_t agx3_helper_terminal[16] = {
+   0xf7, 0x03, 0xaa, 0x00, 0x8f, 0x02, 0x54, 0x01,
+   0x06, 0x00, 0x06, 0x00, 0x06, 0x00, 0x06, 0x00,
+};
+
 static void
 agx3_fill_helper_table(uint8_t *image, size_t base, unsigned slots)
 {
-   static const uint8_t terminal[16] = {
-      0xf7, 0x03, 0xaa, 0x00, 0x8f, 0x02, 0x54, 0x01,
-      0x06, 0x00, 0x06, 0x00, 0x06, 0x00, 0x06, 0x00,
-   };
+   const uint8_t *terminal = agx3_helper_terminal;
 
    assert(slots <= 14 && "both tables fit below the block-size dword");
    for (unsigned i = 0; i < slots; ++i) {
@@ -162,8 +164,18 @@ agx3_fill_helper_table(uint8_t *image, size_t base, unsigned slots)
          record[h + 1] = 0x00;
       }
    }
-   memcpy(image + base + slots * 0x10, terminal, sizeof(terminal));
-   memcpy(image + base + (slots + 1) * 0x10, terminal, sizeof(terminal));
+   memcpy(image + base + slots * 0x10, terminal, 0x10);
+   memcpy(image + base + (slots + 1) * 0x10, terminal, 0x10);
+}
+
+/* Store the helper tables' terminal record (a return) in every 16-byte slot
+ * of [from, to), so a helper call that lands on any of them returns rather
+ * than running whatever bytes the image holds there. */
+static void
+agx3_fill_helper_terminals(uint8_t *image, size_t from, size_t to)
+{
+   for (size_t offset = from; offset + 0x10 <= to; offset += 0x10)
+      memcpy(image + offset, agx3_helper_terminal, 0x10);
 }
 
 /* Total container bytes for `code_size` bytes of executable. */
@@ -190,6 +202,28 @@ agx3_build_container_lead(uint8_t *image, enum agx_chip chip)
    }
    agx3_fill_helper_table(image, 0x100, slots);
    agx3_fill_helper_table(image, 0x200, slots);
+}
+
+/* The USC window's base page: the container lead, then zeroes, so the zero
+ * dword at +0x340 ends the page's container chain.  Where
+ * agx_chip_usc_base_page_fill_returns() holds, every slot after the two
+ * ten-slot tables (from +0x2c0) and after that dword (from +0x350) to the
+ * end of the page returns, so a helper call that misses the tables stays in
+ * the page.  Only the base page gets this; per-shader containers keep the
+ * plain lead. */
+void
+agx3_build_usc_base_page(uint8_t *image, size_t size, enum agx_chip chip)
+{
+   assert(size >= AGX3_CONTAINER_LEAD + 0x10);
+
+   memset(image, 0, size);
+   agx3_build_container_lead(image, chip);
+
+   if (agx_chip_usc_base_page_fill_returns(chip)) {
+      assert(agx_chip_usc_helper_table_slots(chip) == 10);
+      agx3_fill_helper_terminals(image, 0x2c0, AGX3_CONTAINER_LEAD);
+      agx3_fill_helper_terminals(image, AGX3_CONTAINER_LEAD + 0x10, size);
+   }
 }
 
 static void
