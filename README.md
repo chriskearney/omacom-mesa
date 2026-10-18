@@ -99,5 +99,4 @@ its contents. This is a dated public-source investigation; it cannot establish
 that no private, deleted, unindexed or newer work exists.
 
 GitHub Actions runs the quick CPU checks on main and pull requests. Full host
-compilation and hardware qualification are distinct checks. The existing
-archived `iconidentify/aurora-linux` repository remains untouched.
+compilation and hardware qualification are distinct checks.
