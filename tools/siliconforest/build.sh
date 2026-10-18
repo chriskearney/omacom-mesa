@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 set -euo pipefail
 sf_mesa_source=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
-sf_mesa_build=${1:-"$sf_mesa_source/../siliconforested-mesa-build"}
+sf_mesa_build=${1:-"$sf_mesa_source/../siliconforest-mesa-build"}
 sf_mesa_meson=${MESON:-meson}
 "$sf_mesa_meson" setup "$sf_mesa_build" "$sf_mesa_source" \
   -Dgallium-drivers=asahi,zink,softpipe -Dvulkan-drivers=asahi \

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "discovered_on": "2026-10-18",
-  "repository": "https://github.com/iconidentify/siliconforested-mesa",
+  "repository": "https://github.com/iconidentify/siliconforest-mesa",
   "default_branch": "siliconforest/next",
   "source_snapshots": [
     {
@@ -2783,42 +2783,42 @@
   "profiles": [
     {
       "branch": "experimental/m5-recognition",
-      "commit": "9570664a2211ee3a029a9499331a4b2b882c82c0",
+      "commit": "e4addb3c3ce4099eb6940afc16a69185b2bd5385",
       "source_commit": "068c165a0c83cab4e4c6e9a3c89f63f7a4fa0c2c",
       "source_ref": "refs/remotes/discovery/dj/m5-agx-g15-g17-failclosed",
       "note": "Public DJ M5/G15/G17 recognition and encoder research. Hardware admission remains fail-closed; this is not a runnable M5 driver. Newer private HAL300 work is kept local at the owner's instruction."
     },
     {
       "branch": "experimental/m4",
-      "commit": "1e82eb965e4010eccacdb023340f3b5703e6ec8e",
+      "commit": "4a7f7eab1a30f4035b9927601d2ea152c6331c8f",
       "source_commit": "08b19ec3a2e422a7252fdfe77c185450fccf86da",
       "source_ref": "refs/remotes/discovery/eryk-legacy/m4-asahi-port",
       "note": "Eryk's M4 development and qualification evidence. This is a separate, older driver and firmware contract; it is not a universal or release-qualified M4 driver."
     },
     {
       "branch": "compat/m3-air-hal200",
-      "commit": "012e74731643a9a8a1497c7b18fb99f70330d2d2",
+      "commit": "7446b6810fc620f999680841e6a6209f6d0e7101",
       "source_commit": "78908f4d18af2274b5df08c4ad9d953c25980b53",
       "source_ref": "refs/remotes/discovery/previous/m3/air-hal200",
       "note": "Previously maintained M3 Air T8122 HAL200 / macOS 26.6.2 OpenGL profile. This does not provide native Honeykrisp Vulkan. Requires its matching kernel, firmware and m1n1 handoffs."
     },
     {
       "branch": "compat/m3-legacy",
-      "commit": "311afd88176f3006c8ecfc5565783f1f72493e0f",
+      "commit": "1acd44ee395324c1f8c7af37b3bec5d9ff5d658f",
       "source_commit": "59ec4e2e8f0e5c2356ccf2749408c1e472484a5c",
       "source_ref": "refs/remotes/discovery/previous/m3/legacy",
       "note": "Previously maintained M3 legacy firmware profile. Requires the matching older boot/firmware/kernel contract; it is not interchangeable with the native M3 integration."
     },
     {
       "branch": "compat/m3-pro-legacy",
-      "commit": "fa50dda542bcefac66792d368a5a90a5f142958e",
+      "commit": "f7d09448e2ee398047a5b1ab4de13e37be00486d",
       "source_commit": "d616d0650d6fa80f72a750a0121442ab917ed6cf",
       "source_ref": "refs/remotes/discovery/previous/fix/native-index-offset-integrated-20261013",
       "note": "Previously maintained native M3 Pro OpenGL profile on the older Mesa 26.1.4 foundation. Retained for existing boot-stack compatibility; consult the pinned source history before selecting it."
     },
     {
       "branch": "experimental/m3-max-legacy",
-      "commit": "41d78aa1fe6fdc5fcac914afa0f0937df56d2188",
+      "commit": "71a7843b5553d3c65fbf7d6c4b74fbed101c4bc1",
       "source_commit": "ff120e88cfc047b69ed412b2276599e3b2a426de",
       "source_ref": "refs/remotes/discovery/previous/m3max/g15c",
       "note": "Earlier M3 Max experiments on the legacy Mesa foundation. New work should use the combined native branch with its matched experimental kernel instead."

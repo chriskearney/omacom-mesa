@@ -37,8 +37,8 @@ def main():
             actual = local.stdout.strip() if local.returncode == 0 else run(
                 'git', 'rev-parse', 'refs/remotes/origin/' + profile['branch'])
             assert actual == profile['commit']
-            assert run('git', 'rev-parse', profile['commit'] + '^') == profile['source_commit']
-            paths = run('git', 'diff-tree', '--no-commit-id', '--name-only', '-r', profile['commit']).splitlines()
+            subprocess.run(['git', 'merge-base', '--is-ancestor', profile['source_commit'], profile['commit']], cwd=ROOT, check=True)
+            paths = run('git', 'diff', '--name-only', profile['source_commit'], profile['commit']).splitlines()
             assert set(paths) <= {'AGENTS.md', 'README.md', '.github/workflows/macos.yml'}, paths
     cases = [
         ('chip-admission', ['src/asahi/lib/agx_chip.c',
