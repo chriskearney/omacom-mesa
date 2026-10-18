@@ -34,7 +34,7 @@ def main():
             assert run('git', 'rev-parse', profile['branch']) == profile['commit']
             assert run('git', 'rev-parse', profile['commit'] + '^') == profile['source_commit']
             paths = run('git', 'diff-tree', '--no-commit-id', '--name-only', '-r', profile['commit']).splitlines()
-            assert set(paths) <= {'AGENTS.md', 'README.md'}, paths
+            assert set(paths) <= {'AGENTS.md', 'README.md', '.github/workflows/macos.yml'}, paths
     cases = [
         ('chip-admission', ['src/asahi/lib/agx_chip.c',
                             'src/asahi/lib/tests/test-chip-admission.c']),

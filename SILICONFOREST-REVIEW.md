@@ -73,7 +73,7 @@ public PR history alongside the new integration commits.
 | Newer private M5 HAL300 research | Kept local at the owner's instruction. No private-source snapshot or runnable M5 claim is published here. |
 | DJ public `m5-agx-g15-g17-failclosed`, `068c165a0c83cab4e4c6e9a3c89f63f7a4fa0c2c` | Preserved on `experimental/m5-recognition` and as an exact source tag. Recognition/encoder research remains fail-closed, not an active M5 driver. |
 | Eryk M4, `08b19ec3a2e422a7252fdfe77c185450fccf86da` | Preserved on `experimental/m4` with original qualification evidence; no new hardware claim. |
-| Personal Air/legacy/older Pro/Max sources | Separate named profiles; firmware and kernel contracts differ from main. Only policy/branch notices are changed at their new tips. |
+| Personal Air/legacy/older Pro/Max sources | Separate named profiles; firmware and kernel contracts differ from main. Only policy/branch notices and removal of the obsolete inherited macOS workflow differ at their new tips. |
 | Joshua omacom PR3–6 | Source snapshots retained. Latest PR6 `f144c7949b7d960f26677b671341d5a123057ddf` reports 55 regressions over 3,253,584 cases. A narrow later pass does not qualify the complete performance stack. Not merged. |
 | Joshua PR11 `44841202b4fd041fc29b6ff77f585d4df6e70dd7` | Depends on the above performance stack; retained for review, not applied standalone or enabled. |
 | Official MR44475 phi shuffling, `e22cd9bd50daa4671b41a81ee72c8238a0604a8f` | Examined. Main has the newer parallel-phi implementation that snapshots original destinations and whole vector ranges. The older one-line reverse-walk fix is not a drop-in replacement. |
