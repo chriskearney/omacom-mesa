@@ -20,7 +20,7 @@ _Static_assert(offsetof(struct drm_asahi_cmd_render_with_prior, prior_vdm) ==
 _Static_assert(offsetof(struct drm_asahi_cmd_render_with_prior, prior_cdm) ==
                   264,
                "render prior cdm");
-_Static_assert(sizeof(struct drm_asahi_cmd_compute_with_prior) == 88,
+_Static_assert(sizeof(struct drm_asahi_cmd_compute_with_prior) == 136,
                "compute wire");
 _Static_assert(offsetof(struct drm_asahi_cmd_compute_with_prior, scs_layout) ==
                   64,
@@ -31,6 +31,12 @@ _Static_assert(offsetof(struct drm_asahi_cmd_compute_with_prior, prior_vdm) ==
 _Static_assert(offsetof(struct drm_asahi_cmd_compute_with_prior, prior_cdm) ==
                   80,
                "compute prior cdm");
+_Static_assert(offsetof(struct drm_asahi_cmd_compute_with_prior,
+                        cdm_auxiliary_allocation) == 88,
+               "compute auxiliary state follows prior barriers");
+_Static_assert(offsetof(struct drm_asahi_cmd_compute_with_prior,
+                        intersection_default_control) == 128,
+               "compute ray-intersection tail");
 static unsigned tests, failures;
 static void *test_context;
 
