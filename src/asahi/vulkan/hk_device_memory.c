@@ -300,6 +300,11 @@ hk_FreeMemory(VkDevice device, VkDeviceMemory _mem,
     * the BO; an owned one belongs to this object alone. */
    if (mem->map_owned)
       agx_bo_unmap_owned(mem->bo, mem->map, mem->map_size);
+   else if (mem->map && mem->map_placed) {
+      dev->dev.ops.bo_munmap(&dev->dev, mem->bo);
+      mem->bo->_map = NULL;
+      mem->bo->_map_size = 0;
+   }
 
    agx_bo_unreference(&dev->dev, mem->bo);
 
@@ -354,6 +359,22 @@ hk_MapMemory2KHR(VkDevice device, const VkMemoryMapInfoKHR *pMemoryMapInfo,
                        "Memory object already mapped.");
    }
 
+   if (fixed_addr && (offset != 0 || size != mem->vk.size ||
+                      mem->vk.size > mem->bo->size)) {
+      *ppData = NULL;
+      return vk_errorf(dev, VK_ERROR_MEMORY_MAP_FAILED,
+                       "A placed mapping must cover exactly the allocation.");
+   }
+
+   /* A backend unable to create independent mappings must not relocate a
+    * mapping that another imported memory object may still be using. */
+   if (fixed_addr && !dev->dev.ops.bo_mmap_independent && mem->bo->_map &&
+       p_atomic_read(&mem->bo->refcnt) > 1) {
+      *ppData = NULL;
+      return vk_errorf(dev, VK_ERROR_MEMORY_MAP_FAILED,
+                       "Cannot relocate a shared mapping on this backend.");
+   }
+
    /* Bound a placed mapping by the memory object, not the BO: the BO cache
     * may have handed us one up to twice as large, and the application has
     * reserved only mem->vk.size at this address.
@@ -378,7 +399,22 @@ hk_MapMemory2KHR(VkDevice device, const VkMemoryMapInfoKHR *pMemoryMapInfo,
                        mem->bo->uapi_handle);
    }
 
-   assert(!fixed_addr || mem->map == fixed_addr);
+   if (fixed_addr && mem->map != fixed_addr) {
+      if (mem->map_owned)
+         agx_bo_unmap_owned(mem->bo, mem->map, mem->map_size);
+      else {
+         dev->dev.ops.bo_munmap(&dev->dev, mem->bo);
+         mem->bo->_map = NULL;
+         mem->bo->_map_size = 0;
+      }
+      mem->map = NULL;
+      mem->map_owned = false;
+      mem->map_size = 0;
+      *ppData = NULL;
+      return vk_errorf(dev, VK_ERROR_MEMORY_MAP_FAILED,
+                       "Placed mapping returned an unexpected address.");
+   }
+   mem->map_placed = fixed_addr != NULL;
    *ppData = mem->map + offset;
 
    return VK_SUCCESS;
@@ -390,9 +426,10 @@ hk_UnmapMemory2KHR(VkDevice device,
 {
    VK_FROM_HANDLE(hk_device_memory, mem, pMemoryUnmapInfo->memory);
 
-   if (mem == NULL)
+   if (mem == NULL || mem->map == NULL)
       return VK_SUCCESS;
 
+   mem->map_placed = false;
    if (mem->map_owned) {
       if (pMemoryUnmapInfo->flags & VK_MEMORY_UNMAP_RESERVE_BIT_EXT) {
          VK_FROM_HANDLE(hk_device, dev, device);
