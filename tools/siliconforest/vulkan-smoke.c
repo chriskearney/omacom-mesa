@@ -36,8 +36,12 @@ int main(void)
    REQUIRE(strstr(props.deviceName, "Apple") != NULL);
    printf("device: %s\n", props.deviceName);
 
+   VkPhysicalDeviceVulkan13Features f13 = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+   };
    VkPhysicalDeviceTransformFeedbackFeaturesEXT xfb = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT,
+      .pNext = &f13,
    };
    VkPhysicalDeviceMapMemoryPlacedFeaturesEXT placed = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAP_MEMORY_PLACED_FEATURES_EXT,
@@ -48,6 +52,11 @@ int main(void)
    };
    vkGetPhysicalDeviceFeatures2(physical, &features);
    REQUIRE(placed.memoryMapPlaced && placed.memoryUnmapReserve && xfb.transformFeedback);
+   REQUIRE(f13.dynamicRendering);
+   f13 = (VkPhysicalDeviceVulkan13Features){
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+      .dynamicRendering = VK_TRUE,
+   };
    placed.memoryMapRangePlaced = VK_FALSE;
    xfb.geometryStreams = VK_FALSE;
 
@@ -140,8 +149,12 @@ int main(void)
    OK(vkAllocateCommandBuffers(device, &cai, &cmd));
    VkCommandBufferBeginInfo cbi = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
    OK(vkBeginCommandBuffer(cmd, &cbi));
+   VkRenderingInfo rendering = {.sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+                                 .renderArea = {.extent = {1, 1}}, .layerCount = 1};
+   vkCmdBeginRendering(cmd, &rendering);
    begin(cmd, 0, 1, NULL, NULL);
    end(cmd, 0, 1, NULL, NULL);
+   vkCmdEndRendering(cmd);
    OK(vkEndCommandBuffer(cmd));
    vkDestroyCommandPool(device, pool, NULL);
    vkDestroyDevice(device, NULL);
