@@ -271,10 +271,10 @@
   ],
   "private_sources_in_this_repository": false,
   "geometry_heap_followup": {
-    "checked_at_utc": "2026-10-19T00:35:53.655354+00:00",
-    "code_commit": "86e11a3ee2dee9037f7c51500b1dfe60a96dbe0c",
+    "checked_at_utc": "2026-10-19T00:43:29.712527+00:00",
+    "code_commit": "db96168675f5464d5293caf48ed718792b2bed74",
     "test_commit": "df1456f7f4a2984087a335ed25ba4fca25205f52",
-    "asahi_tree": "288a0e6b091a44355ad32d67aca12689c95befd1",
+    "asahi_tree": "88c6193c34676906a198ec27cd996dc71b3d0cff",
     "host": "x86_64 Linux",
     "buildtype": "release",
     "b_ndebug": false,
@@ -291,14 +291,26 @@
       "undefined"
     ],
     "heap_callback_cases": [
-      "16 MiB",
-      "128 MiB default",
-      "256 MiB override",
-      "1024 MiB",
+      "12 XML integers including both INT limits, negative/zero and4096/5000MiB clamped to16..1024MiB",
+      "actual u32 GPU layout",
       "BO allocation failure",
       "map failure and BO release"
     ],
     "hardware_qualified": false,
-    "game_profile_added": false
+    "game_profile_added": false,
+    "initial_import_commit": "86e11a3ee2dee9037f7c51500b1dfe60a96dbe0c",
+    "actual_xml_parser_to_heap_cases": 12,
+    "actual_gpu_heap_layout_bytes": 16,
+    "heap_callback_invalid_values_clamped": [
+      -2147483648,
+      -1,
+      0,
+      15,
+      1025,
+      4096,
+      5000,
+      2147483647
+    ],
+    "unbounded_xml_mutant_rejected": true
   }
 }

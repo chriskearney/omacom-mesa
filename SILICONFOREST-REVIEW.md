@@ -120,5 +120,11 @@ does not establish that a game crash is fixed or that general FPS improves.
 The production callback is exercised under ASan/UBSan by the public CPU checker,
 including the default, both limits, the 256 MiB override and BO/map failures.
 A fresh x86_64 build from this public source tree passed all 36 registered Asahi
-tests. The generated option parser rejected invalid/out-of-range settings in
-11 direct parser checks. These are host checks, without GPU qualification.
+tests. The generated option parser rejected invalid/out-of-range environment settings
+in 11 direct parser checks. Adversarial review found XML values bypass that
+parser range check; `db96168675f` clamps them at allocation to 16–1024 MiB
+and statically bounds publication to the GPU u32 fields. The regression uses
+the real `poly_heap` declaration. Twelve real XML-parser-to-callback checks
+covered negative, zero, in-range and oversized values, including 4096/5000 MiB;
+all allocated and published the same bounded size. Removing the clamp fails
+the maintained regression. These are host checks, without GPU qualification.

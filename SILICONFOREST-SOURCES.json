@@ -2832,7 +2832,8 @@
       "source_commit": "a2a5472089a029c067a2e3e35adc420643603065",
       "import_commit": "86e11a3ee2dee9037f7c51500b1dfe60a96dbe0c",
       "regression_test_commit": "df1456f7f4a2984087a335ed25ba4fca25205f52",
-      "hardware_qualified": false
+      "hardware_qualified": false,
+      "review_hardening_commit": "db96168675f5464d5293caf48ed718792b2bed74"
     }
   ]
 }
