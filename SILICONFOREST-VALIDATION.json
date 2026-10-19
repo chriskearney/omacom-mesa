@@ -269,5 +269,36 @@
     "compatibility and experimental branch builds",
     "virtio GPU execution"
   ],
-  "private_sources_in_this_repository": false
+  "private_sources_in_this_repository": false,
+  "geometry_heap_followup": {
+    "checked_at_utc": "2026-10-19T00:35:53.655354+00:00",
+    "code_commit": "86e11a3ee2dee9037f7c51500b1dfe60a96dbe0c",
+    "test_commit": "df1456f7f4a2984087a335ed25ba4fca25205f52",
+    "asahi_tree": "288a0e6b091a44355ad32d67aca12689c95befd1",
+    "host": "x86_64 Linux",
+    "buildtype": "release",
+    "b_ndebug": false,
+    "glvnd": true,
+    "full_driver_build": true,
+    "asahi_suite": {
+      "passed": 36,
+      "failed": 0
+    },
+    "public_cpu_test_programs": 5,
+    "actual_drirc_parser_cases": 11,
+    "heap_callback_sanitizers": [
+      "address",
+      "undefined"
+    ],
+    "heap_callback_cases": [
+      "16 MiB",
+      "128 MiB default",
+      "256 MiB override",
+      "1024 MiB",
+      "BO allocation failure",
+      "map failure and BO release"
+    ],
+    "hardware_qualified": false,
+    "game_profile_added": false
+  }
 }
