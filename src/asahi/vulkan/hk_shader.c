@@ -3700,9 +3700,9 @@ hk_shader_binary_cache_finish(struct hk_device *dev)
 }
 
 /*
- * A draw that runs geometry or tessellation allocates the 128 MB geometry heap,
- * and until now that allocation was reached only from inside vkCmdDraw().  It
- * costs 15.5 ms on G17P, so the first such draw in a process paid a 15.5 ms
+ * A draw that runs geometry or tessellation needs the configured geometry heap.
+ * The default 128 MiB allocation measured 15.5 ms on G17P when reached only
+ * from inside vkCmdDraw(), so the first such draw in a process paid a 15.5 ms
  * stall mid-render-pass while every later draw with the same shaders cost
  * ~110 us.  The heap depends on nothing but the device, so pull it forward to
  * the creation of the stage that will need it -- a creation-time allocation is

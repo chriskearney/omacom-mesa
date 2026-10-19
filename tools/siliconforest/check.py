@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import shlex
 import subprocess
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -58,7 +59,8 @@ def main():
                                   '-Isrc/asahi/lib', '-Isrc/asahi/vulkan'] +
                            sources + ['-o', binary], cwd=ROOT, check=True)
             subprocess.run([binary], check=True)
-    print(f'{len(tags)} source records and {len(cases)} production CPU test programs passed')
+    subprocess.run([sys.executable, str(ROOT / 'tools/siliconforest/test-geometry-heap.py')], check=True)
+    print(f'{len(tags)} source records and {len(cases) + 1} production CPU test programs passed')
 
 if __name__ == '__main__':
     main()

@@ -35,6 +35,7 @@
 #include "hk_entrypoints.h"
 #include "hk_image.h"
 #include "hk_image_view.h"
+#include "hk_instance.h"
 #include "hk_agx3_ioto_program_core.h"
 #include "hk_g17p_ppp_indices.h"
 #include "hk_g17p_full_frame_scissor.h"
@@ -2897,10 +2898,17 @@ static void
 hk_init_heap(const void *data)
 {
    struct hk_device *dev = (struct hk_device *)data;
+   struct hk_instance *instance =
+      hk_physical_device_instance(hk_device_physical(dev));
 
    perf_debug_dev(&dev->dev, "Allocating heap");
 
-   size_t size = 128 * 1024 * 1024;
+   /* XML drirc values bypass the option parser's environment range checks.
+    * Bound them before allocation: poly_heap.size and draw ranges are u32.
+    */
+   STATIC_ASSERT(UINT64_C(1024) * 1024 * 1024 <= UINT32_MAX);
+   unsigned mb = CLAMP(instance->drirc.misc.geometry_heap_size_mb, 16, 1024);
+   size_t size = (size_t)mb * 1024 * 1024;
    struct agx_bo *heap =
       agx_bo_create(&dev->dev, size, 0, 0, "Geometry heap");
    if (!heap)
@@ -2923,8 +2931,9 @@ hk_init_heap(const void *data)
 }
 
 /*
- * Allocating the geometry heap is a 128 MB agx_bo_create(), measured at 15.5 ms
- * on G17P: the kernel has to find and zero the pages.  Every consumer of the
+ * Allocating the configured geometry heap requires agx_bo_create(): the kernel
+ * finds and zeroes the pages. The default 128 MiB allocation measured 15.5 ms
+ * on G17P. Every consumer of the
  * heap is reached from a draw, so leaving the allocation to util_call_once()
  * put those 15.5 ms inside the first vkCmdDraw() that used geometry or
  * tessellation -- a stall in the middle of a render pass, and ~150x the cost of

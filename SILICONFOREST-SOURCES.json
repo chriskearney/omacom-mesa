@@ -762,7 +762,7 @@
       "commit": "a2a5472089a029c067a2e3e35adc420643603065",
       "tag": "sources/2026-10-18/fdo-mr/44931",
       "url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/44931",
-      "disposition": "snapshot-only; consult integration decisions"
+      "disposition": "adapted in 86e11a3ee2d; retain checked device-owned initialization, warm-up and allocation failures; 128 MiB default, no automatic game override"
     },
     {
       "repository": "https://gitlab.freedesktop.org/mesa/mesa",
@@ -2825,5 +2825,15 @@
     }
   ],
   "scope_note": "Finite public-source discovery snapshot, not a claim to have found every private, deleted, unindexed or subsequently published branch. Source snapshots do not imply code approval or hardware qualification.",
-  "source_policy": "Public-source refs only. Private-source work stays local at the owner's instruction."
+  "source_policy": "Public-source refs only. Private-source work stays local at the owner's instruction.",
+  "integration_followups_20261018": [
+    {
+      "source_url": "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/44931",
+      "source_commit": "a2a5472089a029c067a2e3e35adc420643603065",
+      "import_commit": "86e11a3ee2dee9037f7c51500b1dfe60a96dbe0c",
+      "regression_test_commit": "df1456f7f4a2984087a335ed25ba4fca25205f52",
+      "hardware_qualified": false,
+      "review_hardening_commit": "db96168675f5464d5293caf48ed718792b2bed74"
+    }
+  ]
 }

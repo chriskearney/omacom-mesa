@@ -88,7 +88,7 @@ public PR history alongside the new integration commits.
 | Joshua PR11 `44841202b4fd041fc29b6ff77f585d4df6e70dd7` | Depends on the above performance stack; retained for review, not applied standalone or enabled. |
 | Official MR44475 phi shuffling, `e22cd9bd50daa4671b41a81ee72c8238a0604a8f` | Examined. Main has the newer parallel-phi implementation that snapshots original destinations and whole vector ranges. The older one-line reverse-walk fix is not a drop-in replacement. |
 | Official MR44041 lighter CDM barriers | Retained for review. It removes undocumented barrier bits and does not establish equivalent cache guarantees for the merged native GPU paths. |
-| Official MR44931 geometry heap option, MR44932 virtio implicit-sync optimization | Exact candidate heads retained. Current heap initialization and external-BO lifetime code differ; do not blindly apply older callbacks or sync assumptions. |
+| Official MR44932 virtio implicit-sync optimization | Exact candidate head retained. Current external-BO lifetime code differs; do not blindly apply older sync assumptions. |
 | Official GL/Vulkan interop MR42872, memory-budget MR40238, SVM MR37668 | Candidate snapshots retained; these are separate features requiring targeted runtime validation, not prerequisites for native M3/Neo source integration. |
 | Official Mesa main, `c823a83e8f373a5c36c2b9ed1d7dc98a4f3360ee` | Pinned as a future rebase source. It is 1,335 commits beyond this fork's October 1 base and includes cross-driver/NIR interface changes. Not merged wholesale during this chip-stack integration. |
 | Official Asahi fork main, `01ac84e119f468a3267714b0b4a339316a3083f4` | Checked directly; its tip is dated April 2025, so it is not presumed newer than the current Mesa development source. |
@@ -103,3 +103,28 @@ this is not a claim that every inherited line has been independently audited.
 No M3/Neo/M4/M5 hardware, physical GPU execution, compositor session, firmware
 recovery, full Vulkan/OpenGL CTS or game compatibility was tested here. Source
 preservation is not a substitute for those checks.
+
+
+## Configurable geometry heap follow-up
+
+Official [MR44931](https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/44931),
+`a2a5472089a029c067a2e3e35adc420643603065`, is adapted in `86e11a3ee2d` with
+s0ullight's author credit. The option is `hk_geometry_heap_size_mb`, default
+128 MiB, valid range 16–1024 MiB. The implementation keeps the current device
+callback, one-time initialization, shader-stage warm-up and BO/map failure
+handling. No allocator or native kernel ABI guard is replaced.
+
+The upstream change adds no per-game profile. An explicit setting such as
+`hk_geometry_heap_size_mb=256 your-game` is needed to opt in; this integration
+does not establish that a game crash is fixed or that general FPS improves.
+The production callback is exercised under ASan/UBSan by the public CPU checker,
+including the default, both limits, the 256 MiB override and BO/map failures.
+A fresh x86_64 build from this public source tree passed all 36 registered Asahi
+tests. The generated option parser rejected invalid/out-of-range environment settings
+in 11 direct parser checks. Adversarial review found XML values bypass that
+parser range check; `db96168675f` clamps them at allocation to 16–1024 MiB
+and statically bounds publication to the GPU u32 fields. The regression uses
+the real `poly_heap` declaration. Twelve real XML-parser-to-callback checks
+covered negative, zero, in-range and oversized values, including 4096/5000 MiB;
+all allocated and published the same bounded size. Removing the clamp fails
+the maintained regression. These are host checks, without GPU qualification.
