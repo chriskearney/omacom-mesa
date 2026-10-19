@@ -35,6 +35,7 @@
 #include "hk_entrypoints.h"
 #include "hk_image.h"
 #include "hk_image_view.h"
+#include "hk_instance.h"
 #include "hk_agx3_ioto_program_core.h"
 #include "hk_g17p_ppp_indices.h"
 #include "hk_g17p_full_frame_scissor.h"
@@ -2897,10 +2898,13 @@ static void
 hk_init_heap(const void *data)
 {
    struct hk_device *dev = (struct hk_device *)data;
+   struct hk_instance *instance =
+      hk_physical_device_instance(hk_device_physical(dev));
 
    perf_debug_dev(&dev->dev, "Allocating heap");
 
-   size_t size = 128 * 1024 * 1024;
+   size_t size =
+      (size_t)instance->drirc.misc.geometry_heap_size_mb * 1024 * 1024;
    struct agx_bo *heap =
       agx_bo_create(&dev->dev, size, 0, 0, "Geometry heap");
    if (!heap)
