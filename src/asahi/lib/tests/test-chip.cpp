@@ -20,11 +20,14 @@ g16g_params()
    return params;
 }
 
-TEST(AGXChip, G16GRequiresExactKernelContract)
+TEST(AGXChip, G16GAdmissionHeldForHardwareQualification)
 {
    const drm_asahi_params_global valid = g16g_params();
    ASSERT_EQ(agx_chip_from_params(&valid), AGX_CHIP_G16G);
-   ASSERT_TRUE(agx_params_driver_supported(&valid));
+   /* Retain compiler capability coverage, but this M3 update does not
+    * qualify an M4 device for opening. */
+   ASSERT_TRUE(agx_chip_driver_supported(AGX_CHIP_G16G));
+   ASSERT_FALSE(agx_params_driver_supported(&valid));
    EXPECT_FALSE(agx_params_driver_supported(nullptr));
 
    for (unsigned field = 0; field < 7; ++field) {

@@ -267,6 +267,12 @@ agx_chip_driver_supported(enum agx_chip chip)
              agx_chip_sampler_generation(chip) ==
                 AGX_SAMPLER_GENERATION_GEN4 &&
              agx_chip_submission_model(chip) == AGX_SUBMISSION_MODEL_CLASSIC;
+   case AGX_CHIP_G16G:
+      return agx_chip_command_stream_generation(chip) ==
+                AGX_CS_GENERATION_HAL200 &&
+             agx_chip_sampler_generation(chip) ==
+                AGX_SAMPLER_GENERATION_GEN4_HAL200 &&
+             agx_chip_submission_model(chip) == AGX_SUBMISSION_MODEL_CLASSIC;
    default:
       return false;
    }
@@ -279,7 +285,8 @@ agx_params_driver_supported(const struct drm_asahi_params_global *params)
       return false;
 
    const enum agx_chip chip = agx_chip_from_params(params);
-   if (!agx_chip_driver_supported(chip) || params->chip_id == 0x6040)
+   if (!agx_chip_driver_supported(chip) || params->chip_id == 0x6040 ||
+       params->chip_id == 0x8132)
       return false;
 
    switch (chip) {

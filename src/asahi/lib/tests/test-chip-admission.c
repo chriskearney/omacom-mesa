@@ -188,7 +188,7 @@ main(void)
    m4.gpu_variant = 'G';
    m4.chip_id = 0x8132;
    m4.num_clusters_total = 1;
-   assert(!agx_chip_driver_supported(AGX_CHIP_G16G));
+   assert(agx_chip_driver_supported(AGX_CHIP_G16G));
    assert(!agx_params_driver_supported(&m4));
 
    /* T8122 (G15G) by its own identity only; the device additionally needs
