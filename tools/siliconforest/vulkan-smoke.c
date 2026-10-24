@@ -17,7 +17,7 @@
    fprintf(stderr, "line %u: %s\n", __LINE__, #x); exit(1); } } while (0)
 #define OK(x) REQUIRE((x) == VK_SUCCESS)
 
-int main(void)
+int main(int argc, char **argv)
 {
    REQUIRE(dlsym(RTLD_DEFAULT, "asahi_noop_is_registered_fd") != NULL);
    VkApplicationInfo app = {.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
@@ -29,6 +29,12 @@ int main(void)
    OK(vkCreateInstance(&ici, NULL, &instance));
    uint32_t n = 0;
    OK(vkEnumeratePhysicalDevices(instance, &n, NULL));
+   if (argc == 2 && strcmp(argv[1], "--expect-no-device") == 0) {
+      REQUIRE(n == 0);
+      vkDestroyInstance(instance, NULL);
+      puts("device admission refused as expected");
+      return 0;
+   }
    REQUIRE(n == 1);
    VkPhysicalDevice physical;
    OK(vkEnumeratePhysicalDevices(instance, &n, &physical));
