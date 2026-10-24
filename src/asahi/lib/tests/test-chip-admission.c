@@ -38,7 +38,7 @@ check_native_g15(enum agx_chip chip)
    assert(agx_chip_native_imageblock(chip));
    assert(agx_chip_native_indirect_compute(chip));
    assert(agx_chip_driver_supported(chip));
-   assert(agx_chip_usc_helper_table_slots(chip) == 10);
+   assert(agx_chip_usc_helper_table_slots(chip, 0) == 10);
 }
 
 int
@@ -103,11 +103,15 @@ main(void)
    g15c.features = native;
    assert(agx_params_native_kernel_abi_supported(&g15s));
    assert(agx_params_native_kernel_abi_supported(&g15c));
-   for (unsigned bit = 10; bit <= 15; ++bit) {
+   /* Extra advertised capabilities do not change this packet contract. */
+   for (unsigned bit = 3; bit <= 16; ++bit) {
       bad = g15c;
       bad.features |= UINT64_C(1) << bit;
-      assert(!agx_params_native_kernel_abi_supported(&bad));
+      assert(agx_params_native_kernel_abi_supported(&bad));
    }
+   bad = g15c;
+   bad.features = (UINT64_C(1) << 3) | (UINT64_C(1) << 5);
+   assert(!agx_params_native_kernel_abi_supported(&bad));
    bad = g15c;
    bad.features &= ~DRM_ASAHI_FEATURE_EXACT_PRIOR_BARRIERS;
    assert(!agx_params_native_kernel_abi_supported(&bad));
@@ -121,13 +125,46 @@ main(void)
    assert(agx_params_driver_supported(&bad));
    assert(agx_params_native_kernel_abi_supported(&bad));
    bad.features = UINT64_C(0xfc00) | native;
-   assert(!agx_params_native_kernel_abi_supported(&bad));
-   bad.features = UINT64_C(0xfc00);
+   assert(agx_params_native_kernel_abi_supported(&bad));
+   bad.features = (UINT64_C(1) << 3) | (UINT64_C(1) << 5);
    assert(!agx_params_native_kernel_abi_supported(&bad));
    bad = (struct drm_asahi_params_global){
       .gpu_generation = 13, .gpu_variant = 'G', .num_clusters_total = 1,
    };
    assert(agx_params_native_kernel_abi_supported(&bad));
+   /* The M4 Pro (T6040, G16S, AGX3, HAL200) runs as G17P with its two
+    * clusters; other G16S identities stay G16S and unsupported. */
+   struct drm_asahi_params_global t6040 = g15_params('S', 0x6040, 2);
+   t6040.gpu_generation = 16;
+   t6040.gpu_hal_generation = DRM_ASAHI_GPU_HAL_200;
+   assert(agx_chip_from_params(&t6040) == AGX_CHIP_G17P);
+   assert(!agx_params_driver_supported(&t6040));
+
+   bad = t6040;
+   bad.num_clusters_total = 3;
+   assert(!agx_params_driver_supported(&bad));
+
+   bad = t6040;
+   bad.chip_id = 0x6041;
+   assert(agx_chip_from_params(&bad) == AGX_CHIP_G16S);
+   assert(!agx_params_driver_supported(&bad));
+
+   bad = t6040;
+   bad.gpu_hal_generation = DRM_ASAHI_GPU_HAL_LEGACY;
+   assert(agx_chip_from_params(&bad) == AGX_CHIP_G16S);
+
+   /* G17P helper tables have a slot per core of a cluster, never fewer than
+    * the A18 Pro's six: six there, ten on the M4 Pro. */
+   assert(agx_chip_usc_helper_table_slots(AGX_CHIP_G17P, 0) == 6);
+   assert(agx_chip_usc_helper_table_slots(AGX_CHIP_G17P, 6) == 6);
+   assert(agx_chip_usc_helper_table_slots(AGX_CHIP_G17P, 10) == 10);
+
+   struct drm_asahi_params_global m4 = t6040;
+   m4.gpu_variant = 'G';
+   m4.chip_id = 0x8132;
+   m4.num_clusters_total = 1;
+   assert(!agx_chip_driver_supported(AGX_CHIP_G16G));
+   assert(!agx_params_driver_supported(&m4));
 
    printf("chip admission: ok\n");
    return 0;

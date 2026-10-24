@@ -77,6 +77,65 @@ if with_tests and with_tools.contains('drm-shim')
     ),
     suite : ['asahi'],
   )
+  test(
+    'asahi-g17p-shadow-border',
+    executable(
+      'asahi-g17p-shadow-border',
+      files('tests/test-agx-g17p-shadow-border.c'),
+      include_directories : [
+        inc_gallium_aux, inc_gallium, inc_include, inc_src, inc_asahi,
+        inc_virtio_gpu, inc_virtio_vdrm,
+      ],
+      dependencies : [
+        idep_nir, idep_mesautil, idep_agx_pack, dep_libdrm, idep_libagx,
+        idep_libagx_shaders_h, idep_xmlconfig,
+      ],
+      link_with : [
+        libasahi, libasahiwinsys, libasahi_compiler, libasahi_lib,
+        libasahi_layout, libasahi_decode, libgallium, libgalliumvl_stub,
+      ],
+    ),
+    suite : ['asahi'],
+  )
+
+  asahi_vs_query_test = executable(
+    'asahi-vs-query',
+    files('tests/test-agx-vs-query.c'),
+    include_directories : [
+      inc_gallium_aux, inc_gallium, inc_include, inc_src, inc_asahi,
+      inc_virtio_gpu, inc_virtio_vdrm,
+    ],
+    dependencies : [
+      idep_nir, idep_mesautil, idep_agx_pack, dep_libdrm, idep_libagx,
+      idep_libagx_shaders_h, idep_xmlconfig,
+    ],
+    link_with : [
+      libasahi, libasahiwinsys, libasahi_compiler, libasahi_lib,
+      libasahi_layout, libasahi_decode, libgallium, libgalliumvl_stub,
+    ],
+    build_by_default : false,
+  )
+
+  foreach chip : ['g13g', 'g15c', 'g15s', 'g17p']
+    foreach mode : ['vs', 'query']
+      test(
+        'asahi-' + chip + '-gallium-' + mode,
+        prog_python,
+        args : [
+          files('tests/run-shim.py'),
+          libasahi_noop_drm_shim,
+          asahi_vs_query_test,
+          mode,
+        ],
+        env : [
+          'ASAHI_SHIM_CHIP=' + chip,
+          'ASAHI_MESA_DEBUG=perf',
+          'ASAHI_SHIM_VALIDATE_G17P_STREAM=1',
+        ],
+        suite : ['asahi'],
+      )
+    endforeach
+  endforeach
 
   asahi_g17p_blit_test = executable(
     'asahi-g17p-blit',
@@ -95,6 +154,73 @@ if with_tests and with_tools.contains('drm-shim')
     ],
     build_by_default : false,
   )
+
+  asahi_submit_test = executable(
+    'asahi-submit',
+    files('tests/test-agx-submit.c'),
+    include_directories : [
+      inc_gallium_aux, inc_gallium, inc_include, inc_src, inc_asahi,
+      inc_virtio_gpu, inc_virtio_vdrm,
+    ],
+    dependencies : [
+      idep_nir, idep_mesautil, idep_agx_pack, dep_libdrm, idep_libagx,
+      idep_libagx_shaders_h, idep_xmlconfig,
+    ],
+    link_with : [
+      libasahi, libasahiwinsys, libasahi_compiler, libasahi_lib,
+      libasahi_layout, libasahi_decode, libgallium, libgalliumvl_stub,
+    ],
+  )
+  asahi_submit_retirement_test = executable(
+    'asahi-submit-retirement',
+    files('tests/test-agx-submit-retirement.c'),
+    include_directories : [
+      inc_gallium_aux, inc_gallium, inc_include, inc_src, inc_asahi,
+      inc_virtio_gpu, inc_virtio_vdrm,
+    ],
+    dependencies : [
+      idep_nir, idep_mesautil, idep_agx_pack, dep_libdrm, idep_libagx,
+      idep_libagx_shaders_h, idep_xmlconfig,
+    ],
+    link_with : [
+      libasahi, libasahiwinsys, libasahi_compiler, libasahi_lib,
+      libasahi_layout, libasahi_decode, libgallium, libgalliumvl_stub,
+    ],
+  )
+  foreach scenario : [
+    ['split-pending', '0'],
+    ['split-completed', '1'],
+    ['mixed-pending', '2'],
+    ['mixed-completed', '3'],
+    ['first-ioctl-failure', '4'],
+    ['prepublication-no-fence', '5'],
+    ['stale-output-generation', '6'],
+    ['completed-error-fence', '7'],
+    ['first-ioctl-partial', '8'],
+    ['split-wait-error', '9'],
+    ['mixed-wait-error', '10'],
+    ['publication-probe-error', '11'],
+    ['interrupted-wait', '12'],
+  ]
+    test(
+      'asahi-g17p-submit-retirement-' + scenario[0],
+      prog_python,
+      args : [files('tests/run-shim.py'), libasahi_noop_drm_shim,
+              asahi_submit_retirement_test, scenario[1]],
+      env : ['ASAHI_SHIM_CHIP=g17p'],
+      suite : ['asahi'],
+    )
+  endforeach
+
+  foreach chip : ['g13g', 'g17p']
+    test(
+      'asahi-' + chip + '-gallium-submit',
+      prog_python,
+      args : [files('tests/run-shim.py'), libasahi_noop_drm_shim, asahi_submit_test],
+      env : ['ASAHI_SHIM_CHIP=' + chip],
+      suite : ['asahi'],
+    )
+  endforeach
 
   # The shim has to be preloaded before libc's open(), so the test runs the
   # binary through a wrapper that sets LD_PRELOAD and the chip selector.

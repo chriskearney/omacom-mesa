@@ -315,12 +315,19 @@ pass(struct nir_builder *b, nir_intrinsic_instr *intr, void *data)
    nir_def *bounds = nir_load_attrib_clamp_agx(b, buf_handle);
    nir_def *oob = nir_ult(b, bounds, el);
 
+   /* Native vec3/vec4 fetches use the explicit zero-result path already used
+    * for scalar and vec2 fetches. Clamp their index too, so zeroing an invalid
+    * attribute does not depend on a load from the low soft-fault address range.
+    */
+   const bool soft_fault = ctx->rs.soft_fault &&
+                           !(ctx->native_raw && interchange_comps > 2);
+
    /* We clamp to handle GL robustness. This should be optimized further.
     * However, with the fix up after the load for D3D robustness, we don't need
     * this clamp if we can ignore the fault.
     */
    if (ctx->rs.level >= AGX_ROBUSTNESS_GL &&
-       !(ctx->rs.level >= AGX_ROBUSTNESS_D3D && ctx->rs.soft_fault)) {
+       !(ctx->rs.level >= AGX_ROBUSTNESS_D3D && soft_fault)) {
 
       el = nir_bcsel(b, oob, nir_imm_int(b, 0), el);
    }
@@ -355,7 +362,7 @@ pass(struct nir_builder *b, nir_intrinsic_instr *intr, void *data)
     * it requires 2 instructions. It is implemented with a 64GiB carveout at the
     * bottom of memory, using soft fault to return zeroes.
     */
-   bool rs_address_fixup = interchange_comps > 2 && ctx->rs.soft_fault;
+   bool rs_address_fixup = interchange_comps > 2 && soft_fault;
 
    if (ctx->rs.level >= AGX_ROBUSTNESS_D3D && rs_address_fixup) {
       base = nir_bcsel(b, oob, nir_imm_int64(b, 0), base);

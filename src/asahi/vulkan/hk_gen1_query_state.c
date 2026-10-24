@@ -1,8 +1,41 @@
+/* Copyright 2026 Aurora Silicon
+ * SPDX-License-Identifier: MIT
+ */
 #include "hk_cmd_buffer.h"
 #include "hk_acceleration_structure.h"
 #include "asahi/lib/agx_scs_layout.h"
 #include "util/u_debug.h"
 #include <string.h>
+
+/* The generated runtime writes traversal state with stscs, into the kernel's
+ * per-kick SCS allocation. The user image supplies only global-load data;
+ * mutable AS tables and launch contexts have their own allocations. Keep a
+ * command-buffer reference just as we do for the runtime code and IFT.
+ * External diagnostic runtimes retain private, fully initialized storage.
+ */
+uint64_t
+hk_gen1_query_state(struct hk_cmd_buffer *cmd,
+                    const struct agx_scs_layout_gen2 *scs)
+{
+   struct hk_device *dev = hk_cmd_buffer_device(cmd);
+   if (dev->gen1_rq_state) {
+      hk_cmd_buffer_retain_bo(cmd, dev->gen1_rq_state);
+      return dev->gen1_rq_state->va->addr;
+   }
+
+   const uint64_t size = MAX2(UINT64_C(0x60000),
+                             ALIGN_POT((uint64_t)scs->end[12], 0x4000));
+   struct agx_ptr state = hk_pool_alloc(cmd, size, 0x4000);
+   if (!state.cpu)
+      return 0;
+
+   memcpy(state.cpu, dev->gen1_rq_user_image, 0x60000);
+   if (size > 0x60000)
+      memset((uint8_t *)state.cpu + 0x60000, 0, size - 0x60000);
+   if (dev->gen1_rq_instances)
+      agx_scs_layout_gen1_parameters(scs, (uint8_t *)state.cpu + 0x4000);
+   return state.gpu;
+}
 
 bool
 hk_gen1_upload_fragment_query_state(struct hk_cmd_buffer *cmd, bool vertex_stage,
@@ -21,24 +54,19 @@ hk_gen1_upload_fragment_query_state(struct hk_cmd_buffer *cmd, bool vertex_stage
          vk_command_buffer_set_error(&cmd->vk, VK_ERROR_FEATURE_NOT_PRESENT);
          return false;
       }
-      const uint64_t state_size = MAX2(UINT64_C(0x60000),
-         ALIGN_POT((uint64_t)scs.end[12], 0x4000));
-      struct agx_ptr state=hk_pool_alloc(cmd,state_size,0x4000);
+      const uint64_t state = hk_gen1_query_state(cmd, &scs);
       struct agx_ptr u=hk_pool_alloc(cmd,512,16);
-      if(!state.cpu || !u.cpu)return false;
-      memcpy(state.cpu,dev->gen1_rq_user_image,0x60000);
-      if (state_size > 0x60000)
-         memset((uint8_t *)state.cpu + 0x60000, 0, state_size - 0x60000);
+      if(!state || !u.cpu)return false;
       memset(u.cpu,0,512);memcpy(u.cpu,dev->gen1_rq_uniforms,320);
       for(unsigned i=0;i<74;i+=2) {
          uint64_t value;memcpy(&value,(uint8_t*)u.cpu+4*i,8);
          if(value>=UINT64_C(0x20d0000000) && value<UINT64_C(0x20d0060000)) {
-            value+=state.gpu-UINT64_C(0x20d0000000);
+            value+=state-UINT64_C(0x20d0000000);
             memcpy((uint8_t*)u.cpu+4*i,&value,8);
          }
       }
       uint32_t context[30]={[17]=0x6f};
-      uint64_t table=state.gpu+0x50000,ctx=u.gpu+352;
+      uint64_t table=state+0x50000,ctx=u.gpu+352;
       if (dev->gen1_rq_instances) {
          table=hk_gen1_upload_as_table(cmd);
          if (!table) return false;
@@ -51,7 +79,6 @@ hk_gen1_upload_fragment_query_state(struct hk_cmd_buffer *cmd, bool vertex_stage
          uw[48/2]=scs.end[6];uw[50/2]=scs.end[11];
          uw[52/2]=packed;uw[54/2]=packed>>32;
          memcpy((uint8_t *)u.cpu+32*2,&table,8);
-         agx_scs_layout_gen1_parameters(&scs, (uint8_t *)state.cpu + 0x4000);
          context[2]=packed;context[3]=packed>>32;
          context[20]=scs.end[5];
 

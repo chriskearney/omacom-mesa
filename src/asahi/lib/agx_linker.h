@@ -85,8 +85,10 @@ struct agx_linked_shader {
 
 /* Write the AGX3 code container's fixed leading block. Its size lives in
  * agx_ioto_program_core.h so decoders can share it. */
-void agx3_build_container_lead(uint8_t *image, enum agx_chip chip);
-void agx3_build_usc_base_page(uint8_t *image, size_t size, enum agx_chip chip);
+void agx3_build_container_lead(uint8_t *image, enum agx_chip chip,
+                               unsigned cores_per_cluster);
+void agx3_build_usc_base_page(uint8_t *image, size_t size, enum agx_chip chip,
+                              unsigned cores_per_cluster);
 
 bool agx_fast_link(struct agx_linked_shader *linked, struct agx_device *dev,
                    bool fragment, struct agx_shader_part *main,
@@ -388,6 +390,7 @@ bool agx_fs_epilog_may_discard(const struct agx_fs_epilog_link_info *link,
 void agx_nir_vs_prolog(struct nir_builder *b, const void *key_);
 void agx_nir_vs_prolog_raw(struct nir_builder *b, const void *key_);
 void agx_nir_fs_epilog(struct nir_builder *b, const void *key_);
+void agx_nir_fs_epilog_agx2(struct nir_builder *b, const void *key_);
 void agx_nir_fs_epilog_g17p(struct nir_builder *b, const void *key);
 bool agx_nir_lower_g17p_sample_shading(
    nir_shader *nir, struct agx_fs_epilog_link_info *link, unsigned samples);

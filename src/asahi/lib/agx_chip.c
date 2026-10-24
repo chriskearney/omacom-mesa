@@ -56,7 +56,17 @@ agx_chip_from_params(const struct drm_asahi_params_global *params)
       switch (params->gpu_variant) {
       case 'P': return AGX_CHIP_G16P;
       case 'G': return AGX_CHIP_G16G;
-      case 'S': return AGX_CHIP_G16S;
+      case 'S':
+         /* The M4 Pro (T6040) on the G17 kernel runtime takes the A18 Pro's
+          * contract: its firmware has the A18 Pro firmware's interface, and
+          * every G16S axis in these tables (AGX3B, HAL200, Gen9, Gen4-HAL200,
+          * 32-byte sampler heap, dual submission) equals G17P's.
+          */
+         if (params->chip_id == 0x6040 &&
+             params->usc_generation == AGX_ISA_AGX3 &&
+             params->gpu_hal_generation == DRM_ASAHI_GPU_HAL_200)
+            return AGX_CHIP_G17P;
+         return AGX_CHIP_G16S;
       case 'C': return AGX_CHIP_G16C;
       default: return AGX_CHIP_UNKNOWN;
       }
@@ -219,10 +229,11 @@ agx_chip_driver_supported(enum agx_chip chip)
    /*
     * Codegen is necessary, not sufficient. An AGX3 chip is admitted only on
     * the native path, and only with the exact axes that path is wired for:
-    * Gen9 descriptors in a 32-byte sampler heap, and either G17P's HAL200
-    * records, HAL200 sampler layout and dual queue model, or G15S's G15
-    * command stream, Gen4 sampler and classic queue model. Other AGX3
-    * identities still lack at least one of those pieces.
+    * Gen9 descriptors in a 32-byte sampler heap, with HAL200 records and
+    * samplers for G17P and G16G, or G15 records and Gen4 samplers for G15S
+    * and G15C. G17P uses dual queues; the other native profiles use the
+    * classic queue model. Other AGX3 identities still lack at least one
+    * of those pieces.
     */
    if (!agx_chip_codegen_supported(chip))
       return false;
@@ -265,17 +276,22 @@ agx_params_driver_supported(const struct drm_asahi_params_global *params)
       return false;
 
    const enum agx_chip chip = agx_chip_from_params(params);
-   if (!agx_chip_driver_supported(chip))
+   if (!agx_chip_driver_supported(chip) || params->chip_id == 0x6040)
       return false;
 
    switch (chip) {
-   case AGX_CHIP_G17P:
+   case AGX_CHIP_G17P: {
       /* Honeykrisp's first AGX3 path is the exact T8140/A18 Pro contract.
        * Do not let the shared G17P ISA name admit another SoC or topology. */
-      return params->chip_id == 0x8140 && params->num_dies == 1 &&
-             params->num_clusters_total == 1 &&
+      const bool a18_pro =
+         params->chip_id == 0x8140 && params->num_clusters_total == 1;
+      /* M4 Pro: two clusters (a binned part keeps two). */
+      const bool m4_pro =
+         params->chip_id == 0x6040 && params->num_clusters_total == 2;
+      return (a18_pro || m4_pro) && params->num_dies == 1 &&
              params->usc_generation == AGX_ISA_AGX3 &&
              params->gpu_hal_generation == DRM_ASAHI_GPU_HAL_200;
+   }
    case AGX_CHIP_G15S:
       /* T6030/M3 Pro: one die, two clusters, AGX3 shaders on the legacy
        * (pre-HAL200) firmware interface. */
@@ -291,15 +307,19 @@ agx_params_driver_supported(const struct drm_asahi_params_global *params)
              params->num_clusters_total == 4 &&
              params->usc_generation == AGX_ISA_AGX3 &&
              params->gpu_hal_generation == DRM_ASAHI_GPU_HAL_LEGACY;
+   case AGX_CHIP_G16G:
+      return params->chip_id == 0x8132 && params->num_dies == 1 &&
+             params->num_clusters_total == 1 &&
+             params->usc_generation == AGX_ISA_AGX3 &&
+             params->gpu_hal_generation == DRM_ASAHI_GPU_HAL_200;
    default:
       return true;
    }
 }
 
-/* The maintained legacy kernel uses a different payload layout and assigns
- * bits 10..15 to features which this ABI places at 3..8. Never interpret its
- * timestamp-copy fields as native prior-command barriers. This check is in
- * addition to identity admission, before any VM or command is submitted.
+/* Native submissions use the unified Aurora feature bits and timestamp-copy
+ * packet layout. Refuse the older low-bit contract before creating a VM.
+ * This is a check for that known collision, not general ABI negotiation.
  */
 bool
 agx_params_native_kernel_abi_supported(
@@ -314,9 +334,7 @@ agx_params_native_kernel_abi_supported(
 
    const uint64_t required = DRM_ASAHI_FEATURE_PER_COMMAND_INPUT_SYNCS |
                              DRM_ASAHI_FEATURE_EXACT_PRIOR_BARRIERS;
-   const uint64_t legacy_feature_assignments = UINT64_C(0xfc00);
-   return (params->features & required) == required &&
-          !(params->features & legacy_feature_assignments);
+   return (params->features & required) == required;
 }
 
 const char *

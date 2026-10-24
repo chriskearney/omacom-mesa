@@ -20,8 +20,7 @@ hk_agx3_as_layout_init(uint32_t leaves, struct hk_agx3_as_layout *out)
    if (!out)
       return false;
    if (!leaves) {
-      *out = (struct hk_agx3_as_layout){.slot_bound = 3,
-                                     .as_bytes = 192 + 16383};
+      *out = (struct hk_agx3_as_layout){.slot_bound = 3, .as_bytes = 192};
       return true;
    }
    const uint64_t nodes = (uint64_t)leaves + (leaves > 1 ? leaves : 2) - 1;
@@ -41,9 +40,7 @@ hk_agx3_as_layout_init(uint32_t leaves, struct hk_agx3_as_layout *out)
       .nodes = 0, .jobs = jobs, .envelope = envelope, .state = state,
       .node_status = status, .envelope_status = status + nodes * 4,
       .encode_bytes = end, .node_bound = nodes, .slot_bound = slots,
-      /* The native root is 16KiB aligned on G17P; retain enough prefix padding even
-       * when Vulkan places this object at a 256-byte buffer offset. */
-      .as_bytes = slots * 64 + 184 + 16383,
+      .as_bytes = slots * 64 + 184,
    };
    return true;
 }

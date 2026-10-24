@@ -829,19 +829,14 @@ hk_g17p_build_compute_program(struct hk_cmd_buffer *cmd, struct hk_cs *cs,
          vk_command_buffer_set_error(&cmd->vk, VK_ERROR_FEATURE_NOT_PRESENT);
          return false;
       }
-      const uint64_t state_size = MAX2(UINT64_C(0x60000),
-         ALIGN_POT((uint64_t)scs.end[12], 0x4000));
-      struct agx_ptr state=hk_pool_alloc(cmd,state_size,0x4000);
+      const uint64_t state = hk_gen1_query_state(cmd, &scs);
       struct agx_ptr u=hk_pool_alloc(cmd,512,16);
-      if(!state.cpu || !u.cpu)return false;
-      memcpy(state.cpu,dev->gen1_rq_user_image,0x60000);
-      if (state_size > 0x60000)
-         memset((uint8_t *)state.cpu + 0x60000, 0, state_size - 0x60000);
+      if(!state || !u.cpu)return false;
       memset(u.cpu,0,512);memcpy(u.cpu,dev->gen1_rq_uniforms,320);
       for(unsigned i=0;i<74;i+=2) {
          uint64_t value;memcpy(&value,(uint8_t*)u.cpu+4*i,8);
          if(value>=UINT64_C(0x20d0000000) && value<UINT64_C(0x20d0060000)) {
-            value+=state.gpu-UINT64_C(0x20d0000000);
+            value+=state-UINT64_C(0x20d0000000);
             memcpy((uint8_t*)u.cpu+4*i,&value,8);
          }
       }
@@ -858,7 +853,7 @@ hk_g17p_build_compute_program(struct hk_cmd_buffer *cmd, struct hk_cs *cs,
          vk_command_buffer_set_error(&cmd->vk, VK_ERROR_FEATURE_NOT_PRESENT);
          return false;
       }
-      uint64_t table=state.gpu+0x50000,ctx=u.gpu+352;
+      uint64_t table=state+0x50000,ctx=u.gpu+352;
       if (dev->gen1_rq_instances) {
          table=hk_gen1_upload_as_table(cmd);
          if (!table) return false;
@@ -871,7 +866,6 @@ hk_g17p_build_compute_program(struct hk_cmd_buffer *cmd, struct hk_cs *cs,
          uw[48/2]=scs.end[6];uw[50/2]=scs.end[11];
          uw[52/2]=packed;uw[54/2]=packed>>32;
          memcpy((uint8_t *)u.cpu+32*2,&table,8);
-         agx_scs_layout_gen1_parameters(&scs, (uint8_t *)state.cpu + 0x4000);
          context[2]=packed;context[3]=packed>>32;
          context[20]=scs.end[5];
 
@@ -1338,7 +1332,21 @@ hk_dispatch_g17p_native(struct hk_cmd_buffer *cmd, struct hk_cs *cs,
    const bool internal_graphics = s->info.stage != MESA_SHADER_COMPUTE;
    if (s->b.info.uses_ray_traversal && dev->gen1_native_rq) {
       bool valid = !internal_graphics || dev->gen1_native_graphics_rq;
-      if (agx_is_indirect(grid)) {
+      struct hk_gen1_rt_indirect_contract tes_contract;
+      if (agx_is_indirect(grid) && internal_graphics &&
+          s->info.stage == MESA_SHADER_TESS_EVAL) {
+         /* Poly's TES-before-GS kernel (hk_launch_gs_prerast()) always has
+          * a driver-written indirect grid, since the tessellator decides its
+          * size. It is an ordinary 64x1x1 graphics kernel: its query context
+          * is the direct one and SCS slots are addressed by resident
+          * warp/lane, independent of the grid. Application indirect query
+          * dispatches keep the trace-rays contract below. */
+         valid = valid && dev->gen1_rq_instances && dev->gen1_rq_candidates &&
+            grid.mode == AGX_CDM_MODE_INDIRECT_LOCAL &&
+            local_size.x == 64 && local_size.y == 1 && local_size.z == 1 &&
+            hk_gen1_rt_indirect_contract_init(hk_gen1_ray_query_scs_layout(dev),
+                                              &tes_contract);
+      } else if (agx_is_indirect(grid)) {
          struct hk_gen1_rt_indirect_contract contract;
          struct agx_precompiled_shader *setup = NULL;
          /* The shared native indirect helper already publishes a private
@@ -1388,8 +1396,8 @@ hk_dispatch_g17p_native(struct hk_cmd_buffer *cmd, struct hk_cs *cs,
    }
 
    if (!internal_graphics && s->data_size != 0) {
-      const uint64_t constant_data = hk_pool_upload(
-         cmd, s->data_ptr, s->data_size, HK_MIN_UBO_ALIGNMENT);
+      const uint64_t constant_data =
+         hk_cmd_upload_constants(cmd, s, MESA_SHADER_COMPUTE);
       if (!constant_data) {
          vk_command_buffer_set_error(&cmd->vk, VK_ERROR_OUT_OF_DEVICE_MEMORY);
          return;

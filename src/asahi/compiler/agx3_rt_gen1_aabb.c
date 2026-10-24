@@ -42,7 +42,7 @@ static void body(struct stream *s,bool corrected){
   if(op->target!=UINT32_MAX){assert(agx3_cf_branch(AGX_ISA_ENCODING_AGX3B,true,bytes,&n));}
   else{
    struct agx3_field_kv fields[48];memcpy(fields,op->fields,sizeof(fields));
-   if(corrected&&op->offset==380){assert(agx3_alu_f32rcp(AGX_ISA_ENCODING_AGX3B,48,12,AGX3_ALU_HINT_NONE,true,34,bytes,&n));}
+   if(corrected&&op->offset==380){assert(agx3_alu_f32rcp(AGX_ISA_ENCODING_AGX3B,48,12,AGX3_ALU_HINT_NONE,true,63,bytes,&n));}
    else {
     if(corrected&&op->offset==652){bool found=false;for(unsigned k=0;k<op->nfields;k++)if(fields[k].field==110){assert(fields[k].value==1);fields[k].value=6;found=true;}assert(found);}
     assert(agx3_bind_compose(AGX_ISA_ENCODING_AGX3B,op->name,op->ep,fields,op->nfields,NULL,0,bytes,&n));

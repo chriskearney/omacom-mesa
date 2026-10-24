@@ -126,15 +126,15 @@ test_feature_gates(void)
    CHECK(agx_gallium_native_pbe_supported(AGX_DESCRIPTOR_GENERATION_10));
    CHECK(!agx_gallium_native_pbe_supported(AGX_DESCRIPTOR_GENERATION_UNKNOWN));
 
-   CHECK(agx_gallium_native_compressed_pbe_supported(
+   CHECK(agx_gallium_shared_compression_supported(
       AGX_DESCRIPTOR_GENERATION_7));
-   CHECK(agx_gallium_native_compressed_pbe_supported(
+   CHECK(agx_gallium_shared_compression_supported(
       AGX_DESCRIPTOR_GENERATION_8));
-   CHECK(!agx_gallium_native_compressed_pbe_supported(
+   CHECK(!agx_gallium_shared_compression_supported(
       AGX_DESCRIPTOR_GENERATION_9));
-   CHECK(!agx_gallium_native_compressed_pbe_supported(
+   CHECK(!agx_gallium_shared_compression_supported(
       AGX_DESCRIPTOR_GENERATION_10));
-   CHECK(!agx_gallium_native_compressed_pbe_supported(
+   CHECK(!agx_gallium_shared_compression_supported(
       AGX_DESCRIPTOR_GENERATION_UNKNOWN));
 }
 
@@ -552,6 +552,82 @@ test_agx3_pbe(void)
 
 /* Image atomics decode one packed addressing word from the G17P storage
  * tail; Gallium and Honeykrisp must write it identically. */
+/* G17P's compressed colour render target as agx_batch_upload_pbe() builds it
+ * for an end-of-tile store: GPU tiling, one level, one layer, the metadata
+ * address in the extended word. These are the native bytes
+ * test-hk-native-descriptor.c pins for Honeykrisp: a live 1024x1024 RGBA8
+ * record and independent packets at display sizes.
+ */
+static void
+test_g17p_compressed_render_target(void)
+{
+   static const struct {
+      unsigned width, height;
+      uint64_t buffer, metadata;
+      uint64_t words[4];
+   } targets[] = {
+      {1024, 1024, UINT64_C(0x10000080000), UINT64_C(0x10000480000),
+       {UINT64_C(0x0800ffc3ffe40a22), UINT64_C(0x8000001000008000),
+        UINT64_C(0x0000001000048000), 0}},
+      {1920, 1080, UINT64_C(0x10000000000), UINT64_C(0x100000a0000),
+       {UINT64_C(0x08010dc77fe40a22), UINT64_C(0x8000001000000000),
+        UINT64_C(0x000000100000a000), 0}},
+      {2408, 1506, UINT64_C(0x10000000000), UINT64_C(0x100000a0000),
+       {UINT64_C(0x0801784967e40a22), UINT64_C(0x8000001000000000),
+        UINT64_C(0x000000100000a000), 0}},
+      {2560, 1536, UINT64_C(0x10000000000), UINT64_C(0x100000a0000),
+       {UINT64_C(0x08017fc9ffe40a22), UINT64_C(0x8000001000000000),
+        UINT64_C(0x000000100000a000), 0}},
+   };
+
+   for (unsigned i = 0; i < ARRAY_SIZE(targets); ++i) {
+      struct AGX_PBE rt = render_target_pbe();
+      rt.layout = AGX_LAYOUT_GPU;
+      rt.width = targets[i].width;
+      rt.height = targets[i].height;
+      rt.buffer = targets[i].buffer;
+      rt.levels = 1;
+      rt.layers = 1;
+      rt.compressed = true;
+      rt.extended = true;
+      rt.acceleration_buffer = targets[i].metadata;
+
+      struct agx_gallium_pbe_descriptor native;
+      memset(&native, 0xa5, sizeof(native));
+      CHECK(agx_gallium_pack_native_pbe(AGX_DESCRIPTOR_GENERATION_9, &native,
+                                        &rt));
+      CHECK(memcmp(native.opaque, targets[i].words,
+                   sizeof(targets[i].words)) == 0);
+
+      /* Outside the compressed single-layer 2D packet nothing is encoded. */
+      const struct AGX_PBE original = rt;
+      rt.acceleration_buffer = 0;
+      CHECK(!agx_gallium_pack_native_pbe(AGX_DESCRIPTOR_GENERATION_9, &native,
+                                         &rt));
+      rt = original;
+      rt.extended = false;
+      CHECK(!agx_gallium_pack_native_pbe(AGX_DESCRIPTOR_GENERATION_9, &native,
+                                         &rt));
+      rt = original;
+      rt.dimension = AGX_TEXTURE_DIMENSION_2D_ARRAY;
+      rt.layers = 2;
+      CHECK(!agx_gallium_pack_native_pbe(AGX_DESCRIPTOR_GENERATION_9, &native,
+                                         &rt));
+      rt = original;
+      rt.dimension = AGX_TEXTURE_DIMENSION_2D_MULTISAMPLED;
+      rt.samples = AGX_SAMPLE_COUNT_4;
+      CHECK(!agx_gallium_pack_native_pbe(AGX_DESCRIPTOR_GENERATION_9, &native,
+                                         &rt));
+      rt = original;
+      rt.layout = AGX_LAYOUT_TWIDDLED;
+      CHECK(!agx_gallium_pack_native_pbe(AGX_DESCRIPTOR_GENERATION_9, &native,
+                                         &rt));
+      rt = original;
+      CHECK(!agx_gallium_pack_native_pbe(AGX_DESCRIPTOR_GENERATION_10,
+                                         &native, &rt));
+   }
+}
+
 static void
 test_g17p_image_atomic_sw(void)
 {
@@ -1014,6 +1090,7 @@ main(void)
    test_gen9_uncompressed_dimensions();
    test_native_packers();
    test_agx3_pbe();
+   test_g17p_compressed_render_target();
    test_g17p_image_atomic_sw();
    printf("Gallium AGX native descriptors: %u checks passed\n", checks);
    return 0;

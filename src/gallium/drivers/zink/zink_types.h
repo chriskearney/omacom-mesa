@@ -1547,6 +1547,10 @@ struct zink_screen {
       bool disable_optimized_compile;
       bool always_feedback_loop;
       bool always_feedback_loop_zs;
+      /* create colour images without ATTACHMENT_FEEDBACK_LOOP usage and add
+       * it only to images a draw or copy actually reads while writing
+       */
+      bool lazy_feedback_loop_usage;
       bool track_renderpasses;
       bool no_linestipple;
       bool no_linesmooth;
@@ -1841,6 +1845,12 @@ struct zink_context {
    uint16_t void_clears;
    uint16_t fbfetch_outputs;
    uint16_t feedback_loops;
+   /* driver_workarounds.lazy_feedback_loop_usage: whether it applies, and
+    * whether framebuffer, sampler-view, shader or bindless state changed
+    * since zink_update_lazy_feedback_loops() last ran
+    */
+   bool lazy_feedback;
+   bool lazy_feedback_dirty;
    struct zink_resource *needs_present;
 
    struct pipe_vertex_buffer vertex_buffers[PIPE_MAX_ATTRIBS];

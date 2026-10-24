@@ -25,7 +25,7 @@
 #include "util/macros.h"
 #include <sys/mman.h>
 
-const char *targets[] = {"g13g", "g13x", "g17p", "g15s"};
+const char *targets[] = {"g13g", "g13x", "g17p", "g15s", "g16g"};
 
 #define foreach_target(target)                                                 \
    for (const char **target = &targets[0];                                     \
@@ -38,6 +38,8 @@ target_chip(const char *target)
       return AGX_CHIP_G17P;
    else if (!strcmp(target, "g15s"))
       return AGX_CHIP_G15S;
+   else if (!strcmp(target, "g16g"))
+      return AGX_CHIP_G16G;
    else if (!strcmp(target, "g13x"))
       return AGX_CHIP_G13X;
    else
@@ -281,6 +283,11 @@ remap_variant(nir_function *func, unsigned variant, const char *target)
 static bool
 target_supports_program(const char *target, const nir_function *func)
 {
+   /* The range copy uses the native query command's producer ordering and
+    * volatile WAIT loop. Never select this program for the AGX2/G13 path. */
+   if (!strcmp(func->name, "libagx_copy_query_g17p"))
+      return target_is_native_agx3(target);
+
    /* AGX3 internal programs need both native machine code and the HAL200
     * Ioto/CDM launch contract. Keep unqualified slots NULL and fail closed.
     * Fast clear is required by the qualified G17P compressed color shapes;
@@ -312,6 +319,7 @@ target_supports_program(const char *target, const nir_function *func)
           !strcmp(func->name, "libagx_draw_indirect_byte_count") ||
           !strcmp(func->name, "libagx_conditional_render") ||
           !strcmp(func->name, "libagx_draw_robust_index") ||
+          !strcmp(func->name, "libagx_draw_robust_index_batch") ||
           !strcmp(func->name, "libagx_unroll_restart") ||
           !strcmp(func->name, "libagx_gs_setup_indirect") ||
           !strcmp(func->name, "libagx_prefix_sum_geom") ||

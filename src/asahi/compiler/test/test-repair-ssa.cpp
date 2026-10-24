@@ -140,3 +140,36 @@ TEST_F(RepairSSA, UseModifiersDoNotLeakIntoPhi)
       });
    }
 }
+
+/* A value defined before a join and read after it gets a phi of itself from
+ * the repair. G17P removes that trivial phi; other chips keep their output. */
+TEST_F(RepairSSA, G17PRemovesTrivialJoinPhi)
+{
+   for (bool g17p : {false, true}) {
+      agx_shader_key key = {};
+      key.dev.encoding =
+         g17p ? AGX_ISA_ENCODING_AGX3B : AGX_ISA_ENCODING_AGX2;
+      key.dev.chip = g17p ? AGX_CHIP_G17P : AGX_CHIP_G13G;
+
+      CASE({
+         b->shader->key = &key;
+         agx_block *A = agx_start_block(b->shader);
+         agx_block *B = agx_test_block(b->shader);
+         agx_block *C = agx_test_block(b->shader);
+         agx_block *D = agx_test_block(b->shader);
+         agx_block_add_successor(A, B);
+         agx_block_add_successor(A, C);
+         agx_block_add_successor(B, D);
+         agx_block_add_successor(C, D);
+
+         b->cursor = agx_after_block(A);
+         agx_index x = agx_mov_imm(b, 32, 0xcafe);
+
+         b->cursor = agx_after_block(D);
+         if (repaired && !g17p)
+            x = agx_phi_2(b, x, x);
+
+         agx_unit_test(b, x);
+      });
+   }
+}

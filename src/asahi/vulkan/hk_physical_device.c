@@ -74,17 +74,25 @@ hk_hash_device_generation_contract(blake3_hasher *ctx,
       agx_chip_descriptor_generation(dev->chip),
       agx_chip_sampler_generation(dev->chip),
       agx_chip_sampler_heap_element_size(dev->chip),
-      hk_g17p_rt_enabled(dev->chip),
-      hk_g17p_rt_enabled(dev->chip),
+      hk_g17p_rt_enabled(dev),
+      hk_g17p_rt_enabled(dev),
    };
 
    _mesa_blake3_update(ctx, values, sizeof(values));
 }
 
 static void
-hk_get_device_extensions(const struct hk_instance *instance,
+hk_get_device_extensions(const struct agx_device *dev,
+                         const struct hk_instance *instance,
                          struct vk_device_extension_table *ext)
 {
+   /* Keep the upstream AGX2 extension profile until the newly added common
+    * implementations have been qualified there. Native AGX3 keeps its
+    * existing exposure.
+    */
+   const bool native_agx3 = agx_native_graphics(dev) &&
+                            dev->params.gpu_generation > 15;
+
    /*
     * VK_KHR_ray_query and everything it depends on.  Software traversal:
     * grounded end to end in shader ALU and global loads, with no dependence
@@ -195,7 +203,7 @@ hk_get_device_extensions(const struct hk_instance *instance,
       .KHR_swapchain_mutable_format = true,
 #endif
       .KHR_synchronization2 = true,
-      .KHR_unified_image_layouts = true,
+      .KHR_unified_image_layouts = native_agx3,
       .KHR_uniform_buffer_standard_layout = true,
       .KHR_variable_pointers = true,
       .KHR_vertex_attribute_divisor = true,
@@ -208,7 +216,7 @@ hk_get_device_extensions(const struct hk_instance *instance,
       .EXT_border_color_swizzle = true,
       .EXT_buffer_device_address = true,
       .EXT_calibrated_timestamps = true,
-      .EXT_conditional_rendering = true,
+      .EXT_conditional_rendering = native_agx3,
       .EXT_color_write_enable = true,
       .EXT_custom_border_color = true,
       .EXT_debug_marker = true,
@@ -240,7 +248,7 @@ hk_get_device_extensions(const struct hk_instance *instance,
       .EXT_line_rasterization = true,
       .EXT_load_store_op_none = true,
       .EXT_map_memory_placed = true,
-      .EXT_memory_budget = true,
+      .EXT_memory_budget = native_agx3,
       .EXT_multi_draw = true,
       .EXT_mutable_descriptor_type = true,
       .EXT_non_seamless_cube_map = true,
@@ -570,8 +578,8 @@ hk_get_device_features(
       .shaderFloatControls2 = true,
 
       /* VK_KHR_shader_fma */
-      .shaderFmaFloat16 = agx_chip_exact_fma32(dev->chip),
-      .shaderFmaFloat32 = agx_chip_exact_fma32(dev->chip),
+      .shaderFmaFloat16 = (dev->chip == AGX_CHIP_G17P && agx_chip_exact_fma32(dev->chip)),
+      .shaderFmaFloat32 = (dev->chip == AGX_CHIP_G17P && agx_chip_exact_fma32(dev->chip)),
       .shaderFmaFloat64 = false,
 
       /* VK_KHR_shader_maximal_reconvergence */
@@ -595,7 +603,7 @@ hk_get_device_features(
        *
        * Video is not supported, so the video half stays false.
        */
-      .unifiedImageLayouts = true,
+      .unifiedImageLayouts = supported_extensions->KHR_unified_image_layouts,
       .unifiedImageLayoutsVideo = false,
 
       /* VK_KHR_vertex_attribute_divisor */
@@ -892,6 +900,11 @@ hk_get_device_features(
       features->sparseBinding = sparse;
       features->sparseResidencyAliased = false;
       features->sparseResidencyImage2D = sparse;
+      /* The sparse binder and SSTT use the same slice layout for 3D images
+       * as for 2D arrays. Report the nonstandard, one-slice block shape rather
+       * than requiring the standard 3D block shape.
+       */
+      features->sparseResidencyImage3D = sparse;
       features->sparseResidencyBuffer = sparse;
       /* The common Honeykrisp lowering duplicates a draw per view, writes
        * ViewIndex through the draw root and routes it through the packed
@@ -1020,10 +1033,11 @@ hk_get_device_properties(const struct agx_device *dev,
       /* Vulkan 1.0 limits */
       .maxImageDimension1D = 16384,
       .maxImageDimension2D = 16384,
-      /* G17P supports 3D base dimensions up to 2048, although the shared
-       * texture descriptor fields can encode larger arrays.
+      /* G17P and G16G use a 2048 limit for 3D base dimensions, although the
+       * shared texture descriptor fields can encode larger arrays.
        */
-      .maxImageDimension3D = dev->chip == AGX_CHIP_G17P ? 2048 : 16384,
+      .maxImageDimension3D =
+         (dev->chip == AGX_CHIP_G17P || dev->chip == AGX_CHIP_G16G) ? 2048 : 16384,
       .maxImageDimensionCube = 16384,
       .maxImageArrayLayers = 2048,
       /* The G17P texture/PBE includes the software alignment tail in its
@@ -1048,7 +1062,12 @@ hk_get_device_properties(const struct agx_device *dev,
       .maxSamplerAllocationCount = 4000,
       .bufferImageGranularity = 0x400,
       .sparseAddressSpaceSize = HK_SPARSE_ADDR_SPACE_SIZE,
-      .maxBoundDescriptorSets = HK_MAX_SETS,
+      /* The classic AGX2 root upload has one USC uniform record, limited
+       * to 64 halfwords. Keep upstream's eight-set limit: the native
+       * sixteen-set root needs 68 halfwords and uses a separate loader.
+       */
+      .maxBoundDescriptorSets =
+         dev->params.gpu_generation <= 15 ? 8 : HK_MAX_SETS,
       /* VK_KHR_acceleration_structure limits.  The counts are the
        * specification's own 24/29-bit encoding maxima, which is what bounds
        * us: the geometry, instance and primitive ids all live in packed
@@ -1071,15 +1090,16 @@ hk_get_device_properties(const struct agx_device *dev,
        * requires more, because every record address arrives as a device
        * address the shader adds a stride to.
        *
-       * maxRayRecursionDepth is 1, and that is a real limit rather than a
-       * policy: recursion is unrolled into the megakernel at compile time, so
-       * every extra level multiplies the compiled code.  Raising it is a
-       * decision about code size, not a hardware question.
+       * Trace recursion is unrolled into the megakernel at compile time.
+       * G17P supports three levels until trace continuations can be shared.
+       * KHR requires at least one level; legacy generations retain their
+       * limit of three.
        *
        * maxRayDispatchInvocationCount is bounded by what one compute dispatch
        * can launch, since the launch is exactly a compute dispatch. */
       .shaderGroupHandleSize = HK_RAY_TRACING_GROUP_HANDLE_SIZE,
-      .maxRayRecursionDepth = HK_MAX_RAY_RECURSION_DEPTH,
+      .maxRayRecursionDepth = dev->chip == AGX_CHIP_G17P ?
+         HK_G17P_MAX_RAY_RECURSION_DEPTH : HK_MAX_RAY_RECURSION_DEPTH,
       .maxShaderGroupStride = 16384,
       .shaderGroupBaseAlignment = 64,
       .shaderGroupHandleCaptureReplaySize = sizeof(uint32_t),
@@ -1269,7 +1289,12 @@ hk_get_device_properties(const struct agx_device *dev,
       .independentResolveNone = true,
       .independentResolve = true,
       .driverID = VK_DRIVER_ID_MESA_HONEYKRISP,
-      .conformanceVersion = (VkConformanceVersion){1, 4, 6, 2},
+      /* The G16G port has not completed a conformance submission. Keep the
+       * implemented API/features available without claiming a passed CTS version.
+       */
+      .conformanceVersion = dev->chip == AGX_CHIP_G16G
+                               ? (VkConformanceVersion){0, 0, 0, 0}
+                               : (VkConformanceVersion){1, 4, 6, 2},
       .denormBehaviorIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_ALL,
       .roundingModeIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_ALL,
       .shaderSignedZeroInfNanPreserveFloat16 = true,
@@ -1282,6 +1307,11 @@ hk_get_device_properties(const struct agx_device *dev,
       .shaderDenormFlushToZeroFloat32 = true,
       .shaderDenormFlushToZeroFloat64 = false,
       .shaderRoundingModeRTEFloat16 = true,
+      /* FP32 arithmetic rounds to nearest even on every generation. On
+       * G13-G15 an RTE execution mode leaves the program unchanged, as
+       * upstream does; G17P adds its FMA repair (agx_nir_lower_fma_rte).
+       * VK_KHR_shader_fma is gated separately.
+       */
       .shaderRoundingModeRTEFloat32 = true,
       .shaderRoundingModeRTEFloat64 = false,
       .shaderRoundingModeRTZFloat16 = false,
@@ -1440,7 +1470,7 @@ hk_get_device_properties(const struct agx_device *dev,
       .variableSampleLocations = false,
 
       /* VK_EXT_shader_object */
-      .shaderBinaryVersion = HK_AGX3_SHADER_BINARY_VERSION,
+      .shaderBinaryVersion = hk_shader_binary_version(dev->chip),
 
       /* VK_EXT_transform_feedback */
       .maxTransformFeedbackStreams = 4,
@@ -1508,9 +1538,9 @@ hk_get_device_properties(const struct agx_device *dev,
    static_assert(sizeof(instance->driver_build_sha) >= VK_UUID_SIZE);
    memcpy(properties->driverUUID, instance->driver_build_sha, VK_UUID_SIZE);
 
-   strncpy(properties->driverName, "Honeykrisp", VK_MAX_DRIVER_NAME_SIZE);
+   strncpy(properties->driverName, HK_DRIVER_NAME, VK_MAX_DRIVER_NAME_SIZE);
    snprintf(properties->driverInfo, VK_MAX_DRIVER_INFO_SIZE,
-            "Mesa " PACKAGE_VERSION MESA_GIT_SHA1);
+            "Mesa " PACKAGE_VERSION MESA_GIT_SHA1 HK_DRIVER_INFO_SUFFIX);
 
    /* We don't use the layouts ATM so just report all layouts from
     * extensions that we support as compatible.
@@ -1688,6 +1718,57 @@ hk_get_sysmem_heap_size(struct hk_physical_device *pdev)
                                &instance->drirc.misc.heap_memory_percent);
 }
 
+static simple_mtx_t hk_heap_usage_lock = SIMPLE_MTX_INITIALIZER;
+static struct hk_heap_usage *hk_heap_usages;
+
+/* Return the process-wide usage record for a render node, creating it on
+ * first use. It outlives any one instance, so it is not allocated with an
+ * instance's allocation callbacks. */
+static struct hk_heap_usage *
+hk_heap_usage_get(dev_t render_dev)
+{
+   simple_mtx_lock(&hk_heap_usage_lock);
+
+   struct hk_heap_usage *usage = hk_heap_usages;
+   while (usage && usage->render_dev != render_dev)
+      usage = usage->next;
+
+   if (usage) {
+      usage->refcount++;
+   } else {
+      usage = calloc(1, sizeof(*usage));
+      if (usage) {
+         usage->render_dev = render_dev;
+         usage->refcount = 1;
+         usage->next = hk_heap_usages;
+         hk_heap_usages = usage;
+      }
+   }
+
+   simple_mtx_unlock(&hk_heap_usage_lock);
+   return usage;
+}
+
+static void
+hk_heap_usage_put(struct hk_heap_usage *usage)
+{
+   if (!usage)
+      return;
+
+   simple_mtx_lock(&hk_heap_usage_lock);
+
+   if (--usage->refcount == 0) {
+      struct hk_heap_usage **link = &hk_heap_usages;
+      while (*link != usage)
+         link = &(*link)->next;
+
+      *link = usage->next;
+      free(usage);
+   }
+
+   simple_mtx_unlock(&hk_heap_usage_lock);
+}
+
 static uint64_t
 hk_get_sysmem_heap_available(struct hk_physical_device *pdev)
 {
@@ -1696,8 +1777,8 @@ hk_get_sysmem_heap_available(struct hk_physical_device *pdev)
    uint64_t total_used = 0;
    for (unsigned i = 0; i < pdev->mem_heap_count; i++) {
       const struct hk_memory_heap *heap = &pdev->mem_heaps[i];
-      uint64_t used = p_atomic_read(&heap->used) +
-                         p_atomic_read(&heap->cached.value);
+      uint64_t used = p_atomic_read(heap->used) +
+                         p_atomic_read(&heap->cached->value);
       total_used += used;
    }
 
@@ -1777,8 +1858,8 @@ hk_create_drm_physical_device(struct vk_instance *_instance,
       &dispatch_table, &wsi_physical_device_entrypoints, false);
 
    struct vk_device_extension_table supported_extensions;
-   hk_get_device_extensions(instance, &supported_extensions);
-   if (hk_g17p_rt_enabled(pdev->dev.chip)) {
+   hk_get_device_extensions(&pdev->dev, instance, &supported_extensions);
+   if (hk_g17p_rt_enabled(&pdev->dev)) {
       supported_extensions.KHR_acceleration_structure = true;
       supported_extensions.KHR_deferred_host_operations = true;
       supported_extensions.KHR_ray_query =
@@ -1798,7 +1879,8 @@ hk_create_drm_physical_device(struct vk_instance *_instance,
    }
 
    /* VK_KHR_shader_fma makes shaderFmaFloat32 mandatory. */
-   if (!agx_chip_exact_fma32(pdev->dev.chip))
+   if (pdev->dev.chip != AGX_CHIP_G17P ||
+       !agx_chip_exact_fma32(pdev->dev.chip))
       supported_extensions.KHR_shader_fma = false;
 
    if (pdev->dev.chip == AGX_CHIP_G17P) {
@@ -1874,9 +1956,17 @@ hk_create_drm_physical_device(struct vk_instance *_instance,
       goto fail_disk_cache;
    }
 
+   pdev->heap_usage = hk_heap_usage_get(render_dev);
+   if (!pdev->heap_usage) {
+      result = vk_error(instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+      goto fail_disk_cache;
+   }
+
    uint32_t sysmem_heap_idx = pdev->mem_heap_count++;
    pdev->mem_heaps[sysmem_heap_idx] = (struct hk_memory_heap){
       .size = sysmem_size_B,
+      .used = &pdev->heap_usage->used[sysmem_heap_idx],
+      .cached = &pdev->heap_usage->cached[sysmem_heap_idx],
       .flags = VK_MEMORY_HEAP_DEVICE_LOCAL_BIT,
    };
 
@@ -1968,6 +2058,7 @@ hk_create_drm_physical_device(struct vk_instance *_instance,
    return VK_SUCCESS;
 
 fail_disk_cache:
+   hk_heap_usage_put(pdev->heap_usage);
    hk_physical_device_free_disk_cache(pdev);
    vk_physical_device_finish(&pdev->vk);
 fail_agx_device:
@@ -1994,6 +2085,7 @@ hk_physical_device_destroy(struct vk_physical_device *vk_pdev)
       close(pdev->master_fd);
 
    simple_mtx_destroy(&pdev->debug_compile_lock);
+   hk_heap_usage_put(pdev->heap_usage);
    hk_physical_device_free_disk_cache(pdev);
    agx_close_device(&pdev->dev);
    vk_physical_device_finish(&pdev->vk);
@@ -2031,8 +2123,8 @@ hk_GetPhysicalDeviceMemoryProperties2(
 
          for (unsigned i = 0; i < pdev->mem_heap_count; i++) {
             const struct hk_memory_heap *heap = &pdev->mem_heaps[i];
-            uint64_t used = p_atomic_read(&heap->used) +
-                            p_atomic_read(&heap->cached.value);
+            uint64_t allocated = p_atomic_read(heap->used);
+            uint64_t used = allocated + p_atomic_read(&heap->cached->value);
 
             /* From the Vulkan 1.3.278 spec:
              *
@@ -2041,9 +2133,13 @@ hk_GetPhysicalDeviceMemoryProperties2(
              *    for each memory heap. A heap’s usage is an estimate of how
              *    much memory the process is currently using in that heap."
              *
+             * Idle BOs in the BO cache are reclaimable, and an allocation
+             * that reuses one must still raise the reported usage, so they
+             * only lower the budget below.
+             *
              * TODO: Include internal allocations?
              */
-            p->heapUsage[i] = used;
+            p->heapUsage[i] = allocated;
 
             /* Set the budget at 90% to avoid thrashing. */
             float percent = 0.9f;

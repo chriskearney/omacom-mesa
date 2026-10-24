@@ -132,9 +132,12 @@ agx_vdm_hal200_index_range(uint64_t address, uint64_t range_B,
 
    /* Native direct indexed 0x47e57c..0x47e584 rounds the supplied byte
     * length up to dwords, then 0x47e664 subtracts one. Keep arithmetic 64-bit
-    * so firstIndex and a near-4GiB range cannot wrap before validation. */
+    * so firstIndex and a near-4GiB range cannot wrap before validation. The
+    * window starts at the dword holding the first index, so a range that
+    * ends inside a dword needs that dword counted from there. */
    *relocated = address + offset_B;
-   *size_word = (uint32_t)(((range_B - offset_B + 3) >> 2) - 1);
+   *size_word = (uint32_t)(((range_B - offset_B + (*relocated & 3) + 3) >> 2) -
+                           1);
    return true;
 }
 
@@ -235,7 +238,8 @@ agx_vdm_hal200_indirect_draw_pack(
 
    uint32_t size_word = 0;
    if (fields->indexed) {
-      const uint64_t dwords = ((uint64_t)fields->index_buffer_range_B + 3) >> 2;
+      const uint64_t dwords = ((uint64_t)fields->index_buffer_range_B +
+                               (fields->index_buffer & 3) + 3) >> 2;
       const uint64_t limit = UINT64_C(1) << 48;
       if (!fields->index_buffer ||
           (fields->index_buffer & (fields->index_size_B - 1)) ||

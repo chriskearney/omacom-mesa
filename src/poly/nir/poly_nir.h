@@ -52,8 +52,21 @@ bool poly_nir_lower_gs(struct nir_shader *gs, struct nir_shader **gs_count,
                        struct nir_shader **gs_copy, struct nir_shader **pre_gs,
                        struct poly_gs_info *info);
 
+/* G17P native GS replay may discard unobserved invocation-local queries. */
+bool poly_nir_lower_gs_with_options(struct nir_shader *gs,
+                                    struct nir_shader **gs_count,
+                                    struct nir_shader **gs_copy,
+                                    struct nir_shader **pre_gs,
+                                    struct poly_gs_info *info,
+                                    bool eliminate_local_ray_queries);
+
 bool poly_nir_lower_tcs(struct nir_shader *tcs,
                         bool can_ignore_shader_out_barriers);
+
+/* Compact factor addressing is qualified only on G17P. */
+bool poly_nir_lower_tcs_with_options(struct nir_shader *tcs,
+                                     bool can_ignore_shader_out_barriers,
+                                     bool compact_levels);
 
 bool poly_nir_lower_tes(struct nir_shader *tes, bool to_hw_vs);
 

@@ -35,15 +35,21 @@ hk_descriptor_stride_align_for_type(
    const VkMutableDescriptorTypeListEXT *type_list, uint32_t *stride,
    uint32_t *alignment)
 {
+   const unsigned generation = agx_chip_descriptor_generation(pdev->dev.chip);
+   const bool agx2 = hk_descriptor_generation_is_agx2(generation);
+
    switch (type) {
    case VK_DESCRIPTOR_TYPE_SAMPLER:
    case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
       /* TODO: How do samplers work? */
    case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
    case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
-      *stride = hk_sampled_image_descriptor_layout(
-                   agx_chip_descriptor_generation(pdev->dev.chip)).stride;
-      *alignment = 8;
+      *stride = hk_sampled_image_descriptor_layout(generation).stride;
+      /* Preserve the upstream AGX2 descriptor-set ABI. The native AGX3
+       * layout uses a smaller alignment, which must not change G13/G14
+       * binding offsets or the alignment inferred by descriptor lowering.
+       */
+      *alignment = agx2 ? *stride : 8;
       break;
 
    case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
@@ -107,10 +113,15 @@ hk_descriptor_stride_align_for_type(
    case VK_DESCRIPTOR_TYPE_MUTABLE_EXT:
       *stride = *alignment = 0;
       if (type_list == NULL || type_list->descriptorTypeCount == 0) {
-         *stride = HK_MAX_DESCRIPTOR_SIZE;
-         *alignment = agx_native_graphics(&pdev->dev)
-                         ? HK_G17P_STORAGE_ALIGNMENT
-                         : 8;
+         if (agx2) {
+            *stride = *alignment =
+               hk_sampled_image_descriptor_layout(generation).stride;
+         } else {
+            *stride = HK_MAX_DESCRIPTOR_SIZE;
+            *alignment = agx_native_graphics(&pdev->dev)
+                            ? HK_G17P_STORAGE_ALIGNMENT
+                            : 8;
+         }
       }
       for (unsigned i = 0; type_list && i < type_list->descriptorTypeCount;
            i++) {

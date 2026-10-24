@@ -46,6 +46,7 @@ libasahi_lib_files = files(
   'agx_nir_lower_uvs.c',
   'agx_nir_lower_vbo.c',
   'agx_nir_prolog_epilog.c',
+  'agx_nir_legacy_epilog.c',
   'agx_ppp.h',
   'agx_ppp_hal200_graphics_core.c',
   'agx_ppp_hal200_graphics_core.h',
@@ -228,6 +229,7 @@ if with_tests
     executable(
       'libasahi_tests',
       files(
+        'tests/test-chip.cpp',
         'tests/test-packing.cpp',
         'tests/test-tilebuffer.cpp',
         'tests/test-g17p-msaa-epilog.cpp',
@@ -243,6 +245,15 @@ if with_tests
     suite : ['asahi'],
     protocol : 'gtest',
   )
+endif
+
+if with_tests
+  test('vbo_robustness', executable('vbo_robustness_test',
+    files('tests/test-vbo-robustness.c'),
+    include_directories : [inc_asahi, inc_include, inc_src],
+    dependencies : [idep_nir, idep_mesautil, idep_agx_pack, idep_libagx_shaders_h],
+    link_with : [libasahi_lib, libasahi_compiler, libasahi_layout]),
+    suite : ['asahi'])
 endif
 
 if dep_iokit.found()

@@ -11,6 +11,7 @@
 #include "asahi/compiler/agx_compile.h"
 #include "asahi/layout/layout.h"
 #include "asahi/genxml/agx3_cmdstream.h"
+#include "asahi/lib/agx_g17p_compression.h"
 #include "asahi/lib/decode.h"
 #include "drm-uapi/asahi_drm.h"
 #include "drm-uapi/drm_fourcc.h"
@@ -436,26 +437,52 @@ agx_twiddled_allowed(const struct agx_resource *pres)
    return true;
 }
 
+/* G17P compresses a private, single-level, single-layer, single-sample 2D
+ * colour image of agx_g17p_compression_color_format(): written by the
+ * compressed Gen9 2D PBE (end-of-tile stores, blits, staging uploads) and
+ * read by the compressed texture descriptor, the packets Honeykrisp
+ * compresses its own G17P colour images with. Nothing decompresses such an
+ * image in place: its format never spills from the tilebuffer, and it is
+ * neither shared nor scanned out, so a feedback loop or a shader-image
+ * binding reallocates it uncompressed (agx_decompress()), as on AGX2.
+ */
+static bool
+agx_g17p_private_compression_allowed(const struct agx_device *dev,
+                                     const struct pipe_resource *templ)
+{
+   return dev->chip == AGX_CHIP_G17P && templ->target == PIPE_TEXTURE_2D &&
+          templ->depth0 == 1 && templ->array_size <= 1 &&
+          templ->last_level == 0 && templ->nr_samples <= 1 &&
+          !(templ->bind &
+            ~(PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET)) &&
+          agx_g17p_compression_color_format(templ->format);
+}
+
 static bool
 agx_compression_allowed(const struct agx_resource *pres)
 {
+   const struct agx_device *dev = agx_device(pres->base.screen);
    const enum agx_descriptor_generation generation =
-      agx_gallium_descriptor_generation(
-         agx_device(pres->base.screen)->chip);
+      agx_gallium_descriptor_generation(dev->chip);
 
    /* Allow disabling compression for debugging */
-   if (agx_device(pres->base.screen)->debug & AGX_DBG_NOCOMPRESS) {
+   if (dev->debug & AGX_DBG_NOCOMPRESS) {
       rsrc_debug(pres, "No compression: disabled\n");
       return false;
    }
 
-   /* Compression changes both the image allocation and its PBE write
-    * descriptor. Gen9/10 texture reads are grounded, but the matching
-    * compressed PBE is not. Selecting compressed tiling here would therefore
-    * make every real-sized render target fail at end-of-tile. Keep the image
-    * uncompressed, as Honeykrisp does, until that write descriptor is known.
+   /* Compression changes both the image allocation and every write
+    * descriptor of it. AGX2 handles any compressed image, decompressing in
+    * place where needed (agx_gallium_shared_compression_supported()). AGX3
+    * has no in-place decompression, so it compresses only the G17P images
+    * that never need it.
     */
-   if (!agx_gallium_native_compressed_pbe_supported(generation)) {
+   if (agx_gallium_descriptor_generation_is_agx3(generation)) {
+      if (!agx_g17p_private_compression_allowed(dev, &pres->base)) {
+         rsrc_debug(pres, "No compression: outside the G17P policy\n");
+         return false;
+      }
+   } else if (!agx_gallium_shared_compression_supported(generation)) {
       rsrc_debug(pres, "No compression: no native PBE encoding\n");
       return false;
    }
@@ -1534,6 +1561,17 @@ agx_flush(struct pipe_context *pctx, struct pipe_fence_handle **fence,
 
    agx_flush_all(ctx, "Gallium flush");
 
+   if ((flags & PIPE_FLUSH_END_OF_FRAME) &&
+       unlikely(screen->dev.debug & AGX_DBG_PERF)) {
+      perf_debug_ctx(ctx, "[Queue %u Frame %" PRIu64 "] draws=%" PRIu64
+                          " vs_emits=%" PRIu64 " query_waits=%" PRIu64,
+                     ctx->queue_id, ctx->perf.frame++, ctx->perf.draws,
+                     ctx->perf.vs_emits, ctx->perf.query_waits);
+      ctx->perf.draws = 0;
+      ctx->perf.vs_emits = 0;
+      ctx->perf.query_waits = 0;
+   }
+
    if (!(flags & (PIPE_FLUSH_DEFERRED | PIPE_FLUSH_ASYNC)) &&
        ctx->flush_last_seqid) {
       /* Ensure other contexts in this screen serialize against the last
@@ -1591,6 +1629,15 @@ agx_flush(struct pipe_context *pctx, struct pipe_fence_handle **fence,
       struct pipe_fence_handle *f = agx_fence_create(ctx);
       pctx->screen->fence_reference(pctx->screen, fence, NULL);
       *fence = f;
+   }
+
+   if (unlikely(screen->dev.debug & AGX_DBG_PERF)) {
+      perf_debug_ctx(ctx, "Gallium flush: batches=%" PRIu64
+                     " mixed=%" PRIu64 " submits=%" PRIu64
+                     " submit_failures=%" PRIu64 "\n",
+                     ctx->submit_perf.batches, ctx->submit_perf.mixed_batches,
+                     ctx->submit_perf.submits, ctx->submit_perf.failures);
+      memset(&ctx->submit_perf, 0, sizeof(ctx->submit_perf));
    }
 }
 
@@ -1749,6 +1796,8 @@ agx_destroy_context(struct pipe_context *pctx)
     * ensure everything is cleaned up properly.
     */
    agx_sync_all(ctx, "destroy context");
+   if (ctx->submit_quarantined)
+      return;
 
    if (pctx->stream_uploader)
       u_upload_destroy(pctx->stream_uploader);
@@ -2435,12 +2484,13 @@ agx_is_format_supported(struct pipe_screen *pscreen, enum pipe_format format,
 static bool
 agx_dmabuf_modifier_external_only(struct pipe_screen *screen, uint64_t modifier)
 {
-   /* AGX3 can sample imported compressed images, but its compressed PBE
-    * encoding is not recovered.  Advertising this modifier as renderable
-    * lets EGL/GBM allocate a surface that will fail at end-of-tile.
+   /* AGX3 samples imported compressed images, but a shared compressed
+    * render target may need in-place decompression, which has no AGX3 build
+    * (agx_gallium_shared_compression_supported()). Keep the modifier
+    * sample-only there.
     */
    return modifier == DRM_FORMAT_MOD_APPLE_GPU_TILED_COMPRESSED &&
-          !agx_gallium_native_compressed_pbe_supported(
+          !agx_gallium_shared_compression_supported(
              agx_gallium_descriptor_generation(agx_device(screen)->chip));
 }
 
@@ -2492,6 +2542,12 @@ static void
 agx_destroy_screen(struct pipe_screen *pscreen)
 {
    struct agx_screen *screen = agx_screen(pscreen);
+
+   /* Unknown completion cannot be repaired by tearing down userspace owners.
+    * Quarantined contexts retain this screen and its device until exit.
+    */
+   if (p_atomic_read(&screen->submit_quarantined))
+      return;
 
    drmSyncobjDestroy(screen->dev.fd, screen->flush_syncobj);
 

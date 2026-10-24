@@ -721,6 +721,15 @@ zink_init_compute_caps(struct zink_screen *screen)
    caps->max_subgroups = screen->info.props13.maxComputeWorkgroupSubgroups;
 }
 
+/* The A18 Pro (0x8140) and the M4 Pro (0x6040) run Honeykrisp's G17P path. */
+static bool
+zink_honeykrisp_g17p(const struct zink_screen *screen)
+{
+   return zink_driverid(screen) == VK_DRIVER_ID_MESA_HONEYKRISP &&
+          (screen->info.props.deviceID == 0x8140 ||
+           screen->info.props.deviceID == 0x6040);
+}
+
 static void
 zink_init_screen_caps(struct zink_screen *screen)
 {
@@ -1139,9 +1148,17 @@ zink_init_screen_caps(struct zink_screen *screen)
 
    /* 1<<27 is required by VK spec */
    assert(screen->info.props.limits.maxStorageBufferRange >= 1 << 27);
-   /* clamp to VK spec minimum */
    caps->max_shader_buffer_size =
       MIN2(get_smallest_buffer_heap(screen), screen->info.props.limits.maxStorageBufferRange);
+
+   /* GLSL std140 rounds the block extent to its base alignment (up to
+    * 32 bytes for double vectors). G17P Honeykrisp advertises INT32_MAX,
+    * so an otherwise valid member near the limit can round the block past
+    * the limit and overflow its signed size. Expose complete alignment
+    * units on G17P, leaving the other Honeykrisp paths unchanged.
+    */
+   if (zink_honeykrisp_g17p(screen))
+      caps->max_shader_buffer_size &= ~31u;
 
    caps->fs_coord_origin_upper_left = true;
    caps->fs_coord_pixel_center_half_integer = true;
@@ -2797,6 +2814,30 @@ zink_get_sparse_texture_virtual_page_size(struct pipe_screen *pscreen,
                                  VK_IMAGE_USAGE_STORAGE_BIT;
    use_flags |= is_zs ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
    VkImageUsageFlags flags = zink_get_format_props(screen, pformat)->optimalTilingFeatures & use_flags;
+   if (zink_honeykrisp_g17p(screen)) {
+      /* Admit sparse textures per target/format. A missing page size is
+       * represented by NUM_VIRTUAL_PAGE_SIZES = 0, without disabling sparse
+       * textures for the other targets. Format feature bits and image usage
+       * bits are different namespaces; their bitwise intersection above is
+       * not an image usage mask. Query the sampled usage we need here.
+       */
+      if ((type == VK_IMAGE_TYPE_2D &&
+           !screen->info.feats.features.sparseResidencyImage2D) ||
+          (type == VK_IMAGE_TYPE_3D &&
+           !screen->info.feats.features.sparseResidencyImage3D))
+         return 0;
+
+      flags = VK_IMAGE_USAGE_SAMPLED_BIT;
+      VkImageFormatProperties image_props;
+      VkResult result = VKSCR(GetPhysicalDeviceImageFormatProperties)(
+         screen->pdev, format, type, VK_IMAGE_TILING_OPTIMAL, flags,
+         VK_IMAGE_CREATE_SPARSE_BINDING_BIT | VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT,
+         &image_props);
+      if (result != VK_SUCCESS ||
+          !(image_props.sampleCounts &
+            (multi_sample ? VK_SAMPLE_COUNT_2_BIT : VK_SAMPLE_COUNT_1_BIT)))
+         return 0;
+   }
    VkSparseImageFormatProperties props[4]; //planar?
    unsigned prop_count = ARRAY_SIZE(props);
    VKSCR(GetPhysicalDeviceSparseImageFormatProperties)(screen->pdev, format, type,
@@ -3247,6 +3288,24 @@ init_driver_workarounds(struct zink_screen *screen)
 
    if (zink_debug & ZINK_DEBUG_NOGENERAL)
       screen->driver_workarounds.general_layout = false;
+
+   /* Honeykrisp decides lossless compression once, at image creation, and
+    * refuses it for colour images with ATTACHMENT_FEEDBACK_LOOP usage: a
+    * compressed tile being stored can be read torn by a draw that samples
+    * other texels of it. Adding that usage to every render target therefore
+    * leaves every GL colour target uncompressed. With general_layout zink
+    * never selects a feedback-loop layout or enables a feedback loop on an
+    * attachment, so the usage is only that hint: create colour images without
+    * it and recreate an image with it before a draw or copy first reads the
+    * image while writing it (zink_update_lazy_feedback_loops()).
+    *
+    * Only G17P compresses on this rule; other Honeykrisp parts keep the
+    * usage on every render target.
+    */
+   screen->driver_workarounds.lazy_feedback_loop_usage =
+      zink_honeykrisp_g17p(screen) &&
+      screen->driver_workarounds.general_layout &&
+      screen->info.have_EXT_attachment_feedback_loop_layout;
 
    if (!screen->info.have_EXT_vertex_input_dynamic_state || !screen->info.have_EXT_transform_feedback)
       screen->info.have_KHR_device_address_commands = false;

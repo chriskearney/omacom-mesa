@@ -30,6 +30,11 @@ struct hk_queue {
        * syncobj's value equals timeline_value, then all work is complete.
        */
       uint64_t timeline_value;
+
+      /* The highest timeline value a host wait has seen signalled, for
+       * occlusion query reads (hk_oq_submission_done()). Every value at or
+       * below it is complete. */
+      uint64_t signalled_value;
    } drm;
 
    /* Device-lifetime command storage for the G17P SSTT maintenance encoder.

@@ -115,13 +115,15 @@ hk_CmdSetEvent2(VkCommandBuffer commandBuffer, VkEvent _event,
                 const VkDependencyInfo *pDependencyInfo)
 {
    VK_FROM_HANDLE(hk_cmd_buffer, cmd, commandBuffer);
+   hk_flush_deferred_clears(cmd);
    VK_FROM_HANDLE(hk_event, event, _event);
 
    perf_debug(cmd, "Set event");
 
    assert(pDependencyInfo->sType == VK_STRUCTURE_TYPE_DEPENDENCY_INFO);
    uint8_t src_kinds, dst_kinds;
-   hk_sync_dependency_kinds(pDependencyInfo, &src_kinds, &dst_kinds);
+   hk_sync_dependency_kinds(pDependencyInfo, hk_sync_image_class(cmd),
+                            &src_kinds, &dst_kinds);
 
    hk_event_write(cmd, event, src_kinds, VK_EVENT_SET);
 }
@@ -131,6 +133,7 @@ hk_CmdResetEvent2(VkCommandBuffer commandBuffer, VkEvent _event,
                   VkPipelineStageFlags2 stageMask)
 {
    VK_FROM_HANDLE(hk_cmd_buffer, cmd, commandBuffer);
+   hk_flush_deferred_clears(cmd);
    VK_FROM_HANDLE(hk_event, event, _event);
 
    perf_debug(cmd, "Reset event");
@@ -152,6 +155,7 @@ hk_CmdWaitEvents2(VkCommandBuffer commandBuffer, uint32_t eventCount,
                   const VkDependencyInfo *pDependencyInfos)
 {
    VK_FROM_HANDLE(hk_cmd_buffer, cmd, commandBuffer);
+   hk_flush_deferred_clears(cmd);
    struct hk_device *dev = hk_cmd_buffer_device(cmd);
    perf_debug(cmd, "Wait events");
 
@@ -160,7 +164,8 @@ hk_CmdWaitEvents2(VkCommandBuffer commandBuffer, uint32_t eventCount,
       assert(pDependencyInfos[i].sType == VK_STRUCTURE_TYPE_DEPENDENCY_INFO);
 
       uint8_t src_kinds, dst_kinds;
-      hk_sync_dependency_kinds(&pDependencyInfos[i], &src_kinds, &dst_kinds);
+      hk_sync_dependency_kinds(&pDependencyInfos[i], hk_sync_image_class(cmd),
+                               &src_kinds, &dst_kinds);
 
       /* Vulkan 1.3, 7.5: the first synchronization scope of vkCmdWaitEvents2
        * is the union of the set operations' scopes, which are earlier in

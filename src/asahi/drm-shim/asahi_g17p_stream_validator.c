@@ -1246,6 +1246,18 @@ asahi_g17p_stream_validate(const struct asahi_g17p_stream_memory *memory,
       if (!read_owned(memory, cursor, bytes, sizeof(bytes)))
          return fail_at(cursor, "record crosses its owning mapping");
 
+      /* HAL200 bind state is independent of the retained vertex program.
+       * PPP-only updates and clean indirect draws need a bind tail/selector
+       * without a preceding VS update. Do not decode its first bind pair as
+       * the separate initial 12-byte PPP record. */
+      if (have_state && load_le32(bytes) == UINT32_C(0x00000500)) {
+         if (!validate_bind_tail(memory, cursor, &local))
+            return false;
+         cursor += AGX_VDM_HAL200_BIND_TAIL_LENGTH;
+         pending_selector = true;
+         continue;
+      }
+
       struct agx_vdm_decoded_record record;
       if (!agx_vdm_decode_one(AGX_CHIP_G17P, bytes, sizeof(bytes), &record)) {
          if (load_le32(bytes) == UINT32_C(0x40000001)) {

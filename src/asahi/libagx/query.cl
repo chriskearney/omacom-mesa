@@ -7,6 +7,7 @@
 #include "compiler/libcl/libcl.h"
 #include "compiler/libcl/libcl_vk.h"
 #include "query.h"
+#include "query_copy.h"
 
 static inline global uint64_t *
 query_report(global uint64_t *results, global uint16_t *oq_index,
@@ -48,6 +49,19 @@ libagx_copy_query(global uint32_t *availability, global uint64_t *results,
    if (flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) {
       vk_write_query(dst, reports_per_query, flags, available);
    }
+}
+
+/* G17P uses a single range dispatch, including WAIT polling. Keep the AGX2
+ * entry point above unchanged: no timestamp-copy UAPI is involved here. */
+KERNEL(32)
+libagx_copy_query_g17p(global uint32_t *availability, global uint64_t *results,
+                       global uint16_t *oq_index, uint64_t dst_addr,
+                       uint64_t dst_stride, uint32_t first_query,
+                       VkQueryResultFlagBits flags, uint16_t reports_per_query)
+{
+   libagx_copy_query_g17p_result(availability, results, oq_index, dst_addr,
+                                dst_stride, first_query, flags,
+                                reports_per_query, cl_global_id.x);
 }
 
 /**

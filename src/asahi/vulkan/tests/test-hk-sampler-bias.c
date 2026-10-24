@@ -1,9 +1,14 @@
 /* SPDX-License-Identifier: MIT */
-#undef NDEBUG
 #include "hk_nir_sampler_bias.h"
 #include "asahi/compiler/agx_nir_texture.h"
 #include "compiler/glsl_types.h"
 #include <stdio.h>
+
+/* Keep this test's assert()s in NDEBUG builds. NIR's headers above must see
+ * the build's NDEBUG, so that nir_validate_shader() matches what libnir
+ * provides (an inline no-op in NDEBUG builds). */
+#undef NDEBUG
+#include <assert.h>
 
 static const nir_shader_compiler_options options = {0};
 

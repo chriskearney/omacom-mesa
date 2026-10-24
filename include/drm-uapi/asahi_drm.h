@@ -259,7 +259,20 @@ enum drm_asahi_feature {
 	 * Userspace splitting a batch across ioctls must supply its input syncs
 	 * to every chunk relying on this guarantee.
 	 */
-	DRM_ASAHI_FEATURE_PER_COMMAND_INPUT_SYNCS = (1UL) << 3,
+	/*
+	 * Bits 3 to 9 belong to the M3 (G15S) and J613 runtimes:
+	 * SCHEDULED_QUEUES, RENDER_TIMESTAMP_COPIES, COMPUTE_TIMESTAMP_COPIES,
+	 * FRAGMENT_DEPENDENCY, FRAGMENT_DEPENDENCY_COMPUTE,
+	 * COMPUTE_WIDE_VISIBILITY and CACHED_PROGRAM_PROBE.
+	 */
+	DRM_ASAHI_FEATURE_SCHEDULED_QUEUES = (1UL) << 3,
+	DRM_ASAHI_FEATURE_RENDER_TIMESTAMP_COPIES = (1UL) << 4,
+	DRM_ASAHI_FEATURE_COMPUTE_TIMESTAMP_COPIES = (1UL) << 5,
+	DRM_ASAHI_FEATURE_FRAGMENT_DEPENDENCY = (1UL) << 6,
+	DRM_ASAHI_FEATURE_FRAGMENT_DEPENDENCY_COMPUTE = (1UL) << 7,
+	DRM_ASAHI_FEATURE_COMPUTE_WIDE_VISIBILITY = (1UL) << 8,
+	DRM_ASAHI_FEATURE_CACHED_PROGRAM_PROBE = (1UL) << 9,
+	DRM_ASAHI_FEATURE_PER_COMMAND_INPUT_SYNCS = (1UL) << 10,
 
 	/**
 	 * @DRM_ASAHI_FEATURE_VM_STATUS_MIRROR: GET_PARAMS group
@@ -269,22 +282,28 @@ enum drm_asahi_feature {
 	 * of the failed job, so after a successful syncobj wait a load of the word
 	 * replaces the VM_STATUS query. Registration may still be refused.
 	 */
-	DRM_ASAHI_FEATURE_VM_STATUS_MIRROR = (1UL) << 4,
+	DRM_ASAHI_FEATURE_VM_STATUS_MIRROR = (1UL) << 11,
 	/** Exact queue-local prior hardware command prefixes in extended payloads. */
-	DRM_ASAHI_FEATURE_EXACT_PRIOR_BARRIERS = (1UL) << 5,
+	DRM_ASAHI_FEATURE_EXACT_PRIOR_BARRIERS = (1UL) << 12,
 
 	/**
 	 * @DRM_ASAHI_FEATURE_FEW_PRIMITIVES: Render commands accept
 	 * DRM_ASAHI_RENDER_FEW_PRIMITIVES.
 	 */
-	DRM_ASAHI_FEATURE_FEW_PRIMITIVES = (1UL) << 6,
+	DRM_ASAHI_FEATURE_FEW_PRIMITIVES = (1UL) << 13,
 
 	/**
 	 * @DRM_ASAHI_FEATURE_FRAGMENT_BARRIERS: Render commands accept
 	 * DRM_ASAHI_RENDER_FRAGMENT_BARRIERS.
 	 */
-	DRM_ASAHI_FEATURE_FRAGMENT_BARRIERS = (1UL) << 7,
-	DRM_ASAHI_FEATURE_RENDER_RAY_QUERY = (1UL) << 8,
+	DRM_ASAHI_FEATURE_FRAGMENT_BARRIERS = (1UL) << 14,
+	DRM_ASAHI_FEATURE_RENDER_RAY_QUERY = (1UL) << 15,
+
+	/**
+	 * @DRM_ASAHI_FEATURE_BOUNDED_AS_BUILD: Compute commands accept
+	 * DRM_ASAHI_COMPUTE_AS_BUILD for a bounded long execution allowance.
+	 */
+	DRM_ASAHI_FEATURE_BOUNDED_AS_BUILD = (1UL) << 16,
 };
 
 #define DRM_ASAHI_PARAM_GROUP_VM_STATUS 1
@@ -1330,6 +1349,12 @@ struct drm_asahi_cmd_render {
 
 	/** @bg_partial_rsrc_spec_hi: High dword of @partial_bg.rsrc_spec */
 	__u32 bg_partial_rsrc_spec_hi;
+
+	/**
+	 * @ts_frag_end_copies: Timestamp copies used by the M3 (J613) runtime.
+	 * Must be zero for G17P.
+	 */
+	struct drm_asahi_timestamp ts_frag_end_copies[8];
 };
 
 /* Feature-gated extensions preserve the legacy packet sizes used by other
@@ -1404,6 +1429,11 @@ struct drm_asahi_cmd_compute {
 	/** @ts: Timestamps for the compute command */
 	struct drm_asahi_timestamps ts;
 
+	/**
+	 * @ts_end_copies: Timestamp copies used by the M3 (J613) runtime.
+	 * Must be zero for G17P.
+	 */
+	struct drm_asahi_timestamp ts_end_copies[8];
 };
 
 struct drm_asahi_cmd_compute_with_prior {
@@ -1433,6 +1463,16 @@ enum drm_asahi_compute_flags {
 	 * three-buffer table from this command's three compute attachments.
 	 */
 	DRM_ASAHI_COMPUTE_G17P_ADD3_PROOF = (1L << 0),
+	/**
+	 * @DRM_ASAHI_COMPUTE_AS_BUILD: Acceleration-structure build work,
+	 * including compute-based transfers. Requires BOUNDED_AS_BUILD.
+	 * This is an execution hint, not proof of progress or permission to
+	 * access additional memory. The kernel validates the command normally
+	 * and caps its execution allowance at ten seconds (four extra 2s polls).
+	 * Other commands in the same submission receive the same allowance so
+	 * ordered helpers cannot time out while waiting for the build.
+	 */
+	DRM_ASAHI_COMPUTE_AS_BUILD = (1L << 2),
 };
 
 /**

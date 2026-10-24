@@ -129,7 +129,7 @@ clear_instance_pointers(uint job_index, uint lane)
    hk_agx3_envelope_job job = DEREF(INDEX(hk_agx3_envelope_job, args.jobs, job_index));
    if (job.geometry_type != VK_GEOMETRY_TYPE_INSTANCES_KHR ||
        job.primitive_count == 0 || job.end_slot < 3 ||
-       job.output_bvh == 0 || (job.output_bvh & 16383ul) != 0)
+       job.output_bvh == 0 || (job.output_bvh & 63ul) != 0)
       return;
    uint64_t pointers = uint64_t(job.end_slot) * 64ul + uint64_t(job.leaf_bound) * 64ul;
    uint64_t size = pointers + uint64_t(job.leaf_bound) * 16ul + 184ul;
@@ -152,7 +152,7 @@ main()
    hk_agx3_envelope_job job = DEREF(INDEX(hk_agx3_envelope_job, args.jobs, id));
    if (job.primitive_count == 0 &&
        job.opaque_build_word == HK_AGX3_PLAN_EMPTY) {
-      if (job.output_bvh == 0 || (job.output_bvh & 16383ul) != 0 ||
+      if (job.output_bvh == 0 || (job.output_bvh & 63ul) != 0 ||
           job.output_bvh >= (1ul << 48) - 192ul) {
          DEREF(INDEX(uint32_t, args.status, id)) = HK_AGX3_LEAF_RANGE;
          return;
@@ -175,7 +175,7 @@ main()
    if (job.end_slot < 3 || job.primitive_count == 0 || job.node_count == 0 ||
        job.depth == 0)
       status |= HK_AGX3_LEAF_INVALID_COUNT;
-   if (job.output_bvh == 0 || (job.output_bvh & 1023ul) != 0 ||
+   if (job.output_bvh == 0 || (job.output_bvh & 63ul) != 0 ||
        job.output_bvh >= (1ul << 48) || size > (1ul << 48) - job.output_bvh)
       status |= HK_AGX3_LEAF_RANGE;
    vec3 lo = DEREF(job.bounds).aabb.min, hi = DEREF(job.bounds).aabb.max;

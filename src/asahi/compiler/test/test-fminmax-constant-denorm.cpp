@@ -45,7 +45,7 @@ constants(bool is_max)
       nir_io_semantics semantics = {};
       semantics.location = FRAG_RESULT_DATA0;
       nir_intrinsic_set_io_semantics(store, semantics);
-      ASSERT_TRUE(agx_nir_lower_fminmax(b.shader));
+      ASSERT_TRUE(agx_nir_lower_fminmax(b.shader, false));
       EXPECT_EQ(fadds(b.shader), unsigned(test.flush && !is_max));
       nir_validate_shader(b.shader, "constant-ftz");
       ralloc_free(b.shader);
@@ -74,7 +74,7 @@ TEST(FminmaxConstantDenorm, NormalBoundsExcludeSubnormalResults)
             nir_def *out = is_max ? nir_fmax(&b, x, y) : nir_fmin(&b, x, y);
             agx_test_store_output(&b, out, nir_imm_int(&b, 0), nir_type_float32,
                                   FRAG_RESULT_DATA0);
-            ASSERT_TRUE(agx_nir_lower_fminmax(b.shader));
+            ASSERT_TRUE(agx_nir_lower_fminmax(b.shader, false));
             const unsigned exponent = (bits >> 23) & 255;
             const bool normal_bound =
                exponent && exponent != 255 && (bits >> 31) == !is_max;
@@ -98,7 +98,7 @@ TEST(FminmaxConstantDenorm, SelectsPreservePossibleSubnormals)
          nir_def *out = nir_fmin(&b, selected, nir_imm_float(&b, 1.0));
          agx_test_store_output(&b, out, nir_imm_int(&b, 0), nir_type_float32,
                                FRAG_RESULT_DATA0);
-         ASSERT_TRUE(agx_nir_lower_fminmax(b.shader));
+         ASSERT_TRUE(agx_nir_lower_fminmax(b.shader, false));
          const bool denorm_x = !(x & 0x7f800000u) && (x & 0x007fffffu);
          const bool denorm_y = !(y & 0x7f800000u) && (y & 0x007fffffu);
          EXPECT_EQ(fadds(b.shader), unsigned(denorm_x || denorm_y));
@@ -118,7 +118,7 @@ TEST(FminmaxConstantDenorm, VectorLaneRequiresCanonicalization)
       nir_def *out = is_max ? nir_fmax(&b, x, y) : nir_fmin(&b, x, y);
       agx_test_store_output(&b, out, nir_imm_int(&b, 0), nir_type_float32,
                             FRAG_RESULT_DATA0);
-      ASSERT_TRUE(agx_nir_lower_fminmax(b.shader));
+      ASSERT_TRUE(agx_nir_lower_fminmax(b.shader, false));
       EXPECT_EQ(fadds(b.shader), 1u);
       nir_validate_shader(b.shader, "vector ftz");
       ralloc_free(b.shader);
@@ -140,7 +140,7 @@ TEST(FminmaxConstantDenorm, PhiSourcesPreservePossibleSubnormals)
       nir_def *out = nir_fmin(&b, value, nir_imm_float(&b, 1.0));
       agx_test_store_output(&b, out, nir_imm_int(&b, 0), nir_type_float32,
                             FRAG_RESULT_DATA0);
-      ASSERT_TRUE(agx_nir_lower_fminmax(b.shader));
+      ASSERT_TRUE(agx_nir_lower_fminmax(b.shader, false));
       EXPECT_EQ(fadds(b.shader), unsigned(bits == 1));
       nir_validate_shader(b.shader, "phi ftz");
       ralloc_free(b.shader);
@@ -158,7 +158,7 @@ TEST(FminmaxConstantDenorm, DeepSelectorsKeepConservativeFlush)
    nir_def *out = nir_fmin(&b, value, nir_imm_float(&b, 4.0));
    agx_test_store_output(&b, out, nir_imm_int(&b, 0), nir_type_float32,
                          FRAG_RESULT_DATA0);
-   ASSERT_TRUE(agx_nir_lower_fminmax(b.shader));
+   ASSERT_TRUE(agx_nir_lower_fminmax(b.shader, false));
    EXPECT_EQ(fadds(b.shader), 1u);
    nir_validate_shader(b.shader, "bounded select ftz");
    ralloc_free(b.shader);
@@ -190,9 +190,36 @@ TEST(FminmaxConstantDenorm, RawMinmaxDoesNotProveCanonicalization)
             inner_max ? nir_fmax(&b, value, bound) : nir_fmin(&b, value, bound);
          agx_test_store_output(&b, out, nir_imm_int(&b, 0), nir_type_float32,
                                FRAG_RESULT_DATA0);
-         ASSERT_TRUE(agx_nir_lower_fminmax(b.shader));
+         ASSERT_TRUE(agx_nir_lower_fminmax(b.shader, false));
          EXPECT_EQ(fadds(b.shader), 1u);
          nir_validate_shader(b.shader, "raw minmax ftz");
+         ralloc_free(b.shader);
+      }
+   }
+}
+
+/* In flush-to-zero-only mode (G17P), a min/max result may stay denormal unless
+ * the shader declares flush-to-zero: no flushing add is inserted then, even
+ * for a subnormal operand. A flush-to-zero shader keeps the flush. */
+TEST(FminmaxConstantDenorm, FlushOnlyInFlushToZeroShaders)
+{
+   for (bool ftz : {false, true}) {
+      for (bool is_max : {false, true}) {
+         nir_builder b = nir_builder_init_simple_shader(
+            MESA_SHADER_FRAGMENT, &agx_nir_options, "ftz-only");
+         if (ftz) {
+            b.shader->info.float_controls_execution_mode |=
+               FLOAT_CONTROLS_DENORM_FLUSH_TO_ZERO_FP32;
+         }
+         nir_def *a = agx_test_load_preamble(&b, 1, 32, 0);
+         nir_def *other = nir_imm_float(&b, 0.5f);
+         nir_def *out =
+            is_max ? nir_fmax(&b, a, other) : nir_fmin(&b, a, other);
+         agx_test_store_output(&b, out, nir_imm_int(&b, 0), nir_type_float32,
+                               FRAG_RESULT_DATA0);
+         ASSERT_TRUE(agx_nir_lower_fminmax(b.shader, true));
+         EXPECT_EQ(fadds(b.shader), unsigned(ftz && !is_max));
+         nir_validate_shader(b.shader, "ftz-only");
          ralloc_free(b.shader);
       }
    }

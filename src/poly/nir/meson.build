@@ -21,6 +21,28 @@ libpoly_nir = static_library(
 
 if with_tests
   test(
+    'poly-gs-outputs',
+    executable(
+      'poly-gs-outputs',
+      '../tests/poly_gs_output_tests.c',
+      include_directories : [inc_poly],
+      link_with : [libpoly_nir],
+      dependencies : [idep_nir, idep_mesautil, idep_libpoly],
+    ),
+    suite : 'poly',
+  )
+  test(
+    'poly-tcs-tess-levels',
+    executable(
+      'poly-tcs-tess-levels',
+      '../tests/poly_tcs_tess_level_tests.c',
+      include_directories : [inc_poly],
+      link_with : [libpoly_nir],
+      dependencies : [idep_nir, idep_mesautil, idep_libpoly],
+    ),
+    suite : 'poly',
+  )
+  test(
     'poly-tcs-barriers',
     executable(
       'poly-tcs-barriers',

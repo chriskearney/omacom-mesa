@@ -100,6 +100,26 @@ struct hk_gen1_sparse_table {
    const char *label;
 };
 
+/* G17P AS IDs index this registry directly, with a free list in vacant slots.
+ * base is the traversal base published in the AS table: the structure's own
+ * address when that is 16 KiB-aligned, otherwise base page window_base of
+ * window `window` (UINT32_MAX for none). */
+struct hk_gen1_as_slot {
+   struct vk_acceleration_structure *as;
+   uint32_t next_free;
+   uint32_t window;
+   uint32_t window_base;
+   uint64_t base;
+};
+
+/* 256 consecutive 16 KiB base pages; see hk_gen1_as_window_assign(). */
+struct hk_gen1_as_window {
+   struct agx_va *va;
+   struct agx_bo *trampolines;
+   uint32_t used[8];
+   uint32_t live;
+};
+
 struct hk_device {
    struct vk_device vk;
    struct agx_device dev;
@@ -124,7 +144,8 @@ struct hk_device {
    bool gen1_native_graphics_rq;
    bool gen1_rq_instances, gen1_rq_candidates, gen1_as_lock_ready;
    simple_mtx_t gen1_as_lock;
-   struct util_dynarray gen1_ases;
+   struct util_dynarray gen1_ases; /* struct hk_gen1_as_slot */
+   uint32_t gen1_as_free_head;
    struct hash_table *gen1_as_ids;
    struct hk_gen1_sparse_table gen1_as_table_pages;
    struct hk_gen1_sparse_table gen1_as_metadata_pages;
@@ -133,12 +154,17 @@ struct hk_device {
    struct agx_bo *gen1_as_metadata;
    struct agx_bo *gen1_as_addresses;
    struct agx_bo *gen1_as_query_bank;
+   struct agx_bo *gen1_as_window_roots;
+   struct util_dynarray gen1_as_windows; /* struct hk_gen1_as_window */
+   uint32_t gen1_as_window_hint;
    bool gen1_rq_live_as_table;
    bool gen1_as_chunk_cache_lock_ready;
    simple_mtx_t gen1_as_chunk_cache_lock;
    struct list_head gen1_as_free_chunks[2];
    uint32_t gen1_as_free_chunk_count[2];
    struct agx_bo *gen1_rq_code, *gen1_rq_ift;
+   /* Immutable generated user image, shared by all query launches. */
+   struct agx_bo *gen1_rq_state;
    struct agx_va *gen1_rq_code_alias;
    struct agx_bo *gen1_vertex_directory;
    struct agx_va *gen1_vertex_directory_va;

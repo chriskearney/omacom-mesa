@@ -2007,6 +2007,7 @@ bind_gfx_stage(struct zink_context *ctx, mesa_shader_stage stage, struct zink_sh
    }
 
    ctx->gfx_stages[stage] = shader;
+   ctx->lazy_feedback_dirty |= ctx->lazy_feedback;
    if (stage < MESA_SHADER_COMPUTE)
       ctx->gfx_dirty = ctx->gfx_stages[MESA_SHADER_FRAGMENT] && ctx->gfx_stages[MESA_SHADER_VERTEX];
    if (stage == MESA_SHADER_FRAGMENT || stage > MESA_SHADER_COMPUTE)

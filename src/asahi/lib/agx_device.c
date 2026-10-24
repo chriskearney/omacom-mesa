@@ -908,13 +908,13 @@ agx_open_device(void *memctx, struct agx_device *dev)
                  dev->params.num_clusters_total);
       } else if (dev->chip == AGX_CHIP_G17P) {
          fprintf(stderr,
-                 "Apple G17P kernel contract does not match Honeykrisp "
+                 "Apple G17P kernel contract does not match this driver "
                  "(USC %u, HAL %u; expected USC 3, HAL 200)\n",
                  dev->params.usc_generation,
                  dev->params.gpu_hal_generation);
       } else if (dev->chip == AGX_CHIP_G15C) {
          fprintf(stderr,
-                 "Apple G15C kernel parameters do not match Honeykrisp "
+                 "Apple G15C kernel parameters do not match this driver "
                  "(chip %#x, %u dies, %u clusters, USC %u, HAL %u; expected "
                  "chip 0x6031, 1 die, 4 clusters, USC 3, HAL 0)\n",
                  dev->params.chip_id, dev->params.num_dies,
@@ -943,7 +943,10 @@ agx_open_device(void *memctx, struct agx_device *dev)
       goto fail;
    }
 
-   const char *product = agx_chip_exact_product_name(dev->chip);
+   /* The M4 Pro runs as G17P too; it takes the M-series name below. */
+   const char *product = dev->params.chip_id == 0x8140
+                            ? agx_chip_exact_product_name(dev->chip)
+                            : NULL;
    if (product) {
       /* Match the M-series format with the exact GPU codename and revision. */
       snprintf(dev->name, sizeof(dev->name), "Apple %s (%s %02X)", product,
@@ -1254,6 +1257,8 @@ agx_open_device(void *memctx, struct agx_device *dev)
       /* G15C executes the same AGX3B encoding as G15S with no extra
        * scheduling rules, so it runs the G15S build of the programs. */
       dev->libagx_programs = libagx_g15s;
+   } else if (dev->chip == AGX_CHIP_G16G) {
+      dev->libagx_programs = libagx_g16g;
    } else {
       dev->libagx_programs = NULL;
    }
@@ -1402,7 +1407,8 @@ agx_open_device(void *memctx, struct agx_device *dev)
          goto fail;
       }
 
-      agx3_build_usc_base_page(map, usc_base_size, dev->chip);
+      agx3_build_usc_base_page(map, usc_base_size, dev->chip,
+                               dev->params.num_cores_per_cluster);
       agx_bo_assert_range(usc_base, 0, usc_base_size);
 
    }
@@ -1457,16 +1463,21 @@ uint32_t
 agx_create_command_queue_with_render_scs(struct agx_device *dev,
    enum drm_asahi_priority priority, const uint64_t layouts[2])
 {
-   if ((dev->debug & AGX_DBG_1QUEUE) && (layouts[0] || layouts[1])) {
-      errno = EINVAL;
-      return UINT32_MAX;
-   }
-
    if (dev->debug & AGX_DBG_1QUEUE) {
       // Abuse this lock for this, it's debug only anyway
       simple_mtx_lock(&dev->vma_lock);
       if (dev->queue_id) {
+         /* The shared queue serves a later caller only if it was created with
+          * every render SCS layout that caller needs (Vulkan's first queue
+          * brings the ray-query layout; GL needs none). */
+         const bool covered =
+            (!layouts[0] || layouts[0] == dev->queue_layouts[0]) &&
+            (!layouts[1] || layouts[1] == dev->queue_layouts[1]);
          simple_mtx_unlock(&dev->vma_lock);
+         if (!covered) {
+            errno = EINVAL;
+            return UINT32_MAX;
+         }
          return dev->queue_id;
       }
    }
@@ -1493,6 +1504,8 @@ agx_create_command_queue_with_render_scs(struct agx_device *dev,
 
    if (dev->debug & AGX_DBG_1QUEUE) {
       dev->queue_id = queue_create.queue_id;
+      dev->queue_layouts[0] = layouts[0];
+      dev->queue_layouts[1] = layouts[1];
       simple_mtx_unlock(&dev->vma_lock);
    }
 

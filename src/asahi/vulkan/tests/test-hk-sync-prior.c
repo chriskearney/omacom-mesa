@@ -9,34 +9,37 @@
 #include "hk_cmd_buffer.h"
 #include "hk_drm_prior_core.h"
 #include "hk_queue.h"
-_Static_assert(sizeof(struct drm_asahi_cmd_render) == 256, "legacy render");
-_Static_assert(sizeof(struct drm_asahi_cmd_compute) == 64,
+_Static_assert(sizeof(struct drm_asahi_cmd_render) == 320, "legacy render");
+_Static_assert(sizeof(struct drm_asahi_cmd_compute) == 128,
                "legacy Mesa compute");
-_Static_assert(sizeof(struct drm_asahi_cmd_render_with_prior) == 272,
+_Static_assert(sizeof(struct drm_asahi_cmd_render_with_prior) == 336,
                "render wire");
 _Static_assert(offsetof(struct drm_asahi_cmd_render_with_prior, prior_vdm) ==
-                  256,
+                  320,
                "render prior vdm");
 _Static_assert(offsetof(struct drm_asahi_cmd_render_with_prior, prior_cdm) ==
-                  264,
+                  328,
                "render prior cdm");
-_Static_assert(sizeof(struct drm_asahi_cmd_compute_with_prior) == 136,
+_Static_assert(sizeof(struct drm_asahi_cmd_compute_with_prior) == 200,
                "compute wire");
 _Static_assert(offsetof(struct drm_asahi_cmd_compute_with_prior, scs_layout) ==
-                  64,
+                  128,
                "kernel scs_layout gap");
 _Static_assert(offsetof(struct drm_asahi_cmd_compute_with_prior, prior_vdm) ==
-                  72,
+                  136,
                "compute prior vdm");
 _Static_assert(offsetof(struct drm_asahi_cmd_compute_with_prior, prior_cdm) ==
-                  80,
+                  144,
                "compute prior cdm");
 _Static_assert(offsetof(struct drm_asahi_cmd_compute_with_prior,
-                        cdm_auxiliary_allocation) == 88,
-               "compute auxiliary state follows prior barriers");
+                        cdm_auxiliary_allocation) == 152,
+               "compute auxiliary allocation");
 _Static_assert(offsetof(struct drm_asahi_cmd_compute_with_prior,
-                        intersection_default_control) == 128,
-               "compute ray-intersection tail");
+                        intersection_pool) == 160,
+               "compute intersection pool");
+_Static_assert(offsetof(struct drm_asahi_cmd_compute_with_prior,
+                        intersection_default_control) == 192,
+               "compute intersection default control");
 static unsigned tests, failures;
 static void *test_context;
 
@@ -100,6 +103,15 @@ hk_dispatch_imm_writes(struct hk_cmd_buffer *cmd, struct hk_cs *cs)
    abort();
 }
 
+/* This fixture never records query resets. */
+void
+hk_flush_query_resets(struct hk_cmd_buffer *cmd, struct hk_cs *cs)
+{
+   (void)cmd;
+   if (cs->query_reset_pending)
+      abort();
+}
+
 /* Record a real full-frame pass with a sparse-mask preservation footprint.
  * Layer ranges describe BG/EOT's physical access, not just enabled views. */
 static struct hk_cs *
@@ -116,6 +128,163 @@ render_pass(struct hk_cmd_buffer *cmd, const void *image, uint32_t layers,
    list_addtail(&cs->node, &cmd->control_streams);
    hk_sync_end_rendering(cmd);
    return cs;
+}
+
+
+/* Transfer one range [lo, hi) into a new compute stream, as the G17P
+ * transfer entry points and hk_cmd_buffer_get_cs_general() do. */
+static struct hk_cs *
+xfer_write(struct hk_cmd_buffer *cmd, uint64_t lo, uint64_t hi, bool bda)
+{
+   cmd->sync.xfer_depth = 1;
+   cmd->sync.xfer_dst = (struct hk_sync_xfer_dst){
+      .lo = lo, .hi = hi, .valid = lo < hi, .device_address = bda};
+   struct hk_cs *cs = add(cmd, true);
+   hk_sync_note_xfer_write(cmd, cs);
+   cmd->sync.xfer_depth = 0;
+   cmd->sync.xfer_dst = (struct hk_sync_xfer_dst){0};
+   return cs;
+}
+
+/* G17P transfer writes: only work that may access the written range is
+ * ordered after the transfer, everything else keeps its overlap. */
+static void
+test_xfer_write_order(void)
+{
+   struct hk_cmd_buffer *cmd = new_cmd();
+   struct hk_cs *xfer = xfer_write(cmd, 0x10000, 0x20000, false);
+   /* CTS null_as: the AS-build destination is never executed. */
+   hk_sync_barrier(cmd, HK_SYNC_XFER, HK_SYNC_COMPUTE);
+   T("non-graphics destination keeps the note", cmd->sync.xfer_write_count == 1);
+   T("an access inside the written range matches",
+     hk_sync_xfer_match(cmd, 0x18000, 0x18001, NULL) == xfer);
+   T("an unrelated resource does not match",
+     hk_sync_xfer_match(cmd, 0x20000, 0x30000, NULL) == NULL &&
+        hk_sync_xfer_match(cmd, 0x0, 0x10000, NULL) == NULL);
+   hk_sync_begin_rendering(cmd, false);
+   struct hk_cs *gfx = add(cmd, false);
+   T("a pass that does not access it keeps the overlap",
+     gfx->sync.dep[HK_SYNC_CDM].cut == NULL &&
+        gfx->sync.dep_ta[HK_SYNC_CDM].cut == NULL);
+   cmd->current_cs.gfx = gfx;
+   struct hk_cs *pre = test_alloc(sizeof(*pre));
+   pre->type = HK_CS_CDM;
+   list_addtail(&pre->node, &gfx->node);
+   hk_sync_stream_created(cmd, pre, &cmd->current_cs.pre_gfx, true);
+   cmd->current_cs.pre_gfx = pre;
+   T("pre-graphics work starts unordered", pre->sync.dep[HK_SYNC_CDM].cut == NULL);
+   /* A draw binds the cleared image. */
+   hk_sync_order_xfer(cmd, xfer);
+   /* The render already waits on its pre-graphics stream, a later prefix. */
+   T("the open render waits in both halves",
+     gfx->sync.dep[HK_SYNC_CDM].cut &&
+        gfx->sync.dep[HK_SYNC_CDM].cut->sync.seq >= xfer->sync.seq &&
+        gfx->sync.dep_ta[HK_SYNC_CDM].cut &&
+        gfx->sync.dep_ta[HK_SYNC_CDM].cut->sync.seq >= xfer->sync.seq);
+   T("its pre-graphics work waits", pre->sync.dep[HK_SYNC_CDM].cut == xfer);
+   T("the ordered note is dropped", !hk_sync_xfer_pending(&cmd->sync));
+   cmd->current_cs.pre_gfx = NULL;
+   cmd->current_cs.gfx = NULL;
+   hk_sync_end_rendering(cmd);
+   hk_sync_begin_rendering(cmd, false);
+   struct hk_cs *gfx2 = add(cmd, false);
+   T("later graphics stays ordered", gfx2->sync.dep[HK_SYNC_CDM].cut == xfer);
+   hk_sync_end_rendering(cmd);
+   struct hk_queue *queue = new_queue(true);
+   T("ordered transfer resolves", submit(queue, cmd));
+   T("pre-graphics waits for the exact transfer ordinal",
+     pre->sync.barrier[HK_SYNC_CDM] == xfer->sync.index);
+
+   /* Ordered at the next pass begin (an attachment). */
+   cmd = new_cmd();
+   xfer = xfer_write(cmd, 0x10000, 0x20000, false);
+   hk_sync_begin_rendering(cmd, false);
+   T("attachment match", hk_sync_xfer_match(cmd, 0x10000, 0x10001, NULL) == xfer);
+   hk_sync_order_xfer(cmd, xfer);
+   gfx = add(cmd, false);
+   T("the render created after waits in both halves",
+     gfx->sync.dep[HK_SYNC_CDM].cut == xfer &&
+        gfx->sync.dep_ta[HK_SYNC_CDM].cut == xfer);
+   T("robustness does not import earlier command buffers",
+     cmd->sync.req[0][HK_SYNC_CDM].prior == 0);
+   hk_sync_end_rendering(cmd);
+
+   /* Dependencies the application records into graphics stages. */
+   const uint8_t gfx_dsts[] = {HK_SYNC_GFX, HK_SYNC_GFX_FRAG,
+                               HK_SYNC_GFX_FRAG | HK_SYNC_GFX_IMG, HK_SYNC_ALL};
+   for (unsigned i = 0; i < ARRAY_SIZE(gfx_dsts); ++i) {
+      cmd = new_cmd();
+      xfer_write(cmd, 0x10000, 0x20000, false);
+      hk_sync_barrier(cmd, HK_SYNC_XFER, gfx_dsts[i]);
+      T("a transfer-to-graphics dependency drops the note",
+        !hk_sync_xfer_pending(&cmd->sync));
+   }
+   cmd = new_cmd();
+   xfer_write(cmd, 0x10000, 0x20000, false);
+   hk_sync_barrier(cmd, HK_SYNC_COMPUTE, HK_SYNC_GFX);
+   T("a compute-to-graphics dependency does not cover a transfer",
+     hk_sync_xfer_pending(&cmd->sync));
+   hk_sync_barrier(cmd, HK_SYNC_ALL, HK_SYNC_ALL);
+   T("ALL_COMMANDS covers it", !hk_sync_xfer_pending(&cmd->sync));
+   xfer = xfer_write(cmd, 0x10000, 0x20000, false);
+   T("a write after the dependency is noted again",
+     hk_sync_xfer_match(cmd, 0x10000, 0x20000, NULL) == xfer);
+
+   /* The same stream launching again for one transfer is one note. */
+   cmd = new_cmd();
+   xfer = xfer_write(cmd, 0x10000, 0x20000, false);
+   cmd->sync.xfer_depth = 1;
+   cmd->sync.xfer_dst = (struct hk_sync_xfer_dst){
+      .lo = 0x20000, .hi = 0x28000, .valid = true};
+   hk_sync_note_xfer_write(cmd, xfer);
+   cmd->sync.xfer_depth = 0;
+   T("an adjacent launch widens the note",
+     cmd->sync.xfer_write_count == 1 && cmd->sync.xfer_writes[0].hi == 0x28000);
+
+   /* What a draw cannot see matches every access. */
+   cmd = new_cmd();
+   xfer = xfer_write(cmd, 0x10000, 0x20000, true);
+   T("a device-address buffer matches any access",
+     hk_sync_xfer_match(cmd, 0x90000, 0x90001, NULL) == xfer);
+   cmd = new_cmd();
+   xfer = xfer_write(cmd, 0, 0, false);
+   T("an unknown destination matches any access",
+     hk_sync_xfer_match(cmd, 0x90000, 0x90001, NULL) == xfer);
+   cmd = new_cmd();
+   struct hk_cs *last = NULL;
+   for (unsigned i = 0; i <= HK_SYNC_XFER_WRITES; ++i)
+      last = xfer_write(cmd, 0x10000 * (i + 1), 0x10000 * (i + 1) + 0x100, false);
+   T("a write past the bound matches any access",
+     cmd->sync.xfer_write_count == HK_SYNC_XFER_WRITES &&
+        hk_sync_xfer_match(cmd, 0x900000, 0x900001, NULL) == last);
+   T("and every noted stream is matched by match_all",
+     hk_sync_xfer_match_all(cmd, NULL) == last);
+   /* Ordering a middle stream drops only the notes it covers. */
+   struct hk_cs *mid = cmd->sync.xfer_writes[3].cs;
+   hk_sync_order_xfer(cmd, mid);
+   T("a prefix covers the notes at or before it",
+     cmd->sync.xfer_write_count == HK_SYNC_XFER_WRITES - 4 &&
+        cmd->sync.xfer_any == last);
+
+   /* Application compute is never noted. */
+   cmd = new_cmd();
+   add(cmd, true);
+   T("application compute is not a transfer write",
+     !hk_sync_xfer_pending(&cmd->sync));
+
+   /* Stream bookkeeping. */
+   cmd = new_cmd();
+   xfer = xfer_write(cmd, 0x10000, 0x20000, false);
+   struct hk_cs *later = xfer_write(cmd, 0x30000, 0x40000, false);
+   hk_sync_merge(cmd, xfer, later);
+   T("a merged stream's note follows it",
+     hk_sync_xfer_match(cmd, 0x30000, 0x30001, NULL) == xfer);
+   hk_sync_forget_stream(cmd, xfer);
+   T("a removed first stream's notes are dropped",
+     !hk_sync_xfer_pending(&cmd->sync));
+   xfer_write(cmd, 0x10000, 0x20000, true);
+   hk_sync_reset(cmd);
+   T("command buffer reset drops the notes", !hk_sync_xfer_pending(&cmd->sync));
 }
 
 static void
@@ -194,6 +363,79 @@ compute_clear_pass(struct hk_cmd_buffer *cmd, const void *image,
 }
 
 static void
+test_loaded_color_preservation(void)
+{
+   const void *image = (void *)0x1234;
+   struct hk_cmd_buffer *cmd = new_cmd();
+   struct hk_cs *clear = compute_clear_pass(cmd, image, 0, true);
+   struct hk_cs *load = render_pass(cmd, image, 1, true);
+   T("full-area color load waits on its compute clear",
+     load->sync.dep[HK_SYNC_CDM].cut == clear &&
+     !load->sync.dep[HK_SYNC_VDM].cut);
+   struct hk_queue *queue = new_queue(true);
+   T("loaded color submit", submit(queue, cmd));
+   T("loaded color names the exact compute producer",
+     load->sync.barrier[HK_SYNC_CDM] == clear->sync.index &&
+     load->sync.barrier[HK_SYNC_VDM] == DRM_ASAHI_BARRIER_NONE);
+
+   cmd = new_cmd();
+   clear = compute_clear_pass(cmd, image, 0, true);
+   struct hk_cs *other = render_pass(cmd, (void *)0x5678, 1, true);
+   T("unrelated loaded image remains independent",
+     !other->sync.dep[HK_SYNC_CDM].cut &&
+     !other->sync.dep[HK_SYNC_VDM].cut);
+   struct hk_cs *overwrite = render_pass(cmd, image, 1, false);
+   T("complete clear or discard does not preserve prior color",
+     !overwrite->sync.dep[HK_SYNC_CDM].cut &&
+     !overwrite->sync.dep[HK_SYNC_VDM].cut);
+
+   struct hk_cmd_buffer *a = new_cmd(), *b = new_cmd();
+   clear = compute_clear_pass(a, image, 0, true);
+   load = render_pass(b, image, 1, true);
+   queue = new_queue(true);
+   struct hk_cmd_buffer *pair[] = {a, b};
+   T("loaded color across command buffers submit",
+     hk_sync_resolve_submit(queue, pair, 2, false, false, 0));
+   T("loaded color across command buffers retains compute clear",
+     load->sync.barrier[HK_SYNC_CDM] == clear->sync.index &&
+     load->sync.barrier[HK_SYNC_VDM] == DRM_ASAHI_BARRIER_NONE);
+
+   a = new_cmd(); b = new_cmd();
+   compute_clear_pass(a, image, 0, true);
+   load = render_pass(b, (void *)0x5678, 1, true);
+   pair[0] = a; pair[1] = b;
+   queue = new_queue(true);
+   T("unrelated color across command buffers submit",
+     hk_sync_resolve_submit(queue, pair, 2, false, false, 0));
+   T("unrelated color across command buffers stays independent",
+     load->sync.barrier[HK_SYNC_CDM] == DRM_ASAHI_BARRIER_NONE &&
+     load->sync.barrier[HK_SYNC_VDM] == DRM_ASAHI_BARRIER_NONE);
+
+   cmd = new_cmd();
+   clear = compute_clear_pass(cmd, image, 1, true);
+   load = render_pass(cmd, image, 1, true);
+   T("loaded layer zero does not wait on disjoint layer one",
+     !load->sync.dep[HK_SYNC_CDM].cut);
+   load = render_pass(cmd, image, 2, true);
+   T("loaded layer range waits on overlapping compute clear",
+     load->sync.dep[HK_SYNC_CDM].cut == clear);
+
+   a = new_cmd(); b = new_cmd();
+   clear = compute_clear_pass(a, image, 0, true);
+   load = render_pass(b, image, 1, true);
+   queue = new_queue(true);
+   queue->drm.timeline_value = 1;
+   T("loaded color producer submission", submit(queue, a));
+   queue->drm.timeline_value = 2;
+   struct hk_cmd_buffer *single[] = {b};
+   T("loaded color consumer submission",
+     hk_sync_resolve_submit(queue, single, 1, false, false, 0));
+   T("loaded color waits on prior compute history",
+     load->sync.barrier[HK_SYNC_CDM] == 0 &&
+     load->sync.barrier[HK_SYNC_VDM] == DRM_ASAHI_BARRIER_NONE);
+}
+
+static void
 test_compute_clear_layer_preservation(void)
 {
    const void *image = (void *)0x1234;
@@ -268,7 +510,12 @@ add_slot(struct hk_cmd_buffer *cmd, struct hk_cs **slot, bool compute)
 {
    struct hk_cs *cs = test_alloc(sizeof(*cs));
    cs->type = compute ? HK_CS_CDM : HK_CS_VDM;
-   list_addtail(&cs->node, &cmd->control_streams);
+   /* Match the real allocator when software work is introduced after the
+    * consuming render has already been opened. */
+   if (slot == &cmd->current_cs.pre_gfx && cmd->current_cs.gfx)
+      list_addtail(&cs->node, &cmd->current_cs.gfx->node);
+   else
+      list_addtail(&cs->node, &cmd->control_streams);
    *slot = cs;
    hk_sync_stream_created(cmd, cs, slot, compute);
    return cs;
@@ -277,6 +524,36 @@ add_slot(struct hk_cmd_buffer *cmd, struct hk_cs **slot, bool compute)
 static void
 test_pass_software_graphics_dependencies(void)
 {
+   struct hk_cmd_buffer *local = new_cmd();
+   hk_sync_begin_rendering(local, false);
+   struct hk_cs *render = add_slot(local, &local->current_cs.gfx, false);
+   hk_sync_pass_barrier(local, HK_SYNC_GFX, HK_SYNC_GFX_FRAG);
+   struct hk_cs *pre = add_slot(local, &local->current_cs.pre_gfx, true);
+   T("software vertex work does not wait on fragment-only destination",
+     !pre->sync.dep[HK_SYNC_VDM].cut);
+   T("render still waits on its new pre-graphics producer",
+     render->sync.dep[HK_SYNC_CDM].cut == pre);
+   hk_sync_end_rendering(local);
+   struct hk_queue *local_queue = new_queue(true);
+   T("local barrier and later software draw resolve without cycle",
+     submit(local_queue, local));
+
+   local = new_cmd();
+   struct hk_cs *external = add(local, false);
+   hk_sync_barrier(local, HK_SYNC_GFX, HK_SYNC_GFX_FRAG);
+   hk_sync_begin_rendering(local, false);
+   render = add_slot(local, &local->current_cs.gfx, false);
+   hk_sync_pass_barrier(local, HK_SYNC_GFX, HK_SYNC_GFX_FRAG);
+   pre = add_slot(local, &local->current_cs.pre_gfx, true);
+   T("pre-graphics producer retains external fragment requirements",
+     pre->sync.dep[HK_SYNC_VDM].cut == external);
+   T("local requirement does not replace producer's external source",
+     pre->sync.dep[HK_SYNC_VDM].cut != render);
+   hk_sync_end_rendering(local);
+   local_queue = new_queue(true);
+   T("external and local requirements resolve without cycle",
+     submit(local_queue, local));
+
    struct hk_cmd_buffer *cmd = new_cmd();
    hk_sync_begin_rendering(cmd, false);
    struct hk_cs *first_pre =
@@ -337,15 +614,287 @@ test_pass_software_graphics_dependencies(void)
    hk_sync_end_rendering(cmd);
 }
 
+/* Kernels without per-command input syncs attach the ioctl's waits to the
+ * first command only, so every later command is chained onto it. The first
+ * command belongs to the first command buffer that emits a stream: chaining
+ * onto a subqueue with no earlier command gives the kernel a barrier it
+ * rejects with EINVAL. */
+/* G17P image barriers order a render's vertex half only once it draws with a
+ * pre-rasterization shader that reads images (HK_SYNC_GFX_IMG). */
+static void
+test_image_barrier_vertex_class(void)
+{
+   const VkImageMemoryBarrier2 image = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+      .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+      .dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT |
+                      VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+   };
+   const VkMemoryBarrier2 memory = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+      .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+      .dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT,
+   };
+   const VkDependencyInfo image_dep = {
+      .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+      .imageMemoryBarrierCount = 1,
+      .pImageMemoryBarriers = &image,
+   };
+   const VkDependencyInfo memory_dep = {
+      .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+      .memoryBarrierCount = 1,
+      .pMemoryBarriers = &memory,
+   };
+   uint8_t src, dst;
+   hk_sync_dependency_kinds(&image_dep, true, &src, &dst);
+   T("image barrier names the fragment and image classes",
+     src == HK_SYNC_GFX && dst == (HK_SYNC_GFX_FRAG | HK_SYNC_GFX_IMG));
+   hk_sync_dependency_kinds(&image_dep, false, &src, &dst);
+   T("without the image class an image barrier names graphics",
+     dst == HK_SYNC_GFX);
+   hk_sync_dependency_kinds(&memory_dep, true, &src, &dst);
+   T("memory barrier still names graphics", dst == HK_SYNC_GFX);
+
+   struct hk_cmd_buffer *cmd = new_cmd();
+   struct hk_cs *producer = add(cmd, false);
+   hk_sync_barrier(cmd, HK_SYNC_GFX, HK_SYNC_GFX_FRAG | HK_SYNC_GFX_IMG);
+   struct hk_cs *plain = add(cmd, false);
+   T("fragment half waits on the image producer",
+     plain->sync.dep[HK_SYNC_VDM].cut == producer);
+   T("vertex half without image reads does not",
+     !plain->sync.dep_ta[HK_SYNC_VDM].cut);
+   struct hk_cs *reader = add(cmd, false);
+   hk_sync_vertex_images(cmd, reader);
+   T("image-reading vertex half waits on the image producer",
+     reader->sync.dep_ta[HK_SYNC_VDM].cut == producer);
+   struct hk_queue *queue = new_queue(true);
+   T("image class submit", submit(queue, cmd));
+   T("plain render splits its vertex half off",
+     plain->sync.barrier_ta[HK_SYNC_VDM] == DRM_ASAHI_BARRIER_NONE &&
+     plain->sync.prior_ta[HK_SYNC_VDM] == 0 &&
+     (plain->sync.barrier[HK_SYNC_VDM] != DRM_ASAHI_BARRIER_NONE ||
+      plain->sync.prior[HK_SYNC_VDM] != 0));
+   T("image-reading render keeps its vertex half ordered",
+     reader->sync.barrier_ta[HK_SYNC_VDM] ==
+        reader->sync.barrier[HK_SYNC_VDM] &&
+     reader->sync.prior_ta[HK_SYNC_VDM] == reader->sync.prior[HK_SYNC_VDM]);
+
+   /* Carried into a later command buffer of the same submission. */
+   struct hk_cmd_buffer *a = new_cmd(), *b = new_cmd();
+   producer = add(a, false);
+   hk_sync_barrier(a, HK_SYNC_GFX, HK_SYNC_GFX_FRAG | HK_SYNC_GFX_IMG);
+   plain = add(b, false);
+   reader = add(b, false);
+   hk_sync_vertex_images(b, reader);
+   queue = new_queue(true);
+   struct hk_cmd_buffer *pair[] = {a, b};
+   T("carried image class submit",
+     hk_sync_resolve_submit(queue, pair, 2, false, false, 0));
+   T("carried image class leaves a plain vertex half unordered",
+     plain->sync.barrier_ta[HK_SYNC_VDM] == DRM_ASAHI_BARRIER_NONE &&
+     plain->sync.prior_ta[HK_SYNC_VDM] == 0);
+   T("carried image class orders an image-reading vertex half",
+     reader->sync.barrier_ta[HK_SYNC_VDM] != DRM_ASAHI_BARRIER_NONE ||
+     reader->sync.prior_ta[HK_SYNC_VDM] != 0);
+}
+
+static void
+test_chain_first_skips_empty_buffers(void)
+{
+   for (unsigned exact = 0; exact < 2; ++exact) {
+      struct hk_queue *q = new_queue(exact);
+      struct hk_cmd_buffer *empty = new_cmd();
+      struct hk_cmd_buffer *a = new_cmd();
+      struct hk_cmd_buffer *b = new_cmd();
+      struct hk_cs *compute = add(a, true);
+      struct hk_cs *render = add(b, false);
+      struct hk_cmd_buffer *ecr[] = {empty, a, b};
+      T("chain [empty, compute, render]",
+        hk_sync_resolve_submit(q, ecr, 3, false, true, 0));
+      T("chain first command has no barrier",
+        compute->sync.barrier[HK_SYNC_VDM] == DRM_ASAHI_BARRIER_NONE &&
+           compute->sync.barrier[HK_SYNC_CDM] == DRM_ASAHI_BARRIER_NONE);
+      T("chain no barrier on VDM before any render",
+        render->sync.barrier[HK_SYNC_VDM] == DRM_ASAHI_BARRIER_NONE);
+      T("chain render follows the first compute",
+        render->sync.barrier[HK_SYNC_CDM] == 1);
+      T("chain vertex half matches",
+        render->sync.barrier_ta[HK_SYNC_VDM] == DRM_ASAHI_BARRIER_NONE &&
+           render->sync.barrier_ta[HK_SYNC_CDM] == 1);
+
+      q = new_queue(exact);
+      empty = new_cmd();
+      a = new_cmd();
+      b = new_cmd();
+      render = add(a, false);
+      compute = add(b, true);
+      struct hk_cmd_buffer *erc[] = {empty, a, b};
+      T("chain [empty, render, compute]",
+        hk_sync_resolve_submit(q, erc, 3, false, true, 0));
+      T("chain no barrier on CDM before any compute",
+        compute->sync.barrier[HK_SYNC_CDM] == DRM_ASAHI_BARRIER_NONE &&
+           compute->sync.barrier[HK_SYNC_VDM] == 1 &&
+           render->sync.barrier[HK_SYNC_VDM] == DRM_ASAHI_BARRIER_NONE &&
+           render->sync.barrier[HK_SYNC_CDM] == DRM_ASAHI_BARRIER_NONE);
+
+      /* Unchanged when the first command buffer has work. */
+      q = new_queue(exact);
+      a = new_cmd();
+      b = new_cmd();
+      compute = add(a, true);
+      render = add(b, false);
+      struct hk_cmd_buffer *cr[] = {a, b};
+      T("chain [compute, render]",
+        hk_sync_resolve_submit(q, cr, 2, false, true, 0));
+      T("chain [compute, render] render follows compute",
+        compute->sync.barrier[HK_SYNC_CDM] == DRM_ASAHI_BARRIER_NONE &&
+           render->sync.barrier[HK_SYNC_VDM] == DRM_ASAHI_BARRIER_NONE &&
+           render->sync.barrier[HK_SYNC_CDM] == 1);
+
+      /* No command at all: nothing to chain. */
+      q = new_queue(exact);
+      struct hk_cmd_buffer *ee[] = {new_cmd(), new_cmd()};
+      T("chain without commands",
+        hk_sync_resolve_submit(q, ee, 2, false, true, 0) &&
+           q->sync.submitted[HK_SYNC_VDM] == 0 &&
+           q->sync.submitted[HK_SYNC_CDM] == 0);
+   }
+}
+
+/* Native ray tracing sends the extended compute command, which only a
+ * kernel advertising both the exact-prior layout and ray query state parses.
+ * Anything less keeps ray tracing off. */
+static void
+test_rt_kernel_gate(void)
+{
+   struct agx_device *dev = test_alloc(sizeof(*dev));
+   dev->chip = AGX_CHIP_G17P;
+   dev->params.features = DRM_ASAHI_FEATURE_EXACT_PRIOR_BARRIERS |
+                          DRM_ASAHI_FEATURE_RENDER_RAY_QUERY;
+   T("rt on with exact prior and ray query", hk_g17p_rt_enabled(dev));
+   dev->params.features = DRM_ASAHI_FEATURE_EXACT_PRIOR_BARRIERS;
+   T("rt off without ray query", !hk_g17p_rt_enabled(dev));
+   dev->params.features = DRM_ASAHI_FEATURE_RENDER_RAY_QUERY;
+   T("rt off without exact prior", !hk_g17p_rt_enabled(dev));
+   dev->params.features = 0;
+   T("rt off on a kernel without either", !hk_g17p_rt_enabled(dev));
+   dev->chip = AGX_CHIP_G13G;
+   dev->params.features = DRM_ASAHI_FEATURE_EXACT_PRIOR_BARRIERS |
+                          DRM_ASAHI_FEATURE_RENDER_RAY_QUERY;
+   T("rt off outside G17P", !hk_g17p_rt_enabled(dev));
+}
+
+/* Exercise the production payload helper against upstream's prefix contract.
+ * A packet is private to an occurrence, even when its hk_cs is shared. */
+static void
+check_classic_packet(struct hk_cs *cs, const unsigned prefix[2],
+                      const uint64_t base[2], bool exact)
+{
+   struct drm_asahi_cmd_header packet = agx_cmd_header(
+      cs->type == HK_CS_CDM, cs->sync.barrier[0], cs->sync.barrier[1]);
+   uint64_t prior[2] = {cs->sync.prior[0], cs->sync.prior[1]};
+   T("classic payload prefix", hk_drm_serialize_prefix(
+        &packet, prior, prefix[0], prefix[1], base, exact));
+   const unsigned barriers[2] = {packet.vdm_barrier, packet.cdm_barrier};
+   for (unsigned sq = 0; sq < 2; ++sq) {
+      bool historical = exact && prefix[sq] == 0;
+      T("classic upstream prefix", barriers[sq] ==
+         (historical ? DRM_ASAHI_BARRIER_NONE : prefix[sq]));
+      T("classic prior ordinal", prior[sq] == (historical ? base[sq] : 0));
+   }
+}
+
+static void
+test_classic_submission_order(void)
+{
+   for (unsigned exact = 0; exact < 2; ++exact) {
+      for (unsigned groups = 1; groups <= 4; groups *= 2) {
+         for (unsigned mix = 0; mix < 16; ++mix) {
+            struct hk_queue *q = new_queue(exact);
+            q->sync.serialize = true;
+            q->sync.submitted[0] = 7;
+            q->sync.submitted[1] = 11;
+            struct hk_cmd_buffer *cmds[4];
+            struct hk_cs *streams[4];
+            for (unsigned i = 0; i < groups; ++i)
+               cmds[i] = new_cmd();
+            for (unsigned i = 0; i < 4; ++i)
+               streams[i] = add(cmds[i * groups / 4], mix & (1u << i));
+            T("classic mixed submission", hk_sync_resolve_submit(
+                 q, cmds, groups, false, false, 0));
+            unsigned prefix[2] = {0, 0};
+            const uint64_t base[2] = {7, 11};
+            for (unsigned i = 0; i < 4; ++i) {
+               check_classic_packet(streams[i], prefix, base, exact);
+               prefix[hk_sync_sq(streams[i])]++;
+            }
+            struct hk_cmd_buffer *next = new_cmd();
+            struct hk_cs *read = add(next, true);
+            const uint64_t next_base[2] = {7 + prefix[0], 11 + prefix[1]};
+            const unsigned zero[2] = {0, 0};
+            T("classic later read submission", submit(q, next));
+            check_classic_packet(read, zero, next_base, exact);
+         }
+      }
+
+      /* NONE event set/reset reuses one simultaneous-use recording in two
+       * merged VkSubmitInfo2 entries. Include empty buffers and graphics too. */
+      struct hk_queue *q = new_queue(exact);
+      q->sync.serialize = true;
+      q->sync.submitted[0] = 7;
+      q->sync.submitted[1] = 11;
+      struct hk_cmd_buffer *empty = new_cmd(), *event = new_cmd();
+      struct hk_cmd_buffer *draw = new_cmd();
+      add(event, true);
+      add(draw, false);
+      struct hk_cmd_buffer *cmds[] = {empty, event, event, draw, event};
+      T("classic repeated recording", hk_sync_resolve_submit(
+           q, cmds, 5, false, false, 0));
+      unsigned prefix[2] = {0, 0};
+      const uint64_t base[2] = {7, 11};
+      for (unsigned i = 0; i < 5; ++i) {
+         list_for_each_entry(struct hk_cs, cs, &cmds[i]->control_streams, node) {
+            check_classic_packet(cs, prefix, base, exact);
+            prefix[hk_sync_sq(cs)]++;
+         }
+      }
+      T("classic repeated ordinals", !exact ||
+         (q->sync.submitted[0] == 8 && q->sync.submitted[1] == 14));
+   }
+
+   struct drm_asahi_cmd_header packet = agx_cmd_header(true, 0, 0);
+   struct drm_asahi_cmd_header saved = packet;
+   uint64_t prior[2] = {3, 5}, base[2] = {7, 11};
+   T("classic prefix overflow rejected", !hk_drm_serialize_prefix(
+        &packet, prior, DRM_ASAHI_BARRIER_NONE, 0, base, true));
+   T("classic prefix overflow no mutation", !memcmp(&packet, &saved,
+      sizeof(packet)) && prior[0] == 3 && prior[1] == 5);
+
+   /* Native independent streams keep their original graph policy. */
+   struct hk_queue *q = new_queue(true);
+   struct hk_cmd_buffer *cmd = new_cmd();
+   add(cmd, false);
+   struct hk_cs *compute = add(cmd, true);
+   T("native independent submission", submit(q, cmd));
+   T("native remains unordered", compute->sync.barrier[0] ==
+      DRM_ASAHI_BARRIER_NONE && compute->sync.prior[0] == 0);
+}
+
 int
 main(void)
 {
    test_context = ralloc_context(NULL);
+   test_classic_submission_order();
    if (!test_context)
       return EXIT_FAILURE;
+   test_xfer_write_order();
    test_multiview_layer_preservation();
    test_compute_clear_layer_preservation();
+   test_loaded_color_preservation();
    test_pass_software_graphics_dependencies();
+   test_image_barrier_vertex_class();
+   test_chain_first_skips_empty_buffers();
+   test_rt_kernel_gate();
    /* Each matching destination retains the exact old source prefix, including
     * reuse of a recording and independent physical destinations on the queue. */
    struct hk_queue *q = new_queue(true);

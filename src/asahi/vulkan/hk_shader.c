@@ -7,6 +7,9 @@
  * SPDX-License-Identifier: MIT
  */
 #include "hk_shader.h"
+#include "hk_nir_lower_gs.h"
+#include "hk_nir_root_size.h"
+#include "hk_nir_lower_tes_rq.h"
 #include "hk_nir_sampler_bias.h"
 #include "hk_gen1_rt_indirect_contract.h"
 #include "asahi/compiler/agx_nir_m5_mesh.h"
@@ -14,6 +17,7 @@
 #include "asahi/compiler/agx_nir_gen1_ray_query.h"
 #include "hk_nir_border_index.h"
 #include "util/u_debug.h"
+#include "util/u_atomic.h"
 
 #include "hk_nir_ray_tracing.h"
 #include "hk_nir_forward_image_stores.h"
@@ -102,7 +106,19 @@ struct hk_fs_key {
     */
    uint8_t g17p_samples;
 
-   uint8_t pad;
+   /** AGX3: alpha-to-coverage is statically disabled, so no fragment epilog of
+    * this shader discards unless the shader writes depth or stencil
+    * (agx_fs_epilog_may_discard()). The main part then always runs the
+    * depth/stencil tests itself and need not select that at draw time; the
+    * pipeline state also rules out a read-only early reject.
+    */
+   bool static_tests : 1;
+
+   /** G17P: complete pipeline state proves that no colour output can be
+    * consumed (no colour attachment, alpha-to-coverage statically off), so
+    * colour stores are pruned before varying linking.
+    */
+   bool discard_color_outputs : 1;
 };
 
 struct hk_shader_binary_cache_entry {
@@ -123,7 +139,11 @@ struct hk_vs_key {
    bool skip_prolog;
    bool static_strides;
    bool kill_psiz;
-   bool pad[1];
+
+   /** Compiled together with a fragment shader that never reads gl_Layer:
+    * no default layer output (agx_nir_lower_default_layer()) is needed.
+    */
+   bool no_default_layer;
 };
 static_assert(sizeof(struct hk_vs_key) == 260, "packed");
 
@@ -474,6 +494,36 @@ hk_populate_vs_key(struct hk_vs_key *key,
    }
 }
 
+/* The native AGX3B parts (G15, G17P) run a discarding shader's read-only
+ * depth test in the prolog instead (hk_g17p_read_only_early_reject_in()),
+ * with the main part's selector off. Whether a draw takes that path is
+ * draw-time state; these pipeline states rule it out for every draw. */
+static bool
+hk_g17p_static_no_early_reject(const struct vk_graphics_pipeline_state *state)
+{
+   if (state->ms != NULL &&
+       !BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_MS_RASTERIZATION_SAMPLES) &&
+       state->ms->rasterization_samples > 1)
+      return true;
+
+   const struct vk_depth_stencil_state *ds = state->ds;
+   if (ds == NULL)
+      return false;
+
+   if (!BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_DS_DEPTH_TEST_ENABLE) &&
+       !ds->depth.test_enable)
+      return true;
+   if (!BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_DS_DEPTH_WRITE_ENABLE) &&
+       ds->depth.write_enable)
+      return true;
+   if (!BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_DS_DEPTH_COMPARE_OP) &&
+       ds->depth.compare_op == VK_COMPARE_OP_ALWAYS)
+      return true;
+   return !BITSET_TEST(state->dynamic,
+                       MESA_VK_DYNAMIC_DS_DEPTH_BOUNDS_TEST_ENABLE) &&
+          ds->depth.bounds_test.enable;
+}
+
 static void
 hk_populate_fs_key(struct hk_fs_key *key,
                    const struct vk_graphics_pipeline_state *state,
@@ -489,6 +539,13 @@ hk_populate_fs_key(struct hk_fs_key *key,
    if (agx_chip_native_agx3(chip) && state->ms != NULL &&
        !BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_MS_RASTERIZATION_SAMPLES))
       key->g17p_samples = state->ms->rasterization_samples;
+
+   if (agx_chip_native_agx3(chip) && state->ms != NULL &&
+       !BITSET_TEST(state->dynamic,
+                    MESA_VK_DYNAMIC_MS_ALPHA_TO_COVERAGE_ENABLE) &&
+       !state->ms->alpha_to_coverage_enable &&
+       hk_g17p_static_no_early_reject(state))
+      key->static_tests = true;
 
    if (state->pipeline_flags &
        VK_PIPELINE_CREATE_2_DEPTH_STENCIL_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT)
@@ -514,6 +571,71 @@ hk_populate_fs_key(struct hk_fs_key *key,
    const struct vk_multisample_state *ms = state->ms;
    if (ms != NULL && ms->sample_shading_enable)
       key->force_sample_shading = true;
+
+   /* A fragment library without output-interface state may acquire color
+    * attachments later. Alpha-to-coverage also consumes color even without
+    * an attachment, so require it to be statically disabled. */
+   if (chip == AGX_CHIP_G17P && state->rp &&
+       (state->cal || BITSET_TEST(state->dynamic,
+                                   MESA_VK_DYNAMIC_COLOR_ATTACHMENT_MAP)) &&
+       vk_render_pass_state_has_attachment_info(state->rp) &&
+       state->rp->color_attachment_count == 0 && ms &&
+       !BITSET_TEST(state->dynamic,
+                    MESA_VK_DYNAMIC_MS_ALPHA_TO_COVERAGE_ENABLE) &&
+       !ms->alpha_to_coverage_enable)
+      key->discard_color_outputs = true;
+}
+
+static bool
+hk_remove_unused_color_store(UNUSED nir_builder *b, nir_intrinsic_instr *intr,
+                             UNUSED void *data)
+{
+   if (intr->intrinsic != nir_intrinsic_store_output)
+      return false;
+
+   const unsigned location = nir_intrinsic_io_semantics(intr).location;
+   if (location != FRAG_RESULT_COLOR &&
+       (location < FRAG_RESULT_DATA0 || location > FRAG_RESULT_DATA7))
+      return false;
+
+   nir_instr_remove(&intr->instr);
+   return true;
+}
+
+static void
+hk_prune_unused_fragment_colors(nir_shader *nir, const struct hk_fs_key *key)
+{
+   if (!key->discard_color_outputs)
+      return;
+
+   assert(nir->info.stage == MESA_SHADER_FRAGMENT && nir->info.io_lowered);
+   /* An output read may still consume a preceding shader-local write. */
+   nir_foreach_function_impl(impl, nir) {
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
+            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+            if (intr->intrinsic == nir_intrinsic_load_output) {
+               const unsigned loc = nir_intrinsic_io_semantics(intr).location;
+               if (loc == FRAG_RESULT_COLOR ||
+                   (loc >= FRAG_RESULT_DATA0 && loc <= FRAG_RESULT_DATA7))
+                  return;
+            }
+         }
+      }
+   }
+   NIR_PASS(_, nir, nir_shader_intrinsics_pass, hk_remove_unused_color_store,
+            nir_metadata_control_flow, NULL);
+
+   bool progress;
+   do {
+      progress = false;
+      NIR_PASS(progress, nir, nir_opt_dce);
+      NIR_PASS(progress, nir, nir_opt_dead_cf);
+      NIR_PASS(progress, nir, nir_opt_remove_phis);
+   } while (progress);
+   nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
 }
 
 /* Every enabled device feature that changes a shader's code must be in this
@@ -531,6 +653,14 @@ enum hk_feature_key {
    HK_FEAT_ROBUST_BUFFER_ACCESS = BITFIELD_BIT(2),
    HK_FEAT_ROBUST_BUFFER_ACCESS_2 = BITFIELD_BIT(3),
    HK_FEAT_PIPELINE_ROBUSTNESS = BITFIELD_BIT(4),
+
+   /* G17P compiles against its native ray-query state only on a device that
+    * enables a ray-tracing feature (hk_rt_features_enabled()). Ray-query
+    * shaders target that state's uniform and SCS layout, and Poly's geometry
+    * and evaluation lowering also runs extra passes with it, query or not.
+    * The bit is never set where ray tracing is not advertised. */
+   HK_FEAT_RAY_TRACING = BITFIELD_BIT(5),
+   HK_FEAT_NULL_DESCRIPTOR = BITFIELD_BIT(6),
 };
 
 /* What a dynamic-sample-count G17P fragment shader needs to compile its
@@ -589,7 +719,9 @@ hk_make_feature_key(const struct vk_features *feats)
               : 0) |
           (feats->robustBufferAccess ? HK_FEAT_ROBUST_BUFFER_ACCESS : 0) |
           (feats->robustBufferAccess2 ? HK_FEAT_ROBUST_BUFFER_ACCESS_2 : 0) |
-          (feats->pipelineRobustness ? HK_FEAT_PIPELINE_ROBUSTNESS : 0);
+          (feats->pipelineRobustness ? HK_FEAT_PIPELINE_ROBUSTNESS : 0) |
+          (hk_rt_features_enabled(feats) ? HK_FEAT_RAY_TRACING : 0) |
+          (feats->nullDescriptor ? HK_FEAT_NULL_DESCRIPTOR : 0);
 }
 
 /*
@@ -784,22 +916,31 @@ lower_load_global_bounded(nir_builder *b, nir_intrinsic_instr *intr)
    nir_def_replace(&intr->def, val);
 }
 
+struct global_load_lowering {
+   bool soft_fault;
+   /* G17P: storage-buffer loads use the soft-fault form as well: load, then
+    * zero the value when the access is out of bounds. */
+   bool storage_result_select;
+};
+
 static bool
 lower_load_global_constant_offset_instr(nir_builder *b,
                                         nir_intrinsic_instr *intrin, void *data)
 {
-   bool *has_soft_fault = data;
+   const struct global_load_lowering *state = data;
 
-   if (intrin->intrinsic == nir_intrinsic_load_global_bounded ||
+   if ((intrin->intrinsic == nir_intrinsic_load_global_bounded &&
+        !(state->soft_fault && state->storage_result_select)) ||
        (intrin->intrinsic == nir_intrinsic_load_global_constant_bounded &&
-        !(*has_soft_fault))) {
+        !state->soft_fault)) {
 
       lower_load_global_bounded(b, intrin);
       return true;
    }
 
    if (intrin->intrinsic != nir_intrinsic_load_global_constant_offset &&
-       intrin->intrinsic != nir_intrinsic_load_global_constant_bounded)
+       intrin->intrinsic != nir_intrinsic_load_global_constant_bounded &&
+       intrin->intrinsic != nir_intrinsic_load_global_bounded)
       return false;
 
    b->cursor = nir_before_instr(&intrin->instr);
@@ -813,19 +954,30 @@ lower_load_global_constant_offset_instr(nir_builder *b,
    unsigned byte_size = bit_size / 8;
    unsigned load_size = byte_size * intrin->num_components;
 
-   if (intrin->intrinsic == nir_intrinsic_load_global_constant_bounded) {
+   const bool bounded =
+      intrin->intrinsic == nir_intrinsic_load_global_constant_bounded ||
+      intrin->intrinsic == nir_intrinsic_load_global_bounded;
+   if (bounded) {
       bound = intrin->src[2].ssa;
    }
 
    unsigned align_mul = nir_intrinsic_align_mul(intrin);
    unsigned align_offset = nir_intrinsic_align_offset(intrin);
 
-   nir_def *val = nir_load_global_constant(
-      b, intrin->def.num_components, intrin->def.bit_size,
-      nir_iadd(b, base_addr, nir_u2u64(b, offset)), .align_mul = align_mul,
-      .align_offset = align_offset, .access = nir_intrinsic_access(intrin));
+   nir_def *addr = nir_iadd(b, base_addr, nir_u2u64(b, offset));
+   nir_def *val =
+      intrin->intrinsic == nir_intrinsic_load_global_bounded
+         ? nir_load_global(b, intrin->def.num_components, intrin->def.bit_size,
+                           addr, .align_mul = align_mul,
+                           .align_offset = align_offset,
+                           .access = nir_intrinsic_access(intrin))
+         : nir_load_global_constant(b, intrin->def.num_components,
+                                    intrin->def.bit_size, addr,
+                                    .align_mul = align_mul,
+                                    .align_offset = align_offset,
+                                    .access = nir_intrinsic_access(intrin));
 
-   if (intrin->intrinsic == nir_intrinsic_load_global_constant_bounded) {
+   if (bounded) {
       nir_scalar offs = nir_scalar_resolved(offset, 0);
       if (nir_scalar_is_const(offs)) {
          /* Compare the exclusive end against the descriptor's byte size.
@@ -1971,6 +2123,69 @@ hk_lower_multiview_stage(mesa_shader_stage stage,
    }
 }
 
+/* Select the query ABI from the stage that will execute the query. */
+static struct agx_gen1_ray_query_layout
+hk_gen1_ray_query_layout(struct hk_device *dev, const nir_shader *nir,
+                         VkShaderStageFlags next_stage_mask)
+{
+   return (struct agx_gen1_ray_query_layout){
+      .payload_uniform = dev->gen1_rq_candidates ? 118 : 124,
+      .bvh_uniform = 96,
+      .status_uniform = dev->gen1_rq_candidates ? 128 :
+                        dev->gen1_rq_instances ? 130 : 128,
+      .instance_traversal = dev->gen1_rq_instances,
+      .candidates = dev->gen1_rq_candidates,
+      .as_table_first = dev->gen1_rq_instances ? HK_GEN1_AS_TABLE_AS_SLOTS : 1,
+      .launch_header = dev->gen1_rq_candidates ? 0x210000 : 0x110000,
+      .context_uniform = 160,
+      .as_table_uniform = 164,
+      .fragment_shader = dev->gen1_native_fragment_rq,
+      .graphics_stage = dev->gen1_native_graphics_rq &&
+         ((nir->info.stage == MESA_SHADER_VERTEX &&
+           !(next_stage_mask & (VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
+                                VK_SHADER_STAGE_GEOMETRY_BIT))) ||
+          (nir->info.stage == MESA_SHADER_TESS_EVAL &&
+           !(next_stage_mask & VK_SHADER_STAGE_GEOMETRY_BIT))),
+      .compute_kernel = dev->gen1_native_graphics_rq,
+      .position_fetch = dev->vk.enabled_features.rayTracingPositionFetch &&
+                        dev->gen1_vertex_directory != NULL,
+      .diagnostic_features = dev->vk.enabled_features.rayTracingPositionFetch,
+      .dispatch_group_count_offset = nir->info.stage == MESA_SHADER_COMPUTE
+         ? hk_root_descriptor_offset(cs.group_count_addr) : 0,
+   };
+}
+
+/*
+ * A native ray query in the post-tessellation hardware vertex program does
+ * not execute on G17P: every query-bearing TES case reads back zero, even
+ * with a null acceleration structure, where no traversal is issued and only
+ * the result store remains. The same lowering, uniform layout and render
+ * state work for an API vertex shader drawn directly. Run such a TES in
+ * Poly's compute variant instead, whose query context is the one TCS, GS and
+ * compute queries use, and rasterize its outputs through a passthrough GS.
+ */
+/* Whether a GS or TES compiles under the G17P native ray-query profile.
+ * The profile also runs passes on shaders without queries, and a shader
+ * binary must not depend on which features its device enabled: shader
+ * object binaries of one shader from devices with different features must
+ * match. A device that enables no ray-tracing feature therefore compiles
+ * the query-free shaders it can have the way a ray-tracing device does.
+ */
+static bool
+hk_native_rq_profile(const struct hk_device *dev)
+{
+   return dev->gen1_native_rq ||
+          (hk_g17p_rt_enabled(&dev->dev) &&
+           !hk_rt_features_enabled(&dev->vk.enabled_features));
+}
+
+bool
+hk_tes_ray_queries_in_compute(const struct hk_device *dev)
+{
+   return dev->dev.chip == AGX_CHIP_G17P &&
+          dev->gen1_native_rq && dev->gen1_native_graphics_rq;
+}
+
 static void
 hk_lower_nir(struct hk_device *dev, nir_shader *nir,
              const struct vk_pipeline_robustness_state *rs, bool is_multiview,
@@ -2053,7 +2268,9 @@ hk_lower_nir(struct hk_device *dev, nir_shader *nir,
     * invocation; forward the stored value. Run it before the robust lowering
     * so the loads and stores it tracks are still unconditional. */
    if (agx_chip_image_load_misses_own_store(dev->dev.chip))
-      NIR_PASS(_, nir, hk_nir_forward_image_stores, lower_g17p_robust_images);
+      NIR_PASS(_, nir, hk_nir_forward_image_stores,
+               lower_g17p_robust_images || native_robust_images ||
+                  (features & HK_FEAT_NULL_DESCRIPTOR));
    NIR_PASS(_, nir, hk_nir_lower_robust_image_access,
             lower_g17p_robust_images);
    if (native_robust_images) {
@@ -2133,31 +2350,22 @@ hk_lower_nir(struct hk_device *dev, nir_shader *nir,
     * by the time the traversal reads a node through it, and before shared
     * memory is laid out, because the pass introduces shader temporaries that
     * nir_lower_vars_to_ssa still has to promote. */
-   if (nir->info.ray_queries > 0) {
+   /* Poly replays a GS in a hardware vertex shader. Keep native queries until
+    * that split so the raster variant gets the graphics query ABI and Poly
+    * cannot strip stores introduced by query lowering as API side effects.
+    */
+   /* A TES likewise has a hardware vertex variant and a CDM variant, so its
+    * native queries are lowered per variant in hk_compile_nir().
+    */
+   if (nir->info.ray_queries > 0 &&
+       !(dev->gen1_native_rq &&
+         (nir->info.stage == MESA_SHADER_GEOMETRY ||
+          nir->info.stage == MESA_SHADER_TESS_EVAL))) {
       if(dev->gen1_native_rq) {
          NIR_PASS(_, nir, nir_opt_ray_queries);
          NIR_PASS(_, nir, nir_opt_ray_query_ranges);
-         const struct agx_gen1_ray_query_layout layout={
-            .payload_uniform=dev->gen1_rq_candidates ? 118 : 124,.bvh_uniform=96,
-            .status_uniform=dev->gen1_rq_candidates ? 128 : dev->gen1_rq_instances ? 130 : 128,
-            .instance_traversal=dev->gen1_rq_instances,.candidates=dev->gen1_rq_candidates,
-            .as_table_first=dev->gen1_rq_instances ? HK_GEN1_AS_TABLE_AS_SLOTS : 1,
-            .launch_header = dev->gen1_rq_candidates ? 0x210000 : 0x110000,
-            .context_uniform=160,.as_table_uniform=164,
-            .fragment_shader=dev->gen1_native_fragment_rq,
-            .graphics_stage = dev->gen1_native_graphics_rq &&
-               ((nir->info.stage == MESA_SHADER_VERTEX &&
-                 !(next_stage_mask & (VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
-                                      VK_SHADER_STAGE_GEOMETRY_BIT))) ||
-                (nir->info.stage == MESA_SHADER_TESS_EVAL &&
-                 !(next_stage_mask & VK_SHADER_STAGE_GEOMETRY_BIT))),
-            .compute_kernel = dev->gen1_native_graphics_rq,
-            .position_fetch = dev->vk.enabled_features.rayTracingPositionFetch &&
-                              dev->gen1_vertex_directory != NULL,
-            .diagnostic_features = dev->vk.enabled_features.rayTracingPositionFetch,
-            .dispatch_group_count_offset = nir->info.stage == MESA_SHADER_COMPUTE
-               ? hk_root_descriptor_offset(cs.group_count_addr) : 0,
-         };
+         const struct agx_gen1_ray_query_layout layout =
+            hk_gen1_ray_query_layout(dev, nir, next_stage_mask);
          if(!agx_nir_lower_gen1_ray_query(nir,&layout)) {
             mesa_loge("Gen1 native ray query: unsupported shape or operation");
             return;
@@ -2198,10 +2406,13 @@ hk_lower_nir(struct hk_device *dev, nir_shader *nir,
    NIR_PASS(progress, nir, nir_opt_sink, opts);
    NIR_PASS(progress, nir, nir_opt_move, opts);
 
-   bool soft_fault = agx_has_soft_fault(&dev->dev);
+   struct global_load_lowering global_loads = {
+      .soft_fault = agx_has_soft_fault(&dev->dev),
+      .storage_result_select = dev->dev.chip == AGX_CHIP_G17P,
+   };
    NIR_PASS(_, nir, nir_shader_intrinsics_pass,
             lower_load_global_constant_offset_instr, nir_metadata_none,
-            &soft_fault);
+            &global_loads);
 
    if (nir->info.stage == MESA_SHADER_TASK || nir->info.stage == MESA_SHADER_MESH) {
       NIR_PASS(_, nir, nir_lower_vars_to_explicit_types, nir_var_mem_task_payload,
@@ -2317,6 +2528,13 @@ hk_lower_nir(struct hk_device *dev, nir_shader *nir,
 static VkResult
 hk_upload_shader(struct hk_device *dev, struct hk_shader *shader)
 {
+   /* Allocator addresses can be recycled after a shader is destroyed while
+    * earlier commands still own an upload of its constants. Do not key those
+    * uploads by a shader or malloc pointer. This is not serialized. */
+   static uint64_t next_constant_data_id;
+   if (shader->data_size && !shader->constant_data_id)
+      shader->constant_data_id = p_atomic_inc_return(&next_constant_data_id);
+
    if (shader->b.info.has_preamble || shader->b.info.rodata.size_16) {
       /* TODO: Do we wnat to compact? Revisit when we rework prolog/epilogs. */
       size_t size = shader->b.info.binary_size;
@@ -2685,7 +2903,8 @@ hk_g17p_saturate_layer_viewport(nir_builder *b, nir_intrinsic_instr *intr,
 
 static void
 hk_lower_hw_vs(nir_shader *nir, struct hk_shader *shader, bool kill_psiz,
-               bool layer_as_varying, bool original_vertex_stage)
+               bool layer_as_varying, bool default_layer,
+               bool original_vertex_stage)
 {
    /* Point size must be clamped, excessively large points don't render
     * properly on G13.
@@ -2708,7 +2927,7 @@ hk_lower_hw_vs(nir_shader *nir, struct hk_shader *shader, bool kill_psiz,
       original_vertex_stage && layer_as_varying &&
       !nir->info.layer_viewport_relative &&
       !(nir->info.outputs_written & VARYING_BIT_LAYER);
-   if (layer_as_varying)
+   if (layer_as_varying && default_layer)
       NIR_PASS(_, nir, agx_nir_lower_default_layer);
 
    NIR_PASS(_, nir, agx_nir_lower_uvs, &shader->info.uvs,
@@ -2980,6 +3199,240 @@ hk_nir_has_tex(const nir_shader *nir)
    return false;
 }
 
+static bool
+hk_fold_tests_zs(nir_builder *b, nir_intrinsic_instr *intr,
+                 UNUSED void *data)
+{
+   if (intr->intrinsic != nir_intrinsic_load_shader_part_tests_zs_agx)
+      return false;
+
+   b->cursor = nir_before_instr(&intr->instr);
+   nir_def_replace(&intr->def,
+                   nir_imm_intN_t(b, UINT16_MAX, intr->def.bit_size));
+   return true;
+}
+
+/* Whether a function writes external memory, by the predicate
+ * nir_shader_gather_info uses, following any remaining direct calls. */
+static bool
+hk_nir_function_writes_external_memory(nir_function_impl *impl)
+{
+   nir_foreach_block(block, impl) {
+      nir_foreach_instr(instr, block) {
+         if (instr->type == nir_instr_type_intrinsic &&
+             nir_intrinsic_writes_external_memory(nir_instr_as_intrinsic(instr)))
+            return true;
+         if (instr->type == nir_instr_type_call) {
+            nir_function *callee = nir_instr_as_call(instr)->callee;
+            if (callee->impl &&
+                hk_nir_function_writes_external_memory(callee->impl))
+               return true;
+         }
+      }
+   }
+   return false;
+}
+
+/* Transform feedback counts as a write before its buffer-store lowering. */
+static bool
+hk_shader_writes_external_memory(nir_shader *nir)
+{
+   return nir->info.has_transform_feedback_varyings ||
+          hk_nir_function_writes_external_memory(nir_shader_get_entrypoint(nir));
+}
+
+/* Whether a shader accesses image texel data: a texture instruction other
+ * than a size or sample-count query, or any image intrinsic other than those
+ * queries. Bindless handles count, so the answer holds for any descriptor. */
+static bool
+hk_shader_reads_images(const nir_shader *nir)
+{
+   nir_foreach_function_impl(impl, nir) {
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr(instr, block) {
+            if (instr->type == nir_instr_type_tex) {
+               const nir_texop op = nir_instr_as_tex(instr)->op;
+               if (op != nir_texop_txs && op != nir_texop_query_levels &&
+                   op != nir_texop_texture_samples)
+                  return true;
+            } else if (instr->type == nir_instr_type_intrinsic) {
+               const char *name = nir_intrinsic_infos[
+                  nir_instr_as_intrinsic(instr)->intrinsic].name;
+               if (strstr(name, "image") && !strstr(name, "_size") &&
+                   !strstr(name, "_samples") && !strstr(name, "descriptor"))
+                  return true;
+            }
+         }
+      }
+   }
+   return false;
+}
+
+/* Whether a fragment shader may leave a covered pixel unwritten: it discards,
+ * demotes, terminates or writes the sample mask. */
+static bool
+hk_fs_may_kill(const nir_shader *fs)
+{
+   nir_foreach_function_impl(impl, fs) {
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
+            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+            switch (intr->intrinsic) {
+            case nir_intrinsic_demote:
+            case nir_intrinsic_demote_if:
+            case nir_intrinsic_terminate:
+            case nir_intrinsic_terminate_if:
+            case nir_intrinsic_demote_samples:
+               return true;
+            case nir_intrinsic_store_output:
+               if (nir_intrinsic_io_semantics(intr).location ==
+                   FRAG_RESULT_SAMPLE_MASK)
+                  return true;
+               break;
+            default:
+               break;
+            }
+         }
+      }
+   }
+   return false;
+}
+
+/* The clip-space position a vertex shader stores for vertex k of a direct
+ * draw that starts at vertex 0 and instance 0, when it is a constant once the
+ * vertex index is: written once, at the top level of the shader, every
+ * component by a constant. */
+static bool
+hk_vs_constant_position(const nir_shader *vs, unsigned k, float pos[4])
+{
+   nir_shader *s = nir_shader_clone(NULL, vs);
+   /* The shader as the front end produced it: system values still read from
+    * the draw, outputs possibly still variables (io_lowered is set before the
+    * outputs are). Lowering what is already lowered changes nothing. */
+   NIR_PASS(_, s, nir_lower_system_values);
+   NIR_PASS(_, s, nir_lower_io, nir_var_shader_out, glsl_type_size, 0);
+   nir_function_impl *impl = nir_shader_get_entrypoint(s);
+
+   /* Substitute the draw's system values. */
+   nir_foreach_function_impl(fimpl, s) {
+      nir_builder b = nir_builder_create(fimpl);
+      nir_foreach_block(block, fimpl) {
+         nir_foreach_instr_safe(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
+            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+            uint64_t v;
+            switch (intr->intrinsic) {
+            case nir_intrinsic_load_vertex_id:
+            case nir_intrinsic_load_vertex_id_zero_base:
+               v = k;
+               break;
+            case nir_intrinsic_load_first_vertex:
+            case nir_intrinsic_load_base_vertex:
+            case nir_intrinsic_load_base_instance:
+            case nir_intrinsic_load_instance_id:
+            case nir_intrinsic_load_draw_id:
+            /* Base vertex lowers to is_indexed_draw ? first_vertex : 0. */
+            case nir_intrinsic_load_is_indexed_draw:
+               v = 0;
+               break;
+            default:
+               continue;
+            }
+            b.cursor = nir_before_instr(instr);
+            nir_def_replace(&intr->def,
+                            nir_imm_intN_t(&b, v, intr->def.bit_size));
+         }
+      }
+   }
+
+   bool progress;
+   do {
+      progress = false;
+      NIR_PASS(progress, s, nir_opt_copy_prop);
+      NIR_PASS(progress, s, nir_opt_constant_folding);
+      NIR_PASS(progress, s, nir_opt_algebraic);
+      NIR_PASS(progress, s, nir_opt_dead_cf);
+      NIR_PASS(progress, s, nir_opt_remove_phis);
+      NIR_PASS(progress, s, nir_opt_dce);
+   } while (progress);
+
+   unsigned written = 0;
+   bool ok = true;
+   nir_foreach_block(block, impl) {
+      nir_foreach_instr(instr, block) {
+         if (instr->type != nir_instr_type_intrinsic)
+            continue;
+         nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+         if (intr->intrinsic != nir_intrinsic_store_output ||
+             nir_intrinsic_io_semantics(intr).location != VARYING_SLOT_POS)
+            continue;
+         const unsigned mask = nir_intrinsic_write_mask(intr)
+                               << nir_intrinsic_component(intr);
+         if (block->cf_node.parent != &impl->cf_node ||
+             !nir_src_is_const(intr->src[0]) || intr->src[0].ssa->bit_size != 32 ||
+             !nir_src_is_const(intr->src[1]) || nir_src_as_uint(intr->src[1]) ||
+             (written & mask)) {
+            ok = false;
+            continue;
+         }
+         u_foreach_bit(c, nir_intrinsic_write_mask(intr)) {
+            pos[c + nir_intrinsic_component(intr)] =
+               nir_src_comp_as_float(intr->src[0], c);
+         }
+         written |= mask;
+      }
+   }
+   ralloc_free(s);
+   return ok && written == 0xf;
+}
+
+/* A vertex shader whose first three vertices, by the vertex index alone, form
+ * a triangle that contains the whole clip-space square in front of the viewer
+ * and inside the depth range: the full-screen triangle of a post-processing
+ * pass. One such triangle covers every sample of a render area its viewport
+ * and scissor cover. Clip and cull distances could cut it, so a shader writing
+ * them never qualifies. */
+static bool
+hk_vs_covers_clip_square(const nir_shader *vs)
+{
+   if (vs->info.stage != MESA_SHADER_VERTEX ||
+       (vs->info.outputs_written &
+        (VARYING_BIT_CLIP_DIST0 | VARYING_BIT_CLIP_DIST1 |
+         VARYING_BIT_CULL_DIST0 | VARYING_BIT_CULL_DIST1 |
+         VARYING_BIT_CLIP_VERTEX)))
+      return false;
+
+   float x[3], y[3];
+   for (unsigned k = 0; k < 3; ++k) {
+      float pos[4];
+      if (!hk_vs_constant_position(vs, k, pos) || !(pos[3] > 0.0f) ||
+          !(pos[2] >= 0.0f && pos[2] <= pos[3]))
+         return false;
+      x[k] = pos[0] / pos[3];
+      y[k] = pos[1] / pos[3];
+   }
+
+   /* Every corner of [-1, 1]^2 on the same side of each edge as the
+    * opposite vertex (or on the edge). */
+   for (unsigned e = 0; e < 3; ++e) {
+      const unsigned a = e, b2 = (e + 1) % 3, o = (e + 2) % 3;
+      const float ex = x[b2] - x[a], ey = y[b2] - y[a];
+      const float side = ex * (y[o] - y[a]) - ey * (x[o] - x[a]);
+      if (side == 0.0f)
+         return false;
+      for (unsigned c = 0; c < 4; ++c) {
+         const float cx = (c & 1) ? 1.0f : -1.0f, cy = (c & 2) ? 1.0f : -1.0f;
+         const float d = ex * (cy - y[a]) - ey * (cx - x[a]);
+         if (d * side < 0.0f)
+            return false;
+      }
+   }
+   return true;
+}
+
 static VkResult
 hk_compile_nir(struct hk_device *dev, const VkAllocationCallbacks *pAllocator,
                nir_shader *nir, VkShaderCreateFlagsEXT shader_flags,
@@ -2989,8 +3442,14 @@ hk_compile_nir(struct hk_device *dev, const VkAllocationCallbacks *pAllocator,
                nir_xfb_info *xfb_info, unsigned set_count,
                uint8_t static_set_mask)
 {
+   const bool writes_external_memory = hk_shader_writes_external_memory(nir);
+   const bool reads_images = hk_shader_reads_images(nir);
+   /* Facts hk_g17p_note_first_draw() needs, before lowering obscures them. */
+   if (dev->dev.chip == AGX_CHIP_G17P && sw_stage == MESA_SHADER_FRAGMENT)
+      shader->info.fs.may_kill = hk_fs_may_kill(nir);
    unsigned nr_vbos = 0;
    bool kill_psiz = false;
+   bool default_layer = true;
    if ((sw_stage == MESA_SHADER_FRAGMENT && dev->gen1_native_fragment_rq) ||
        (sw_stage != MESA_SHADER_FRAGMENT && sw_stage != MESA_SHADER_COMPUTE &&
         dev->gen1_native_graphics_rq)) {
@@ -3179,6 +3638,7 @@ hk_compile_nir(struct hk_device *dev, const VkAllocationCallbacks *pAllocator,
       nr_vbos = DIV_ROUND_UP(
          BITSET_LAST_BIT(shader->info.vs.attrib_components_read), 4);
       kill_psiz = key->vs.kill_psiz;
+      default_layer = !key->vs.no_default_layer;
    } else if (sw_stage == MESA_SHADER_FRAGMENT) {
       shader->info.fs.writes_memory = nir->info.writes_memory;
       shader->info.fs.interp.linear = nir->info.linear_varyings;
@@ -3208,6 +3668,24 @@ hk_compile_nir(struct hk_device *dev, const VkAllocationCallbacks *pAllocator,
          NIR_PASS(_, nir, agx_nir_lower_sample_mask_deferred);
       else
          NIR_PASS(_, nir, agx_nir_lower_sample_mask);
+
+      /* With alpha-to-coverage statically off and no depth/stencil export,
+       * no epilog of this shader discards, so on the native AGX3 parts the
+       * main part always owns the depth/stencil tests while no read-only early
+       * reject can apply (hk_g17p_static_no_early_reject()): the draw-time
+       * selector (hk_root_descriptor_table::draw.no_epilog_discard) is all
+       * ones for every draw that can use it. Fold it, leaving the single
+       * unconditional testing coverage update of the native form instead of
+       * a uniform branch between a testing and a killing one. */
+      if (agx_chip_native_agx3(dev->dev.chip) && key && key->fs.static_tests &&
+          !shader->info.fs.epilog_key.write_z &&
+          !shader->info.fs.epilog_key.write_s) {
+         bool folded = false;
+         NIR_PASS(folded, nir, nir_shader_intrinsics_pass,
+                  hk_fold_tests_zs, nir_metadata_control_flow, NULL);
+         shader->info.fs.static_tests = folded;
+      }
+
       if (agx_native_graphics(&dev->dev) &&
           nir->info.fs.early_fragment_tests) {
          bool done = false;
@@ -3241,7 +3719,7 @@ hk_compile_nir(struct hk_device *dev, const VkAllocationCallbacks *pAllocator,
 
          nir_export_agx(&b, mask, .base = AGX_ABI_FOUT_SAMPLE_MASK);
 
-         NIR_PASS(_, nir, agx_nir_lower_to_per_sample);
+         NIR_PASS(_, nir, agx_nir_lower_to_per_sample_agx2);
       }
 
       /* Explicit interpolateAtSample() is not sample shading. Fold its
@@ -3280,7 +3758,19 @@ hk_compile_nir(struct hk_device *dev, const VkAllocationCallbacks *pAllocator,
          shader->info.tess.tcs_output_stride = poly_tcs_output_stride(nir);
       } else {
          /* This destroys info so it needs to happen after the gather */
-         NIR_PASS(_, nir, poly_nir_lower_tes, hw);
+         struct agx_gen1_ray_query_layout rq_layout =
+            hk_gen1_ray_query_layout(dev, nir, 0);
+         if (!hk_nir_lower_tes_variant(nir, hw,
+                                       hk_native_rq_profile(dev) ? &rq_layout
+                                                                 : NULL)) {
+            ralloc_free(nir);
+            return vk_errorf(dev, VK_ERROR_UNKNOWN,
+                             "Gen1 native TES ray query lowering failed");
+         }
+
+         /* The query-state flag above was gathered before this lowering. */
+         if (dev->gen1_native_graphics_rq)
+            shader->info.agx3_gen1_fragment_rq = hk_nir_has_ray_query(nir);
       }
    }
 
@@ -3307,7 +3797,7 @@ hk_compile_nir(struct hk_device *dev, const VkAllocationCallbacks *pAllocator,
          }
          hk_lower_hw_vs(nir, shader, kill_psiz,
                         agx_native_graphics(&dev->dev),
-                        sw_stage == MESA_SHADER_VERTEX);
+                        default_layer, sw_stage == MESA_SHADER_VERTEX);
          outputs = nir->info.outputs_written;
       } else {
          NIR_PASS(_, nir, poly_nir_lower_vs_before_gs);
@@ -3355,6 +3845,20 @@ hk_compile_nir(struct hk_device *dev, const VkAllocationCallbacks *pAllocator,
     * lower_uniforms removes the load_root_agx markers. */
    if (agx_native_graphics(&dev->dev))
       shader->info.agx3_uses_root = hk_nir_uses_root(nir);
+
+   /* Measure while root markers are still explicit. Uniform lowering loads
+    * the root pointer and set bases separately, so retain that prefix too.
+    * Round up for native uniform/global load granularity. */
+   if (dev->dev.chip == AGX_CHIP_G17P)
+      shader->root_descriptor_size = sizeof(struct hk_root_descriptor_table);
+   if (dev->dev.chip == AGX_CHIP_G17P && sw_stage == MESA_SHADER_COMPUTE) {
+      unsigned bytes = hk_nir_root_size(
+         nir, sizeof(struct hk_root_descriptor_table));
+      bytes = MAX2(bytes, hk_root_descriptor_offset(sets) +
+                            set_count * sizeof(uint64_t));
+      shader->root_descriptor_size = MIN2(
+         ALIGN_POT(bytes, 16), sizeof(struct hk_root_descriptor_table));
+   }
 
    NIR_PASS(_, nir, nir_shader_intrinsics_pass, lower_uniforms,
             nir_metadata_control_flow, &root);
@@ -3535,6 +4039,8 @@ hk_compile_nir(struct hk_device *dev, const VkAllocationCallbacks *pAllocator,
       shader->info.fs.g17p_samples = MAX2(backend_key.fs.nr_samples, 1);
 
    shader->info.stage = sw_stage;
+   shader->info.writes_external_memory = writes_external_memory;
+   shader->info.reads_images = reads_images;
    shader->info.clip_distance_array_size = nir->info.clip_distance_array_size;
    shader->info.cull_distance_array_size = nir->info.cull_distance_array_size;
    shader->b.info.outputs = outputs;
@@ -3930,9 +4436,20 @@ hk_compile_shader_impl(struct hk_device *dev, struct vk_shader_compile_info *inf
                   const struct vk_features *vk_features,
                   const VkAllocationCallbacks *pAllocator,
                   const struct hk_border_source *twin_of,
+                  bool no_default_layer, int vs_covers,
                   struct hk_api_shader **shader_out)
 {
    VkResult result;
+   /* hk_vs_covers_clip_square() needs the system values hk_lower_nir()
+    * lowers: vs_covers is its result when the caller lowered the shader
+    * already, else -1; a shader this function does not lower itself below
+    * never qualifies then. */
+   const bool vs_covers_clip_square =
+      vs_covers >= 0 ? vs_covers > 0
+                     : dev->dev.chip == AGX_CHIP_G17P &&
+                          info->stage == MESA_SHADER_VERTEX &&
+                          !info->nir->info.io_lowered &&
+                          hk_vs_covers_clip_square(info->nir);
    enum hk_feature_key features =
       twin_of ? twin_of->features : hk_make_feature_key(vk_features);
    const uint8_t static_set_mask =
@@ -4014,8 +4531,12 @@ hk_compile_shader_impl(struct hk_device *dev, struct vk_shader_compile_info *inf
       has_key = true;
    } else if (info->stage == MESA_SHADER_VERTEX) {
       hk_populate_vs_key(&key_tmp.vs, state);
+      key_tmp.vs.no_default_layer = no_default_layer;
       has_key = true;
    }
+
+   if (info->stage == MESA_SHADER_FRAGMENT)
+      hk_prune_unused_fragment_colors(nir, &key_tmp.fs);
 
    bool sample_variants = false;
    if (info->stage == MESA_SHADER_FRAGMENT) {
@@ -4109,7 +4630,16 @@ hk_compile_shader_impl(struct hk_device *dev, struct vk_shader_compile_info *inf
    } else if (sw_stage == MESA_SHADER_VERTEX) {
       key = &key_tmp;
    } else if (sw_stage == MESA_SHADER_TESS_CTRL) {
-      NIR_PASS(_, nir, poly_nir_lower_tcs, false);
+      /* A patch fits in a subgroup, so the AGX2 encoding can drop barriers
+       * that only order TCS outputs, as the GL driver does. Its backend only
+       * emits a threadgroup barrier in compute stages. The AGX3 encodings
+       * keep them as device barriers on the lowered output buffer.
+       */
+      bool agx2 =
+         agx_chip_isa_encoding(dev->dev.chip) == AGX_ISA_ENCODING_AGX2;
+
+      NIR_PASS(_, nir, poly_nir_lower_tcs_with_options, agx2,
+               dev->dev.chip == AGX_CHIP_G17P);
    }
 
    
@@ -4301,8 +4831,21 @@ hk_compile_shader_impl(struct hk_device *dev, struct vk_shader_compile_info *inf
 
       nir_shader *count = NULL, *rast = NULL, *pre_gs = NULL;
 
-      NIR_PASS(_, nir, poly_nir_lower_gs, &count, &rast, &pre_gs,
-               &count_variant->info.gs);
+      struct agx_gen1_ray_query_layout rq_layout =
+         hk_gen1_ray_query_layout(dev, nir, 0);
+      /* The raster replay is always a hardware vertex shader. */
+      rq_layout.graphics_stage = dev->gen1_native_graphics_rq;
+      if (!hk_nir_lower_gs(nir, &count, &rast, &pre_gs,
+                           &count_variant->info.gs,
+                           hk_native_rq_profile(dev) ? &rq_layout : NULL)) {
+         ralloc_free(nir);
+         ralloc_free(count);
+         ralloc_free(rast);
+         ralloc_free(pre_gs);
+         hk_api_shader_destroy(&dev->vk, &obj->vk, pAllocator);
+         return vk_errorf(dev, VK_ERROR_UNKNOWN,
+                          "Gen1 native GS ray query lowering failed");
+      }
 
       agx_preprocess_nir(count);
       agx_preprocess_nir(rast);
@@ -4315,7 +4858,7 @@ hk_compile_shader_impl(struct hk_device *dev, struct vk_shader_compile_info *inf
                   NULL);
       }
       hk_lower_hw_vs(rast, shader, false,
-                     agx_native_graphics(&dev->dev), false);
+                     agx_native_graphics(&dev->dev), true, false);
       shader->info.gs = count_variant->info.gs;
       main_variant->info.gs = count_variant->info.gs;
 
@@ -4359,6 +4902,14 @@ hk_compile_shader_impl(struct hk_device *dev, struct vk_shader_compile_info *inf
        * shader for the purpose. Update the next_stage mask accordingly.
        */
       if (nir->xfb_info != NULL) {
+         next_stage |= VK_SHADER_STAGE_GEOMETRY_BIT;
+      }
+
+      /* Native TES ray queries execute in Poly's compute variant, which
+       * needs the software variant (see hk_tes_ray_queries_in_compute()).
+       */
+      if (sw_stage == MESA_SHADER_TESS_EVAL && nir->info.ray_queries > 0 &&
+          hk_tes_ray_queries_in_compute(dev)) {
          next_stage |= VK_SHADER_STAGE_GEOMETRY_BIT;
       }
 
@@ -4501,6 +5052,7 @@ hk_compile_shader_impl(struct hk_device *dev, struct vk_shader_compile_info *inf
                ralloc_free(nir);
             return result;
          }
+         shader->info.vs.covers_clip_square = vs_covers_clip_square;
       }
    } else if (sample_variants) {
       /* The sample count is dynamic API state, but native coverage words and
@@ -4574,7 +5126,7 @@ hk_compile_shader(struct hk_device *dev, struct vk_shader_compile_info *info,
                   struct hk_api_shader **shader_out)
 {
    return hk_compile_shader_impl(dev, info, state, features, allocator, NULL,
-                                 shader_out);
+                                 false, -1, shader_out);
 }
 
 struct hk_api_shader *
@@ -4601,7 +5153,7 @@ hk_border_twin(struct hk_device *dev, struct hk_api_shader *obj)
          };
          struct hk_api_shader *built = NULL;
          if (hk_compile_shader_impl(dev, &info, NULL, NULL, NULL, src,
-                                    &built) == VK_SUCCESS)
+                                    false, -1, &built) == VK_SUCCESS)
             p_atomic_set(&src->twin, built);
       }
    }
@@ -4741,6 +5293,9 @@ hk_compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
 {
    struct hk_device *dev = container_of(vk_dev, struct hk_device, vk);
    nir_shader *shaders[shader_count];
+   int vs_covers[shader_count];
+   for (uint32_t i = 0; i < shader_count; i++)
+      vs_covers[i] = -1;
    bool has_mesh = false;
 
    /* Lower shaders, notably lowering I/O. This is a prerequisite for
@@ -4765,6 +5320,9 @@ hk_compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
          }
       }
 
+      vs_covers[i] = dev->dev.chip == AGX_CHIP_G17P &&
+                     nir->info.stage == MESA_SHADER_VERTEX &&
+                     hk_vs_covers_clip_square(nir);
       hk_lower_nir(dev, nir, info->robustness, is_multiview,
                    info->next_stage_mask, info->set_layout_count,
                     info->set_layouts, hk_features);
@@ -4833,6 +5391,13 @@ hk_compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
                   BITFIELD64_RANGE(VARYING_SLOT_VAR0, 32), 0);
    }
 
+   struct hk_fs_key color_key;
+   hk_populate_fs_key(&color_key, state, dev->dev.chip);
+   for (uint32_t i = 0; i < shader_count; i++) {
+      if (shaders[i]->info.stage == MESA_SHADER_FRAGMENT)
+         hk_prune_unused_fragment_colors(shaders[i], &color_key);
+   }
+
    nir_opt_varyings_bulk(shaders, shader_count, true, UINT32_MAX, UINT32_MAX,
                          nir_opts, NULL);
 
@@ -4865,10 +5430,31 @@ hk_compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
       }
    }
 
+   /* A vertex shader compiled together with its fragment shader writes no
+    * default layer when that fragment shader never reads gl_Layer: nothing
+    * else consumes the output, and its UVS words would be stored for every
+    * vertex. A vertex shader compiled alone keeps it for whichever fragment
+    * shader it meets. */
+   bool fs_reads_layer = true;
    for (uint32_t i = 0; i < shader_count; i++) {
+      if (shaders[i]->info.stage == MESA_SHADER_FRAGMENT) {
+         nir_shader_gather_info(shaders[i],
+                                nir_shader_get_entrypoint(shaders[i]));
+         fs_reads_layer =
+            (shaders[i]->info.inputs_read & VARYING_BIT_LAYER) ||
+            BITSET_TEST(shaders[i]->info.system_values_read,
+                        SYSTEM_VALUE_LAYER_ID);
+      }
+   }
+
+   for (uint32_t i = 0; i < shader_count; i++) {
+      const bool no_default_layer =
+         !fs_reads_layer && infos[i].stage == MESA_SHADER_VERTEX &&
+         infos[i].next_stage_mask == VK_SHADER_STAGE_FRAGMENT_BIT;
       VkResult result =
          hk_compile_shader_impl(dev, &infos[i], state, features, pAllocator,
-                                NULL, (struct hk_api_shader **)&shaders_out[i]);
+                                NULL, no_default_layer, vs_covers[i],
+                                (struct hk_api_shader **)&shaders_out[i]);
       if (result != VK_SUCCESS) {
          /* Clean up all the shaders before this point */
          for (uint32_t j = 0; j < i; j++)
@@ -4914,6 +5500,8 @@ hk_deserialize_shader(struct hk_device *dev, struct blob_reader *blob,
 {
    struct hk_shader_info info;
    blob_copy_bytes(blob, &info, sizeof(info));
+   const uint32_t root_descriptor_size = dev->dev.chip == AGX_CHIP_G17P
+      ? blob_read_uint32(blob) : 0;
 
    struct agx_shader_info b_info;
    blob_copy_bytes(blob, &b_info, sizeof(b_info));
@@ -4926,6 +5514,14 @@ hk_deserialize_shader(struct hk_device *dev, struct blob_reader *blob,
    const uint32_t code_size = blob_read_uint32(blob);
    const uint32_t data_size = blob_read_uint32(blob);
    if (blob->overrun)
+      return vk_error(dev, VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT);
+
+   /* A shader with native ray queries runs against the device's ray-query
+    * state, which a device enabling no ray-tracing feature does not create.
+    * Cache keys keep such binaries apart; refuse one that arrives as an
+    * application-supplied binary from a ray-tracing device. */
+   if ((info.agx3_gen1_fragment_rq || b_info.uses_ray_traversal) &&
+       hk_g17p_rt_enabled(&dev->dev) && !dev->gen1_native_rq)
       return vk_error(dev, VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT);
 
    /* A variant that was never compiled (for instance the software
@@ -4947,6 +5543,7 @@ hk_deserialize_shader(struct hk_device *dev, struct blob_reader *blob,
          return vk_error(dev, VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT);
       shader->b.info = b_info;
       shader->info = info;
+      shader->root_descriptor_size = root_descriptor_size;
       shader->agx3_vdm_state_update = agx3_vdm_state_update;
       shader->b.info.binary_size = 0;
       return VK_SUCCESS;
@@ -4966,6 +5563,7 @@ hk_deserialize_shader(struct hk_device *dev, struct blob_reader *blob,
 
    shader->b.info = b_info;
    shader->info = info;
+   shader->root_descriptor_size = root_descriptor_size;
    shader->agx3_vdm_state_update = agx3_vdm_state_update;
    shader->code_size = code_size;
    shader->data_size = data_size;
@@ -5069,7 +5667,7 @@ hk_deserialize_api_shader_impl(struct vk_device *vk_dev,
 {
    struct hk_device *dev = container_of(vk_dev, struct hk_device, vk);
 
-   if (!hk_agx3_shader_binary_version_supported(binary_version))
+   if (binary_version != hk_shader_binary_version(dev->dev.chip))
       return vk_error(dev, VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT);
 
    mesa_shader_stage stage = blob_read_uint8(blob);
@@ -5430,7 +6028,10 @@ static void
 hk_shader_serialize(struct vk_device *vk_dev, const struct hk_shader *shader,
                     struct blob *blob)
 {
+   struct hk_device *dev = container_of(vk_dev, struct hk_device, vk);
    blob_write_bytes(blob, &shader->info, sizeof(shader->info));
+   if (dev->dev.chip == AGX_CHIP_G17P)
+      blob_write_uint32(blob, shader->root_descriptor_size);
    blob_write_bytes(blob, &shader->b.info, sizeof(shader->b.info));
    if (!hk_agx3_vdm_program_cache_serialize(
           blob, &shader->agx3_vdm_state_update))

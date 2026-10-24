@@ -2523,96 +2523,17 @@ agx_emit_image_store(agx_builder *b, nir_intrinsic_instr *instr)
          }
       }
 
-      if (b->shader->key->dev.chip == AGX_CHIP_G16G) {
-         /* M4's qualified native PBE path selects the input conversion from
-          * the declared image format. Keep it separate from G17P's witnessed
-          * data-type selector below. */
-         switch (nir_intrinsic_format(instr)) {
-      case PIPE_FORMAT_NONE:
-         write->format = nir_intrinsic_src_type(instr) == nir_type_float32
-                            ? AGX_FORMAT_F16 : AGX_FORMAT_I32;
-         break;
-      case PIPE_FORMAT_R10G10B10A2_UINT:
-      case PIPE_FORMAT_B10G10R10A2_UINT:
-      case PIPE_FORMAT_R16_UINT:
-      case PIPE_FORMAT_R16_SINT:
-      case PIPE_FORMAT_R16G16_UINT:
-      case PIPE_FORMAT_R16G16_SINT:
-      case PIPE_FORMAT_R16G16B16A16_SINT:
-      case PIPE_FORMAT_R16G16B16A16_UINT:
-         write->format = AGX_FORMAT_I16;
-         break;
-      case PIPE_FORMAT_R8_UINT:
-      case PIPE_FORMAT_R8G8_UINT:
-      case PIPE_FORMAT_R8G8B8A8_UINT:
-      case PIPE_FORMAT_R8_SINT:
-      case PIPE_FORMAT_R8G8_SINT:
-      case PIPE_FORMAT_R8G8B8A8_SINT:
-         write->format = AGX_FORMAT_I8;
-         break;
-      case PIPE_FORMAT_R8G8_UNORM:
-      case PIPE_FORMAT_R8_UNORM:
-      case PIPE_FORMAT_R8G8B8A8_UNORM:
-      case PIPE_FORMAT_B8G8R8A8_UNORM:
+      switch (stored) {
+      case nir_type_float:
          write->format = AGX_FORMAT_U8NORM;
          break;
-      case PIPE_FORMAT_R10G10B10A2_UNORM:
-      case PIPE_FORMAT_B10G10R10A2_UNORM:
-         write->format = AGX_FORMAT_RGB10A2;
-         break;
-      case PIPE_FORMAT_R32_UINT:
-      case PIPE_FORMAT_R32_SINT:
-      case PIPE_FORMAT_R32G32_UINT:
-      case PIPE_FORMAT_R32G32_SINT:
-      case PIPE_FORMAT_R32G32B32A32_SINT:
-      case PIPE_FORMAT_R32G32B32A32_UINT:
-         write->format = AGX_FORMAT_I32;
-         break;
-      case PIPE_FORMAT_R5G6B5_UNORM:
-      case PIPE_FORMAT_B5G6R5_UNORM:
-      case PIPE_FORMAT_R11G11B10_FLOAT:
-      case PIPE_FORMAT_R8_SNORM:
-      case PIPE_FORMAT_R8G8_SNORM:
-      case PIPE_FORMAT_R8G8B8A8_SNORM:
-      case PIPE_FORMAT_R32_FLOAT:
-      case PIPE_FORMAT_R32G32_FLOAT:
-      case PIPE_FORMAT_R32G32B32A32_FLOAT:
-         /* AGX3 uses this tag for floating input lanes; the PBE
-          * descriptor controls whether storage is F16 or F32. */
-         write->format = AGX_FORMAT_F16;
-         break;
-      case PIPE_FORMAT_R16_UNORM:
-      case PIPE_FORMAT_R16G16_UNORM:
-      case PIPE_FORMAT_R16_SNORM:
-      case PIPE_FORMAT_R16G16_SNORM:
-      case PIPE_FORMAT_R16G16B16A16_UNORM:
-      case PIPE_FORMAT_R16G16B16A16_SNORM:
-         /* Native formatted stores take F32 lanes for both normalized
-          * signs; the PBE descriptor selects the destination conversion. */
-         write->format = AGX_FORMAT_U16NORM;
-         break;
-      case PIPE_FORMAT_R16_FLOAT:
-      case PIPE_FORMAT_R16G16_FLOAT:
-      case PIPE_FORMAT_R16G16B16A16_FLOAT:
-         write->format = AGX_FORMAT_F16;
+      case nir_type_int:
+      case nir_type_uint:
+         write->format = AGX_FORMAT_I8;
          break;
       default:
          write->format = AGX_NUM_FORMATS;
          break;
-         }
-      } else {
-         switch (stored) {
-         case nir_type_float:
-            write->format = AGX_FORMAT_U8NORM;
-            break;
-         case nir_type_int:
-         case nir_type_uint:
-            write->format = AGX_FORMAT_I8;
-            break;
-         default:
-            write->format = AGX_NUM_FORMATS;
-            break;
-         }
       }
    }
    return write;
@@ -3165,6 +3086,17 @@ agx_emit_intrinsic(agx_builder *b, nir_intrinsic_instr *instr)
       if (needs_image_barriers) {
          agx_image_barrier_3(b);
          agx_image_barrier_4(b);
+
+         /* Image atomics are lowered to global memory, while imageLoad uses
+          * the texture cache. After acquiring another invocation's atomic
+          * payload, retire the old texture-cache contents just as
+          * fence_mem_to_tex_agx does for a local image atomic. The image/PBE
+          * barrier train alone does not include this memory-to-texture step.
+          * A release-only barrier has no subsequent reads to make visible.
+          */
+         if (nir_intrinsic_memory_semantics(instr) &
+             (NIR_MEMORY_ACQUIRE | NIR_MEMORY_MAKE_VISIBLE))
+            agx_flush_memory_to_texture(b);
       }
 
       return NULL;
@@ -4327,15 +4259,18 @@ agx_agx3_bitop_immediate_ok(const agx_context *ctx, const agx_instr *I)
           !reg.neg && agx_channels(reg) == 1 && reg.size == I->dest[0].size;
 }
 
-static void
+void
 agx_materialize_agx3_alu_constants(agx_context *ctx)
 {
    agx_foreach_instr_global_safe(ctx, I) {
       agx_builder b = agx_init_builder(ctx, agx_before_instr(I));
 
-      /* AGX3 square-root steps are 16-bit to 16-bit or 32-bit to 32-bit;
-       * a half source feeding a 32-bit result is widened exactly first. */
+      /* A half source feeding a 32-bit square-root step is widened exactly
+       * first. Apple's half-input step (agx3_alu_sqrt_step_half) is grounded
+       * only with a cached source and result, so the packer refuses the other
+       * forms. G17P keeps that native step, and its existing output. */
       if (ctx->key->dev.encoding == AGX_ISA_ENCODING_AGX3B &&
+          ctx->key->dev.chip != AGX_CHIP_G17P &&
           I->op == AGX_OPCODE_SRSQRT && I->nr_srcs == 1 &&
           I->dest[0].size == AGX_SIZE_32 &&
           I->src[0].size == AGX_SIZE_16 &&
@@ -5335,9 +5270,9 @@ agx_materialize_agx3_alu_constants(agx_context *ctx)
          }
       }
 
-      /* The general half compare/select takes four registers. When a half
-       * comparison selects a register or a minifloat, materialize the latter;
-       * terrain uses this for threshold ? value : 0.0h. Keep f32 comparisons
+      /* The general half compare/select takes four registers. Selected
+       * immediates are integer bit patterns, including discard's 0/1 masks.
+       * Tied min/max constants were materialized above. Keep f32 comparisons
        * selecting byte constants on their separate grounded form. */
       if (ctx->key->dev.encoding == AGX_ISA_ENCODING_AGX3B &&
           I->op == AGX_OPCODE_FCMPSEL && I->nr_srcs == 4 &&
@@ -5355,6 +5290,11 @@ agx_materialize_agx3_alu_constants(agx_context *ctx)
          for (unsigned s = 2; s < 4; ++s) {
             if (I->src[s].type != AGX_INDEX_IMMEDIATE)
                continue;
+
+            if (ctx->key->dev.chip == AGX_CHIP_G17P) {
+               I->src[s] = agx_mov_imm(&b, 16, I->src[s].value);
+               continue;
+            }
 
             float value = agx_minifloat_decode(I->src[s].value);
             if (I->src[s].abs)
@@ -6311,6 +6251,15 @@ agx_emit_tex(agx_builder *b, nir_tex_instr *instr)
          texture = index;
          break;
       case nir_tex_src_sampler_handle:
+         /* AGX2 preamble lowering replaces unpromoted bindless sampler
+          * tokens with their heap indices. Custom-border clamp-to-0 samples
+          * also carry plain indices, so the intrinsic is not evidence that
+          * the heap is unused. Keep the upstream AGX2 binding contract;
+          * native AGX3 samplers retain their separate resource path.
+          */
+         if (b->shader->key->dev.encoding == AGX_ISA_ENCODING_AGX2)
+            b->shader->out->uses_sampler_heap = true;
+
          nir_intrinsic_instr *intr = nir_src_as_intrinsic(instr->src[i].src);
          if (intr && intr->intrinsic == nir_intrinsic_bindless_sampler_agx) {
             b->shader->out->uses_sampler_heap = true;
@@ -7341,7 +7290,7 @@ static bool agx3_nir_lower_uniform_dma(nir_shader *nir,
 
 static void
 agx_optimize_nir(nir_shader *nir, bool soft_fault, bool uniform_atomics,
-                 bool byte_indices, bool discard_word,
+                 bool byte_indices, bool discard_word, bool g17p,
                  uint16_t *preamble_size, uint8_t *ts_count, uint8_t *ss_count,
                  const struct agx_shader_key *dma_key,
                  struct agx_shader_info *dma_info)
@@ -7459,6 +7408,10 @@ agx_optimize_nir(nir_shader *nir, bool soft_fault, bool uniform_atomics,
    progress = false;
    if (byte_indices)
       NIR_PASS(progress, nir, agx_nir_scalarize_int64);
+   /* G17P: normalized 64-bit division instead of nir_lower_int64's fully
+    * unrolled 64-step division (agx_nir_lower_divmod64.c). */
+   if (g17p)
+      NIR_PASS(progress, nir, agx_nir_lower_divmod64);
    NIR_PASS(progress, nir, nir_lower_int64);
 
    /* If we lowered actual int64 arithmetic (not folded into the address
@@ -7484,7 +7437,7 @@ agx_optimize_nir(nir_shader *nir, bool soft_fault, bool uniform_atomics,
     * expressions. Do it after nir_opt_reassociate because nir_opt_reassociate
     * should work on unlowered fmin/fmax.
     */
-   NIR_PASS(_, nir, agx_nir_lower_fminmax);
+   NIR_PASS(_, nir, agx_nir_lower_fminmax, g17p);
 
    /* AGX_G17P_DISCARD_WORD: reduce one-sample coverage-update sources to bit
     * 0 after the algebraic loops and right before preamble formation, so the
@@ -7569,7 +7522,7 @@ agx_optimize_nir(nir_shader *nir, bool soft_fault, bool uniform_atomics,
     * GLES.
     */
    NIR_PASS(_, nir, nir_opt_algebraic_late);
-   NIR_PASS(_, nir, agx_nir_lower_fminmax);
+   NIR_PASS(_, nir, agx_nir_lower_fminmax, g17p);
 
    /* The AGX3 byte-address backend cannot encode 64-bit shifted adds.
     * Lower remaining multiplies before fusion turns x * 3 into one; the
@@ -9412,11 +9365,22 @@ agx_compile_function_nir(nir_shader *nir, nir_function_impl *impl,
          (ctx->stage == MESA_SHADER_VERTEX || !ctx->is_preamble)) ||
         (key->g17p_uniform_dma && out->agx3_uniform_dma_count)) &&
        !(agx_compiler_debug & AGX_DBG_NOOPT)) {
+      /* AGX3B main programs use the pressure-aware CSE, which merges only
+       * while the earlier result is still live. Uniform source lowering
+       * copies a uniform into a GPR for each operation that cannot read it in
+       * place, so a value used by a run of selects is copied once per select,
+       * and each copy is read right after it is made. On G17P, also merge
+       * such copies where that keeps the register pressure within the
+       * shader's existing peak. */
       if (key->dev.encoding == AGX_ISA_ENCODING_AGX3B && !ctx->is_preamble &&
-          ctx->stage != MESA_SHADER_VERTEX)
-         AGX_PASS(ctx, agx_opt_cse_pressure);
-      else
+          ctx->stage != MESA_SHADER_VERTEX) {
+         if (key->dev.chip == AGX_CHIP_G17P)
+            AGX_PASS(ctx, agx_opt_cse_bounded);
+         else
+            AGX_PASS(ctx, agx_opt_cse_pressure);
+      } else {
          AGX_PASS(ctx, agx_opt_cse);
+      }
    }
 
    if (native_cprog && ctx->is_preamble &&
@@ -11746,6 +11710,9 @@ agx_compile_shader_nir(nir_shader *nir, struct agx_shader_key *key,
    NIR_PASS(_, nir, nir_lower_alu_to_scalar, NULL, NULL);
    NIR_PASS(_, nir, nir_lower_load_const_to_scalar);
 
+   if (key->dev.chip == AGX_CHIP_G17P)
+      NIR_PASS(_, nir, agx_nir_lower_fma_rte);
+
    /* Late VBO lowering creates constant udiv instructions */
    NIR_PASS(_, nir, nir_opt_idiv_const, 16);
 
@@ -11886,6 +11853,7 @@ agx_compile_shader_nir(nir_shader *nir, struct agx_shader_key *key,
    agx_optimize_nir(
       nir, key->dev.soft_fault, uniform_atomics,
       key->dev.encoding == AGX_ISA_ENCODING_AGX3B, discard_word,
+      key->dev.chip == AGX_CHIP_G17P,
       form_preamble ? &info->push_count : NULL,
       (form_preamble && key->promote_textures) ? &info->texture_state_count
                                               : NULL,

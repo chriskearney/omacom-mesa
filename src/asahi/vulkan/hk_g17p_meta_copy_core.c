@@ -578,8 +578,8 @@ hk_g17p_buffer_to_image_copy_supported(
        * PBE, which also updates compression metadata. Keep this fallback
        * bounded to the single-level 2D shape G17P depth compression admits
        * (hk_g17p_compression.h). A combined depth/stencil image is split
-       * into a depth plane and a stencil plane; only the depth plane is
-       * compressed, so only its aspect comes here. */
+       * into a depth plane and a stencil plane; the stencil aspect is the
+       * branch below. */
       const bool split = copy->format == VK_FORMAT_D32_SFLOAT_S8_UINT ||
                          copy->format == VK_FORMAT_D16_UNORM_S8_UINT;
       if (copy->plane_count != (split ? 2 : 1) ||
@@ -590,6 +590,15 @@ hk_g17p_buffer_to_image_copy_supported(
                       copy->format == VK_FORMAT_D32_SFLOAT_S8_UINT)
                         ? VK_FORMAT_R32_UINT
                         : VK_FORMAT_R16_UINT;
+   } else if ((copy->format == VK_FORMAT_D32_SFLOAT_S8_UINT ||
+               copy->format == VK_FORMAT_D16_UNORM_S8_UINT) &&
+              copy->aspect == VK_IMAGE_ASPECT_STENCIL_BIT) {
+      /* A compressed stencil plane takes the same graphics copy through its
+       * bit-compatible R8_UINT view, in the same single-level 2D shape. */
+      if (copy->plane_count != 2 || copy->image_type != VK_IMAGE_TYPE_2D ||
+          copy->mip_levels != 1 || copy->array_layers != 1)
+         return false;
+      plane_format = VK_FORMAT_R8_UINT;
    } else if (copy->plane_count != 1 ||
               copy->aspect != VK_IMAGE_ASPECT_COLOR_BIT) {
       return false;
@@ -721,4 +730,45 @@ hk_g17p_image_blit_slice(enum agx_chip chip, VkImageType src_type,
    out->dstSubresource.baseArrayLayer += slice;
    out->dstSubresource.layerCount = 1;
    return true;
+}
+
+bool
+hk_g17p_metadata_grid_init(uint32_t width_tl, uint32_t height_tl,
+                           struct hk_g17p_metadata_grid *grid)
+{
+   if (grid)
+      memset(grid, 0, sizeof(*grid));
+   if (!grid || !width_tl || !height_tl || width_tl > UINT16_MAX ||
+       height_tl > UINT16_MAX)
+      return false;
+
+   *grid = (struct hk_g17p_metadata_grid){
+      .width_tl = width_tl,
+      .height_tl = height_tl,
+      .interleave_bits = util_logbase2_ceil(MIN2(width_tl, height_tl)),
+      .major_is_x = width_tl > height_tl,
+   };
+   return true;
+}
+
+static uint32_t
+hk_g17p_spread_bits(uint32_t v)
+{
+   v &= 0xffff;
+   v = (v | (v << 8)) & 0x00ff00ff;
+   v = (v | (v << 4)) & 0x0f0f0f0f;
+   v = (v | (v << 2)) & 0x33333333;
+   return (v | (v << 1)) & 0x55555555;
+}
+
+uint32_t
+hk_g17p_metadata_tile_index(const struct hk_g17p_metadata_grid *grid,
+                            uint32_t x_tl, uint32_t y_tl)
+{
+   const uint32_t mask = (1u << grid->interleave_bits) - 1;
+   const uint32_t major = grid->major_is_x ? x_tl : y_tl;
+
+   return (hk_g17p_spread_bits(x_tl & mask) |
+           (hk_g17p_spread_bits(y_tl & mask) << 1)) +
+          ((major & ~mask) << grid->interleave_bits);
 }

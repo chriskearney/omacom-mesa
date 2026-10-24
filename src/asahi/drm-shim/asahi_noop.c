@@ -93,6 +93,30 @@ static const struct drm_asahi_params_global params_g17p = {
    .gpu_hal_generation = DRM_ASAHI_GPU_HAL_200,
 };
 
+static const struct drm_asahi_params_global params_g16g = {
+   .features = DRM_ASAHI_FEATURE_VM_STATUS |
+               DRM_ASAHI_FEATURE_PER_COMMAND_INPUT_SYNCS |
+               DRM_ASAHI_FEATURE_VM_STATUS_MIRROR |
+               DRM_ASAHI_FEATURE_EXACT_PRIOR_BARRIERS,
+   .gpu_generation = 16,
+   .gpu_variant = 'G',
+   .gpu_revision = 0x10,
+   .chip_id = 0x8132,
+   .num_dies = 1,
+   .num_clusters_total = 1,
+   .num_cores_per_cluster = 10,
+   .core_masks = {0x3ff},
+   .vm_start = 0x4000,
+   .vm_end = (1ull << 42) - 0x8000ull,
+   .vm_kernel_min_size = 0x20000000,
+   .max_commands_per_submission = 64,
+   .max_attachments = 16,
+   .max_frequency_khz = 1470000,
+   .command_timestamp_frequency_hz = 1000000000,
+   .usc_generation = 3,
+   .gpu_hal_generation = DRM_ASAHI_GPU_HAL_200,
+};
+
 /*
  * T6030 / M3 Pro, as the M3 kernel (drivers/gpu/drm/apple/gpu-g15-backend.c
  * g15_params) reports it: AGX3 shaders on the legacy firmware interface, one
@@ -183,6 +207,8 @@ shim_params(void)
       return &params_g15s;
    if (chip && !strcmp(chip, "g15c"))
       return &params_g15c;
+   if (chip && !strcmp(chip, "g16g"))
+      return &params_g16g;
 
    return &params_g13g;
 }
@@ -1035,7 +1061,8 @@ shim_vm_status_register_report(void)
 static int
 asahi_ioctl_vm_status_mirror(int fd, struct drm_asahi_get_params *gp)
 {
-   if (!shim_env_on("ASAHI_SHIM_VM_STATUS_MIRROR") && !shim_g15s()) {
+   if (!shim_env_on("ASAHI_SHIM_VM_STATUS_MIRROR") &&
+       !(shim_params()->features & DRM_ASAHI_FEATURE_VM_STATUS_MIRROR)) {
       errno = EOPNOTSUPP;
       return -1;
    }
@@ -1114,7 +1141,8 @@ asahi_ioctl_get_param(int fd, unsigned long request, void *arg)
    }
 
    case DRM_ASAHI_PARAM_GROUP_VM_STATUS: {
-      if (!shim_env_on("ASAHI_SHIM_VM_STATUS") && !shim_g15s()) {
+      if (!shim_env_on("ASAHI_SHIM_VM_STATUS") &&
+          !(shim_params()->features & DRM_ASAHI_FEATURE_VM_STATUS)) {
          errno = EINVAL;
          return -1;
       }
@@ -1596,7 +1624,8 @@ asahi_ioctl_submit_unlocked(int fd, unsigned long request, void *arg)
             return -ENOENT;
          }
 
-         if (submit->in_sync_count > 0 && submit->out_sync_count == 2)
+         /* A private publication fence may follow the batch outputs. */
+         if (submit->in_sync_count > 0 && submit->out_sync_count >= 2)
             synchronized_render_submits++;
          const struct asahi_g17p_stream_memory memory = {
             .data = (void *)(intptr_t)fd,
@@ -1736,6 +1765,7 @@ drm_shim_driver_init(void)
    const bool g17p = chip && !strcmp(chip, "g17p");
    const bool g15s = chip && !strcmp(chip, "g15s");
    const bool g15c = chip && !strcmp(chip, "g15c");
+   const bool g16g = chip && !strcmp(chip, "g16g");
 
    drm_shim_override_file(g17p   ? "DRIVER=asahi\n"
                                    "OF_FULLNAME=/soc/agx\n"
@@ -1748,6 +1778,10 @@ drm_shim_driver_init(void)
                           : g15c ? "DRIVER=asahi\n"
                                    "OF_FULLNAME=/soc/agx\n"
                                    "OF_COMPATIBLE_0=apple,agx-g15c\n"
+                                   "OF_COMPATIBLE_N=1\n"
+                          : g16g ? "DRIVER=asahi\n"
+                                   "OF_FULLNAME=/soc/agx\n"
+                                   "OF_COMPATIBLE_0=apple,gpu-g16g\n"
                                    "OF_COMPATIBLE_N=1\n"
                                  : "DRIVER=asahi\n"
                                    "OF_FULLNAME=/soc/agx\n"

@@ -219,9 +219,11 @@ agx_nir_gen1_wait_traversal(nir_builder *b, nir_def *query_base, nir_def *lane,
    nir_def *status_address=nir_iadd(b,query_base,nir_ishl_imm(b,lane,3));
    status_address=nir_iadd(b,status_address,
                           nir_load_preamble(b,1,32,.base=status_uniform));
-   nir_variable *polls = nir_local_variable_create(b->impl, glsl_uint_type(),
-      "rq_traversal_polls");
-   nir_store_var(b, polls, nir_imm_int(b, AGX_GEN1_TRAVERSAL_POLL_BOUND), 1);
+   /* A continue can suspend while RayCore traverses a large overlapping TLAS.
+    * Poll count is not an instance/node limit or a completion indication.
+    * Never return an unfinished result as a miss or reuse its live context.
+    * The kernel's job timeout bounds a stuck traversal, as for other GPU work.
+    */
    nir_push_loop(b);
    nir_def *status=nir_load_scs_base_agx(b,1,16,status_address,
       .base=7,.format=PIPE_FORMAT_R8_UINT,.component=4,.flags=4);
@@ -233,9 +235,7 @@ agx_nir_gen1_wait_traversal(nir_builder *b, nir_def *query_base, nir_def *lane,
       .base=7,.format=PIPE_FORMAT_R8_UINT,.component=4,.flags=8);
    nir_def *done = nir_ieq_imm(b,nir_iand_imm(b,status,64),0);
    nir_store_var(b, completed, done, 1);
-   nir_def *poll = nir_iadd_imm(b, nir_load_var(b, polls), -1);
-   nir_store_var(b, polls, poll, 1);
-   nir_break_if(b, nir_ior(b, done, nir_ieq_imm(b, poll, 0)));
+   nir_break_if(b, done);
    nir_pop_loop(b,NULL);
    nir_pop_if(b,NULL);
    return nir_load_var(b, completed);

@@ -299,8 +299,9 @@ main()
          for (uint a = 0; a < 3; ++a)
             root[a + 1] = uint64_t(floatBitsToUint(base[a]) >> 16);
          root[4] = uint64_t((exponent.y << 8) | exponent.z);
-         root[5] = uint64_t(job.child_slot >> 16);
-         root[6] = uint64_t(job.child_slot & 65535u);
+         uint child = job.child_slot + args.slot_bias;
+         root[5] = uint64_t(child >> 16);
+         root[6] = uint64_t(child & 65535u);
          root[7] = instances ? uint64_t(0x1a00u | (count == 8u ? 0x3fu : count << 3))
                    : aabbs ? uint64_t(0x18c0u | (count == 8u ? 0x3fu : count << 3))
                    : leaf ? uint64_t(0x40c0u | (triangle_type[0] << 8) |

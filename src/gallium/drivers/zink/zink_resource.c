@@ -437,7 +437,9 @@ get_image_usage_for_feats(struct zink_screen *screen, VkFormatFeatureFlags2 feat
          usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
          if ((bind & (PIPE_BIND_LINEAR | PIPE_BIND_SHARED)) != (PIPE_BIND_LINEAR | PIPE_BIND_SHARED))
             usage |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
-         if (screen->info.have_EXT_attachment_feedback_loop_layout)
+         if (screen->info.have_EXT_attachment_feedback_loop_layout &&
+             (!screen->driver_workarounds.lazy_feedback_loop_usage ||
+              (templ->flags & ZINK_RESOURCE_FLAG_FEEDBACK_LOOP)))
             usage |= VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
       } else {
          /* trust that gallium isn't going to give us anything wild */
@@ -1608,6 +1610,26 @@ create_image(struct zink_screen *screen, struct zink_resource_object *obj,
    VkImageCreateInfo ici;
    VkFormat formats[4] = {VK_FORMAT_UNDEFINED};
    VkImageFormatListCreateInfo format_list;
+
+   /* Under lazy feedback-loop usage only images zink can later recreate
+    * start without that usage. Imported, exported, scanout, linear, sparse
+    * and protected images keep it from creation, as without the workaround.
+    */
+   struct pipe_resource feedback_templ;
+   if (screen->driver_workarounds.lazy_feedback_loop_usage &&
+       !(templ->flags & ZINK_RESOURCE_FLAG_FEEDBACK_LOOP) &&
+       (alloc_info->whandle || alloc_info->user_mem ||
+        (alloc_info->export_types & VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT) ||
+        modifiers_count || (templ->flags & PIPE_RESOURCE_FLAG_SPARSE) ||
+        (templ->bind & (PIPE_BIND_SHARED | PIPE_BIND_SCANOUT |
+                        PIPE_BIND_DISPLAY_TARGET | PIPE_BIND_LINEAR |
+                        PIPE_BIND_PROTECTED | ZINK_BIND_DMABUF |
+                        ZINK_BIND_VIDEO)))) {
+      feedback_templ = *templ;
+      feedback_templ.flags |= ZINK_RESOURCE_FLAG_FEEDBACK_LOOP;
+      templ = &feedback_templ;
+   }
+
    enum pipe_format srgb = setup_format_list(screen, templ, alloc_info, formats, &format_list, &ici);
    init_ici(screen, &ici, templ, templ->bind, ici_modifier_count);
 
@@ -3462,6 +3484,37 @@ bool
 zink_resource_object_init_mutable(struct zink_context *ctx, struct zink_resource *res)
 {
    return resource_object_add_bind(ctx, res, ZINK_BIND_MUTABLE);
+}
+
+/* Lazy feedback-loop usage: recreate a colour image with
+ * ATTACHMENT_FEEDBACK_LOOP usage, copying its contents, before a draw or copy
+ * first reads it while writing it. Returns whether the object was replaced.
+ */
+bool
+zink_resource_object_init_feedback_loop(struct zink_context *ctx, struct zink_resource *res)
+{
+   assert(zink_screen(ctx->base.screen)->driver_workarounds.lazy_feedback_loop_usage);
+   if (res->obj->is_buffer || res->obj->dt || res->obj->immutable_handle ||
+       !(res->aspect & VK_IMAGE_ASPECT_COLOR_BIT) ||
+       (res->base.b.flags & ZINK_RESOURCE_FLAG_FEEDBACK_LOOP) ||
+       (res->obj->vkusage & VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT))
+      return false;
+
+   perf_debug(ctx, "zink: recreating %s %ux%u with feedback-loop usage\n",
+              util_format_short_name(res->base.b.format), res->base.b.width0,
+              res->base.b.height0);
+   zink_fb_clears_apply(ctx, &res->base.b, 0, INT32_MAX);
+   /* the usage comes with the render-target bind */
+   const unsigned bind = res->base.b.bind & PIPE_BIND_RENDER_TARGET ? 0 : PIPE_BIND_RENDER_TARGET;
+   res->base.b.flags |= ZINK_RESOURCE_FLAG_FEEDBACK_LOOP;
+   if (!add_resource_bind(ctx, res, bind)) {
+      res->base.b.flags &= ~ZINK_RESOURCE_FLAG_FEEDBACK_LOOP;
+      return false;
+   }
+   zink_resource_rebind(ctx, res);
+   /* other contexts may have the image bound too */
+   p_atomic_inc(&zink_screen(ctx->base.screen)->image_rebind_counter);
+   return true;
 }
 
 VkDeviceAddress

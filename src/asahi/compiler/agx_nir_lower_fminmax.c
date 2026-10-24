@@ -91,6 +91,18 @@ lower(nir_builder *b, nir_alu_instr *alu, void *data)
    else
       alu->op = nir_op_fmin_agx;
 
+   /* Without a flush-to-zero execution mode, whether a denormal result is
+    * flushed is implementation-defined (Vulkan, "Precision and Operation of
+    * SPIR-V Instructions": any denormal an instruction produces may be
+    * flushed), so the min/max result may stay denormal. Only a shader that
+    * asks for flushing needs it. Callers that keep flushing every min/max
+    * pass false.
+    */
+   const bool *ftz_only = data;
+   const unsigned mode = b->shader->info.float_controls_execution_mode;
+   if (*ftz_only && !(mode & FLOAT_CONTROLS_DENORM_FLUSH_TO_ZERO_FP32))
+      return true;
+
    bool canonicalize = false;
    for (unsigned c = 0; c < alu->def.num_components; ++c) {
       nir_scalar scalar = nir_get_scalar(&alu->def, c);
@@ -116,7 +128,7 @@ lower(nir_builder *b, nir_alu_instr *alu, void *data)
 }
 
 bool
-agx_nir_lower_fminmax(nir_shader *s)
+agx_nir_lower_fminmax(nir_shader *s, bool ftz_only)
 {
-   return nir_shader_alu_pass(s, lower, nir_metadata_control_flow, NULL);
+   return nir_shader_alu_pass(s, lower, nir_metadata_control_flow, &ftz_only);
 }

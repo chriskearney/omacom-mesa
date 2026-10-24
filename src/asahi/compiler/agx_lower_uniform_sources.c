@@ -151,6 +151,11 @@ agx_instr_accepts_uniform(enum agx_isa_encoding encoding, enum agx_opcode op,
    case AGX_OPCODE_IF_ICMP:
    case AGX_OPCODE_WHILE_ICMP:
    case AGX_OPCODE_BREAK_IF_ICMP:
+      /* AGX2 control-flow compares read 32-bit uniforms in either operand,
+       * as they always have upstream. */
+      if (encoding == AGX_ISA_ENCODING_AGX2)
+         return !is_64;
+
       /* Apple's G17P loop
        * test compares a GPR with an aligned 32-bit uniform in one icmp
        * (fs-apple.bin +0xbc 0a832307060007020000: f18 = u6, f24 = 3), so
@@ -416,7 +421,8 @@ agx_lower_uniform_sources(agx_context *ctx)
          /* The reg/uniform compare (AGX_G17P_UNIFORM_COMPARE) exists only
           * with a 32-bit register first operand. With an immediate, uniform
           * or 16-bit first operand keep copying the uniform, so the existing
-          * register forms still encode the compare. */
+          * register forms still encode the compare. AGX2 has no such
+          * restriction. */
          const bool is_int_compare =
             I->op == AGX_OPCODE_IF_ICMP || I->op == AGX_OPCODE_WHILE_ICMP ||
             I->op == AGX_OPCODE_BREAK_IF_ICMP;
@@ -435,6 +441,7 @@ agx_lower_uniform_sources(agx_context *ctx)
             I->src[1 - s].value <= UINT8_MAX && !I->src[1 - s].abs &&
             !I->src[1 - s].neg;
          const bool copy_compare_uniform =
+            ctx->key->dev.encoding != AGX_ISA_ENCODING_AGX2 &&
             is_int_compare && !uniform_imm_compare &&
             (I->src[0].type != AGX_INDEX_NORMAL ||
              I->src[0].size != AGX_SIZE_32 || I->src[0].abs ||
@@ -448,6 +455,7 @@ agx_lower_uniform_sources(agx_context *ctx)
             ctx->key->dev.encoding == AGX_ISA_ENCODING_AGX3B &&
             !ctx->is_preamble && I->op == AGX_OPCODE_FCMPSEL &&
             I->nr_dests == 1 && I->nr_srcs == 4 && !I->saturate &&
+            I->fcond != AGX_FCOND_LTN && I->fcond != AGX_FCOND_GTN &&
             (I->dest[0].size == AGX_SIZE_16 ||
              I->dest[0].size == AGX_SIZE_32) &&
             agx_channels(I->dest[0]) == 1 && !native_minmax && s < 2 &&
@@ -505,6 +513,7 @@ agx_lower_uniform_sources(agx_context *ctx)
             ctx->key->dev.encoding == AGX_ISA_ENCODING_AGX3B &&
             !ctx->is_preamble && I->op == AGX_OPCODE_FCMPSEL &&
             I->nr_dests == 1 && I->nr_srcs == 4 && !I->saturate &&
+            I->fcond != AGX_FCOND_LTN && I->fcond != AGX_FCOND_GTN &&
             (I->dest[0].size == AGX_SIZE_16 ||
              I->dest[0].size == AGX_SIZE_32) &&
             agx_channels(I->dest[0]) == 1 && !native_minmax && s >= 2 &&

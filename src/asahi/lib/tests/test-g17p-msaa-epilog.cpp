@@ -280,3 +280,77 @@ TEST_F(G17PMSAAEpilog, BroadcastNoopPreservesBoundTargets)
       }
    }
 }
+
+TEST(LegacyFragments, EpilogUsesUpstreamDepthCoverage)
+{
+   nir_builder b = nir_builder_init_simple_shader(
+      MESA_SHADER_FRAGMENT, &agx_nir_options, "legacy depth epilog");
+   agx_fs_epilog_key key = {};
+   key.nr_samples = 2;
+   key.link.write_z = true;
+   key.link.already_ran_zs = true;
+   key.link.sample_mask_after_force_early = true;
+   for (auto &r : key.remap) r = -1;
+   agx_nir_fs_epilog(&b, &key);
+   unsigned zs = 0;
+   nir_foreach_block(block, nir_shader_get_entrypoint(b.shader)) {
+      nir_foreach_instr(instr, block) {
+         if (instr->type != nir_instr_type_intrinsic) continue;
+         nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+         if (intr->intrinsic != nir_intrinsic_store_zs_agx) continue;
+         zs++;
+         EXPECT_TRUE(nir_src_is_const(intr->src[0]));
+         if (nir_src_is_const(intr->src[0]))
+            EXPECT_EQ(nir_src_as_uint(intr->src[0]), 0xffu);
+      }
+   }
+   EXPECT_EQ(zs, 1u);
+   ralloc_free(b.shader);
+}
+
+TEST(LegacyFragments, EarlyCoverageIsPerSample)
+{
+   nir_builder b = nir_builder_init_simple_shader(
+      MESA_SHADER_FRAGMENT, &agx_nir_options, "legacy early coverage");
+   b.shader->info.fs.early_fragment_tests = true;
+   nir_intrinsic_instr *mask = nir_sample_mask_agx(
+      &b, nir_imm_intN_t(&b, 0xff, 16), nir_imm_intN_t(&b, 0xff, 16));
+   EXPECT_TRUE(agx_nir_lower_to_per_sample_agx2(b.shader));
+   EXPECT_FALSE(nir_src_is_const(mask->src[0]));
+   ralloc_free(b.shader);
+}
+
+TEST_F(G17PMSAAEpilog, PerSampleFramebufferFetchMainCompilesForNativeAGX3)
+{
+   for (enum agx_chip chip : {AGX_CHIP_G17P, AGX_CHIP_G16G}) {
+      for (unsigned samples : {2u, 4u}) {
+         nir_builder b = nir_builder_init_simple_shader(
+            MESA_SHADER_FRAGMENT, &agx_nir_options, "sample framebuffer fetch");
+         b.shader->info.fs.uses_sample_shading = true;
+         nir_def *color = nir_load_local_pixel_agx(
+            &b, 4, 32, nir_imm_intN_t(&b, 0xff, 16),
+            .format = PIPE_FORMAT_R8_UNORM);
+         nir_store_output(&b, color, nir_imm_int(&b, 0),
+                          .write_mask = 0xf, .src_type = nir_type_float32,
+                          .io_semantics = {.location = FRAG_RESULT_DATA0});
+         b.shader->info.outputs_written = BITFIELD64_BIT(FRAG_RESULT_DATA0);
+         agx_fs_epilog_link_info link = {};
+         agx_nir_lower_fs_output_to_epilog_for_device(b.shader, chip, &link);
+         ASSERT_TRUE(agx_nir_lower_g17p_sample_shading(b.shader, &link, samples));
+         nir_opt_constant_folding(b.shader);
+         agx_nir_lower_g17p_tile_samples(b.shader, samples);
+         agx_preprocess_nir(b.shader);
+         agx_shader_key key = {};
+         key.dev.encoding = AGX_ISA_ENCODING_AGX3B;
+         key.dev.chip = chip;
+         key.no_preamble = true;
+         key.no_stop = true;
+         key.fs.nr_samples = samples;
+         agx_shader_part part = {};
+         EXPECT_TRUE(agx_compile_shader_nir(b.shader, &key, &part))
+            << agx_last_compile_refusal();
+         free(part.binary);
+         ralloc_free(b.shader);
+      }
+   }
+}

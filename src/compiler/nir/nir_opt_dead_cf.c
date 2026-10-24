@@ -152,12 +152,59 @@ def_only_used_in_cf_node(nir_def *def, void *_node)
    return true;
 }
 
+/* Query state is local to the invocation. It is safe to discard mutations in
+ * a dead CF node if the query is never read outside that node. Restrict this
+ * to direct scalar derefs; aliases and arrays can conservatively stay live.
+ */
+static bool
+query_only_used_in_cf_node(nir_intrinsic_instr *intrin, nir_cf_node *node)
+{
+   if (!nir_def_is_deref(intrin->src[0].ssa))
+      return false;
+
+   nir_deref_instr *deref = nir_src_as_deref(intrin->src[0]);
+   if (deref->deref_type != nir_deref_type_var)
+      return false;
+
+   nir_variable *var = deref->var;
+   if (!var->data.ray_query ||
+       var->data.mode != nir_var_function_temp || glsl_type_is_array(var->type))
+      return false;
+
+   nir_foreach_block(block, intrin->instr.block->impl) {
+      nir_foreach_instr(instr, block) {
+         if (instr->type != nir_instr_type_deref)
+            continue;
+         nir_deref_instr *other = nir_instr_as_deref(instr);
+         if (other->deref_type != nir_deref_type_var || other->var != var)
+            continue;
+
+         nir_foreach_use_including_if(use, &other->def) {
+            if (nir_src_is_if(use))
+               return false;
+            nir_instr *user = nir_src_use_instr(use);
+            if (user->type != nir_instr_type_intrinsic)
+               return false;
+            nir_intrinsic_instr *op = nir_instr_as_intrinsic(user);
+            if (!nir_intrinsic_is_ray_query(op->intrinsic) || use != &op->src[0])
+               return false;
+            /* Reinitialization does not observe the discarded query state. */
+            if (op->intrinsic != nir_intrinsic_rq_initialize &&
+                !block_in_cf_node(user->block, node))
+               return false;
+         }
+      }
+   }
+   return true;
+}
+
 /*
  * Test if a loop or if node is dead. Such nodes are dead if:
  *
  * 1) It has no side effects (i.e. intrinsics which could possibly affect the
  * state of the program aside from producing an SSA value, indicated by a lack
- * of NIR_INTRINSIC_CAN_ELIMINATE).
+ * of NIR_INTRINSIC_CAN_ELIMINATE). Local ray-query state which is not read
+ * outside the node is also safe to discard.
  *
  * 2) It has no phi instructions after it, since those indicate values inside
  * the node being used after the node.
@@ -169,7 +216,7 @@ def_only_used_in_cf_node(nir_def *def, void *_node)
  */
 
 static bool
-node_is_dead(nir_cf_node *node)
+node_is_dead(nir_cf_node *node, bool eliminate_local_ray_queries)
 {
    assert(node->type == nir_cf_node_loop || node->type == nir_cf_node_if);
 
@@ -212,7 +259,10 @@ node_is_dead(nir_cf_node *node)
          if (instr->type == nir_instr_type_intrinsic) {
             nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
             if (!(nir_intrinsic_infos[intrin->intrinsic].flags &
-                  NIR_INTRINSIC_CAN_ELIMINATE))
+                  NIR_INTRINSIC_CAN_ELIMINATE) &&
+                !(eliminate_local_ray_queries &&
+                  nir_intrinsic_is_ray_query(intrin->intrinsic) &&
+                  query_only_used_in_cf_node(intrin, node)))
                return false;
 
             switch (intrin->intrinsic) {
@@ -271,7 +321,7 @@ node_is_dead(nir_cf_node *node)
 }
 
 static bool
-dead_cf_block(nir_block *block)
+dead_cf_block(nir_block *block, bool eliminate_local_ray_queries)
 {
    /* opt_constant_if() doesn't handle this case. */
    if (nir_block_ends_in_jump(block) &&
@@ -290,7 +340,7 @@ dead_cf_block(nir_block *block)
          return true;
       }
 
-      if (node_is_dead(&following_if->cf_node)) {
+      if (node_is_dead(&following_if->cf_node, eliminate_local_ray_queries)) {
          nir_cf_node_remove(&following_if->cf_node);
          return true;
       }
@@ -300,7 +350,7 @@ dead_cf_block(nir_block *block)
    if (!following_loop)
       return false;
 
-   if (!node_is_dead(&following_loop->cf_node))
+   if (!node_is_dead(&following_loop->cf_node, eliminate_local_ray_queries))
       return false;
 
    nir_cf_node_remove(&following_loop->cf_node);
@@ -308,7 +358,8 @@ dead_cf_block(nir_block *block)
 }
 
 static bool
-dead_cf_list(struct exec_list *list, bool *list_ends_in_jump)
+dead_cf_list(struct exec_list *list, bool *list_ends_in_jump,
+             bool eliminate_local_ray_queries)
 {
    bool progress = false;
    *list_ends_in_jump = false;
@@ -319,7 +370,7 @@ dead_cf_list(struct exec_list *list, bool *list_ends_in_jump)
       switch (cur->type) {
       case nir_cf_node_block: {
          nir_block *block = nir_cf_node_as_block(cur);
-         while (dead_cf_block(block)) {
+         while (dead_cf_block(block, eliminate_local_ray_queries)) {
             /* We just deleted the if or loop after this block.
              * nir_cf_node_remove may have deleted the block before
              * or after it -- which one is an implementation detail.
@@ -350,8 +401,8 @@ dead_cf_list(struct exec_list *list, bool *list_ends_in_jump)
       case nir_cf_node_if: {
          nir_if *if_stmt = nir_cf_node_as_if(cur);
          bool then_ends_in_jump, else_ends_in_jump;
-         progress |= dead_cf_list(&if_stmt->then_list, &then_ends_in_jump);
-         progress |= dead_cf_list(&if_stmt->else_list, &else_ends_in_jump);
+         progress |= dead_cf_list(&if_stmt->then_list, &then_ends_in_jump, eliminate_local_ray_queries);
+         progress |= dead_cf_list(&if_stmt->else_list, &else_ends_in_jump, eliminate_local_ray_queries);
 
          if (then_ends_in_jump && else_ends_in_jump) {
             *list_ends_in_jump = true;
@@ -370,7 +421,7 @@ dead_cf_list(struct exec_list *list, bool *list_ends_in_jump)
          nir_loop *loop = nir_cf_node_as_loop(cur);
          assert(!nir_loop_has_continue_construct(loop));
          bool dummy;
-         progress |= dead_cf_list(&loop->body, &dummy);
+         progress |= dead_cf_list(&loop->body, &dummy, eliminate_local_ray_queries);
 
          nir_block *next = nir_cf_node_as_block(nir_cf_node_next(cur));
          if (nir_block_num_preds(next) == 0 &&
@@ -420,10 +471,10 @@ delete_final_return(nir_function_impl *impl)
 }
 
 static bool
-opt_dead_cf_impl(nir_function_impl *impl)
+opt_dead_cf_impl(nir_function_impl *impl, bool eliminate_local_ray_queries)
 {
    bool dummy;
-   bool progress = dead_cf_list(&impl->body, &dummy);
+   bool progress = dead_cf_list(&impl->body, &dummy, eliminate_local_ray_queries);
    progress |= delete_final_return(impl);
 
    if (progress) {
@@ -448,12 +499,19 @@ opt_dead_cf_impl(nir_function_impl *impl)
 }
 
 bool
-nir_opt_dead_cf(nir_shader *shader)
+nir_opt_dead_cf_with_options(nir_shader *shader, bool eliminate_local_ray_queries)
 {
    bool progress = false;
 
    nir_foreach_function_impl(impl, shader)
-      progress |= opt_dead_cf_impl(impl);
+      progress |= opt_dead_cf_impl(impl, eliminate_local_ray_queries);
 
    return progress;
+}
+
+/* Keep all existing callers on their original side-effect rules. */
+bool
+nir_opt_dead_cf(nir_shader *shader)
+{
+   return nir_opt_dead_cf_with_options(shader, false);
 }

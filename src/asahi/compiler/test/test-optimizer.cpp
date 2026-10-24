@@ -1269,6 +1269,37 @@ select_test_run(agx_context *ctx, uint32_t input)
    return 0;
 }
 
+TEST_F(Optimizer, G17PRangeSelectImmediateBoundary)
+{
+   for (enum agx_size size : {AGX_SIZE_16, AGX_SIZE_32}) {
+      agx_builder *before = agx_test_builder(mem_ctx);
+      agx_builder *after = agx_test_builder(mem_ctx);
+      struct agx_shader_key key = {};
+      key.dev.encoding = AGX_ISA_ENCODING_AGX3B;
+      for (agx_builder *b : {before, after}) {
+         b->shader->key = &key;
+         agx_index variable = agx_preload(b, agx_register(0, size));
+         agx_index inner = agx_temp(b->shader, AGX_SIZE_16);
+         agx_icmpsel_to(b, inner, variable, agx_immediate(255),
+                        agx_immediate(0), agx_immediate(1), AGX_ICOND_UEQ);
+         agx_index out = agx_temp(b->shader, AGX_SIZE_16);
+         agx_icmpsel_to(b, out, variable, agx_immediate(255),
+                        agx_immediate(0), inner, AGX_ICOND_ULT);
+         agx_unit_test(b, out);
+      }
+      agx_optimize_and_dce(after->shader);
+      agx_foreach_instr_global(after->shader, I) {
+         agx_foreach_src(I, s) {
+            if (I->src[s].type == AGX_INDEX_IMMEDIATE)
+               ASSERT_LT(I->src[s].value, 256u);
+         }
+      }
+      for (uint32_t input : {0u, 254u, 255u, 256u, 257u, 65535u})
+         ASSERT_EQ(select_test_run(before->shader, input),
+                   select_test_run(after->shader, input)) << input;
+   }
+}
+
 TEST_F(Optimizer, G17PRangeSelectSemantics)
 {
    const enum agx_icond conditions[] = {

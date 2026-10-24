@@ -24,8 +24,11 @@
 #include "hk_device.h"
 #include "hk_drm_render_core.h"
 #include "hk_drm_prior_core.h"
+#include "hk_execution_allowance.h"
 #include "hk_image.h"
 #include "hk_physical_device.h"
+#include "hk_query_pool.h"
+#include "hk_sparse.h"
 
 #include <errno.h>
 #include <inttypes.h>
@@ -344,6 +347,11 @@ asahi_append_compute_attachments(struct hk_device *dev,
                                  struct util_dynarray *payload,
                                  const struct hk_cs *cs)
 {
+   /* Attachment spans are hints for the native AGX3 firmware interface.
+    * AGX2 has never sent them, so G13 and G14 keep that submission. */
+   if (!agx_native_graphics(&dev->dev))
+      return;
+
    const struct hk_drm_attachment_set *set = &cs->compute_attachments;
    const uint32_t count = MIN2(set->count, dev->dev.params.max_attachments);
    const struct drm_asahi_cmd_header header = {
@@ -364,6 +372,10 @@ asahi_append_fragment_attachments(struct hk_device *dev,
                                   struct util_dynarray *payload,
                                   const struct hk_cs *cs)
 {
+   /* See asahi_append_compute_attachments(). */
+   if (!agx_native_graphics(&dev->dev))
+      return;
+
    const struct hk_drm_attachment_set *set = &cs->fragment_attachments;
    const uint32_t count = MIN2(set->count, dev->dev.params.max_attachments);
    const struct drm_asahi_cmd_header header = {
@@ -868,8 +880,9 @@ bind_hw_tile(struct hk_bind_builder *b, struct hk_device_memory *mem,
              VkOffset3D offset, VkExtent3D extent, struct ail_tile std_size_el,
              unsigned mem_offset, unsigned x, unsigned y, unsigned z)
 {
-   uint64_t bo_offset_B = ail_get_twiddled_block_B(
-      layout, level, offset.x + x, offset.y + y, layer + offset.z + z);
+   uint64_t bo_offset_B = hk_sparse_image_tile_offset_B(
+      b->dev->dev.chip, layout, level, offset.x + x, offset.y + y,
+      layer + offset.z + z);
 
    /* Consider the standard tiles in the bound memory to be in raster order, and
     * address accordingly in standard tiles.
@@ -1134,6 +1147,11 @@ queue_submit(struct hk_device *dev, struct hk_queue *queue,
       .timeline_value = ++queue->drm.timeline_value,
    };
 
+   for (unsigned i = 0; i < submit->command_buffer_count; ++i) {
+      hk_query_note_submit((struct hk_cmd_buffer *)submit->command_buffers[i],
+                           queue, queue->drm.timeline_value);
+   }
+
    /* Now setup the command structs */
    struct util_dynarray payload = UTIL_DYNARRAY_INIT;
 
@@ -1173,8 +1191,11 @@ queue_submit(struct hk_device *dev, struct hk_queue *queue,
 
    /* Every command's barrier fields come from recorded dependencies. Legacy
     * kernels attach input syncs only to the first command, requiring a chain.
-    * A kernel advertising per-command waits needs no such execution edge. */
-   if (!hk_sync_resolve_submit(queue,
+    * A kernel advertising per-command waits needs no such execution edge.
+    * A serialized queue without exact priors replaces every field below
+    * (hk_drm_serialize_prefix), and keeps no ordinals, so it skips this. */
+   const bool resolve = !queue->sync.serialize || queue->sync.exact_prior;
+   if (resolve && !hk_sync_resolve_submit(queue,
                           (struct hk_cmd_buffer *const *)submit->command_buffers,
                           submit->command_buffer_count, flush_sstt,
                           wait_count > 0 &&
@@ -1189,10 +1210,36 @@ queue_submit(struct hk_device *dev, struct hk_queue *queue,
       struct hk_cmd_buffer *cmdbuf =
          (struct hk_cmd_buffer *)submit->command_buffers[i];
 
+      if (dev->dev.debug & AGX_DBG_PERF) {
+         perf_debug(cmdbuf, "Barrier renders: kept=%" PRIu64 " splits=%" PRIu64,
+                    cmdbuf->state.barrier_stats.kept,
+                    cmdbuf->state.barrier_stats.splits);
+         for (unsigned r = 0; r < HK_BARRIER_SPLIT_COUNT; ++r) {
+            perf_debug(cmdbuf, "Barrier split reason %s=%" PRIu64,
+                       hk_barrier_split_reason_name(r),
+                       cmdbuf->state.barrier_stats.reason[r]);
+         }
+      }
+
       list_for_each_entry(struct hk_cs, cs, &cmdbuf->control_streams, node) {
          struct drm_asahi_cmd_header header =
             agx_cmd_header(cs->type == HK_CS_CDM, cs->sync.barrier[HK_SYNC_VDM],
                            cs->sync.barrier[HK_SYNC_CDM]);
+         uint64_t command_prior[HK_SYNC_NUM_SQ] = {
+            cs->sync.prior[HK_SYNC_VDM], cs->sync.prior[HK_SYNC_CDM],
+         };
+         /* The same recording can occur twice in a merged submit (for
+          * example synchronization2.basic.event.none_set_reset). Assign
+          * classic prefixes here, per emitted occurrence. Storing them in
+          * hk_cs makes the later occurrence overwrite the earlier one and
+          * creates a self-wait that the kernel rejects with EINVAL. */
+         if (queue->sync.serialize &&
+             !hk_drm_serialize_prefix(&header, command_prior, nr_vdm, nr_cdm,
+                                       prior_base, queue->sync.exact_prior)) {
+            util_dynarray_fini(&payload);
+            return vk_device_set_lost(&dev->vk,
+                                      "Asahi serialization ordinal overflow");
+         }
          assert(header.vdm_barrier == DRM_ASAHI_BARRIER_NONE ||
                 header.vdm_barrier <= nr_vdm);
          assert(header.cdm_barrier == DRM_ASAHI_BARRIER_NONE ||
@@ -1205,13 +1252,31 @@ queue_submit(struct hk_device *dev, struct hk_queue *queue,
                i, cs->stats.calls, cs->stats.cmds, cs->stats.flushes,
                cs->stats.merged);
 
+            if (cs->stats.query_copy_dispatches ||
+                cs->stats.query_reset_dispatches) {
+               perf_debug(
+                  cmdbuf,
+                  "query copy: %" PRIu64 " dispatches, %" PRIu64
+                  " queries, %" PRIu64 " counters; reset: %" PRIu64
+                  " dispatches, %" PRIu64 " queries, %" PRIu64 " flushes",
+                  cs->stats.query_copy_dispatches, cs->stats.query_copy_queries,
+                  cs->stats.query_copy_counters, cs->stats.query_reset_dispatches,
+                  cs->stats.query_reset_queries, cs->stats.query_reset_flushes);
+            }
+
             assert(cs->stats.cmds > 0 || cs->stats.flushes > 0 ||
                    cs->timestamp.end.handle || cs->timestamp.start.handle);
 
             asahi_append_compute_attachments(dev, &payload, cs);
             struct drm_asahi_cmd_compute_with_prior cmd = {0};
             asahi_fill_cdm_command(dev, cs, &cmd.legacy);
-            if(cs->gen1_native_rq) {
+            cmd.legacy.flags |= hk_as_build_flags(dev->dev.chip,
+                                                  dev->dev.params.features,
+                                                  cs->as_build);
+            /* Native ray queries exist only on kernels that accept the
+             * extended command (hk_g17p_rt_enabled). */
+            assert(!cs->gen1_native_rq || dev->gen1_native_rq);
+            if (cs->gen1_native_rq && dev->gen1_native_rq) {
                header.size=sizeof(cmd);
                cmd.scs_layout=hk_gen1_ray_query_scs_layout(dev);
                cmd.intersection_pool=dev->gen1_rq_ift->va->addr;
@@ -1222,16 +1287,22 @@ queue_submit(struct hk_device *dev, struct hk_queue *queue,
             }
             if (queue->sync.exact_prior) {
                header.size = sizeof(cmd);
-               cmd.prior_vdm = cs->sync.prior[HK_SYNC_VDM];
-               cmd.prior_cdm = cs->sync.prior[HK_SYNC_CDM];
+               cmd.prior_vdm = command_prior[HK_SYNC_VDM];
+               cmd.prior_cdm = command_prior[HK_SYNC_CDM];
             }
             util_dynarray_append(&payload, header);
             util_dynarray_append_array(&payload, uint8_t, &cmd, header.size);
             nr_cdm++;
          } else {
             assert(cs->type == HK_CS_VDM);
-            perf_debug(cmdbuf, "%u: Submitting VDM with %u API draws, %u draws",
-                       i, cs->stats.calls, cs->stats.cmds);
+            perf_debug(cmdbuf,
+                       "%u: Submitting VDM with %u API draws, %u draws, "
+                       "robust_index_draws=%u robust_index_dispatches=%u "
+                       "robust_index_batches=%u",
+                       i, cs->stats.calls, cs->stats.cmds,
+                       cs->stats.robust_index_draws,
+                       cs->stats.robust_index_dispatches,
+                       cs->stats.robust_index_batches);
             assert(cs->stats.cmds > 0 || cs->cr.process_empty_tiles ||
                    cs->timestamp.end.handle || cs->timestamp.start.handle);
 
@@ -1245,7 +1316,8 @@ queue_submit(struct hk_device *dev, struct hk_queue *queue,
              * the fragment half after them, so this render's vertex work can
              * overlap their fragment work. Compute dependencies keep ordering
              * the vertex half either way. */
-            if ((dev->dev.params.features &
+            if (!queue->sync.serialize &&
+                (dev->dev.params.features &
                  DRM_ASAHI_FEATURE_FRAGMENT_BARRIERS) &&
                 cs->sync.ta_split &&
                 cs->sync.barrier_ta[HK_SYNC_VDM] == DRM_ASAHI_BARRIER_NONE &&
@@ -1256,8 +1328,8 @@ queue_submit(struct hk_device *dev, struct hk_queue *queue,
             header.size = hk_drm_render_command_size(
                agx_native_graphics(&dev->dev), queue->sync.exact_prior);
             if (queue->sync.exact_prior) {
-               cmd.prior_vdm = cs->sync.prior[HK_SYNC_VDM];
-               cmd.prior_cdm = cs->sync.prior[HK_SYNC_CDM];
+               cmd.prior_vdm = command_prior[HK_SYNC_VDM];
+               cmd.prior_cdm = command_prior[HK_SYNC_CDM];
             }
             if (cs->gen1_native_fragment_rq || cs->gen1_native_vertex_rq) {
                struct drm_asahi_cmd_render_with_ray_query extended = {.legacy = cmd};
@@ -1412,7 +1484,16 @@ hk_queue_init(struct hk_device *dev, const VkDeviceQueueCreateInfo *pCreateInfo,
    }
 
    queue->vk.driver_submit = hk_queue_submit;
+   queue->sync.serialize = dev->dev.params.gpu_generation >= 13 &&
+                           dev->dev.params.gpu_generation <= 14;
+   /* A serialized queue orders every command after both engines' complete
+    * prefixes, earlier submissions included. The legacy header encodes that
+    * exactly (a zero barrier names every earlier command), so exact prior
+    * ordinals carry no information there. They only make the kernel resolve
+    * a historical dependency per engine for every command, which costs
+    * single-submission latency on G13 and G14. Keep upstream's payload. */
    queue->sync.exact_prior =
+      !queue->sync.serialize &&
       (dev->dev.params.features & DRM_ASAHI_FEATURE_EXACT_PRIOR_BARRIERS) != 0;
 
    queue->drm.id = UINT32_MAX;
@@ -1440,6 +1521,7 @@ hk_queue_init(struct hk_device *dev, const VkDeviceQueueCreateInfo *pCreateInfo,
     * completed bootstrap point.  QueueWaitIdle transfers from this cursor;
     * reusing point 1 lets it return before the first submit has completed. */
    queue->drm.timeline_value = initial_value;
+   queue->drm.signalled_value = initial_value;
 
    if (dev->dev.chip == AGX_CHIP_G17P &&
        dev->vk.enabled_features.sparseBinding) {

@@ -244,3 +244,70 @@ TEST(PressureCSE, ReplacementKeyZeroAndRepeatedEmptyBlocks)
       }
    }
 }
+
+TEST(PressureCSE, BoundedSharesCopiesBelowThePeak)
+{
+   void *mem = ralloc_context(NULL);
+   agx_builder *b = agx_test_builder(mem);
+   agx_index x = agx_mov(b, agx_uniform(12, AGX_SIZE_32));
+   agx_index y = agx_mov(b, agx_uniform(14, AGX_SIZE_32));
+   agx_index z = agx_mov(b, agx_uniform(16, AGX_SIZE_32));
+   agx_unit_test(b, x);
+   agx_unit_test(b, y);
+   agx_unit_test(b, z);
+   agx_unit_test(b, agx_mov(b, agx_uniform(8, AGX_SIZE_32)));
+   agx_unit_test(b, agx_mov(b, agx_uniform(10, AGX_SIZE_32)));
+   agx_unit_test(b, agx_mov(b, agx_uniform(8, AGX_SIZE_32)));
+   unsigned pressure = peak_pressure(b->shader);
+   agx_opt_cse_bounded(b->shader);
+   agx_dce(b->shader, true);
+   EXPECT_EQ(count_uniform_copies(b->shader, 8), 1u);
+   EXPECT_LE(peak_pressure(b->shader), pressure);
+   ralloc_free(mem);
+}
+
+TEST(PressureCSE, BoundedKeepsCopiesAcrossThePeak)
+{
+   void *mem = ralloc_context(NULL);
+   agx_builder *b = agx_test_builder(mem);
+   agx_unit_test(b, agx_mov(b, agx_uniform(8, AGX_SIZE_32)));
+   agx_index x = agx_mov(b, agx_uniform(12, AGX_SIZE_32));
+   agx_index y = agx_mov(b, agx_uniform(14, AGX_SIZE_32));
+   agx_unit_test(b, x);
+   agx_unit_test(b, y);
+   agx_unit_test(b, agx_mov(b, agx_uniform(8, AGX_SIZE_32)));
+   agx_opt_cse_bounded(b->shader);
+   agx_dce(b->shader, true);
+   EXPECT_EQ(count_uniform_copies(b->shader, 8), 2u);
+   ralloc_free(mem);
+}
+
+TEST(PressureCSE, BoundedRandomizedValuesAndPressureInvariant)
+{
+   for (unsigned seed = 1; seed <= 128; ++seed) {
+      SCOPED_TRACE(seed);
+      void *mem = ralloc_context(NULL);
+      agx_builder *b = agx_test_builder(mem);
+      std::vector<agx_index> values;
+      unsigned state = seed;
+      auto random = [&state]() {
+         state = state * 1664525u + 1013904223u;
+         return state;
+      };
+      for (unsigned i = 0; i < 64; ++i) {
+         auto size = random() & 1 ? AGX_SIZE_16 : AGX_SIZE_32;
+         values.push_back(agx_mov(b, agx_uniform(2 * (random() % 8), size)));
+         if (random() & 3)
+            agx_unit_test(b, values[random() % values.size()]);
+      }
+      for (unsigned i = 0; i < 32; ++i)
+         agx_unit_test(b, values[random() % values.size()]);
+      auto expected = observe_uniforms(b->shader);
+      unsigned pressure = peak_pressure(b->shader);
+      agx_opt_cse_bounded(b->shader);
+      agx_dce(b->shader, true);
+      EXPECT_EQ(observe_uniforms(b->shader), expected);
+      EXPECT_LE(peak_pressure(b->shader), pressure);
+      ralloc_free(mem);
+   }
+}

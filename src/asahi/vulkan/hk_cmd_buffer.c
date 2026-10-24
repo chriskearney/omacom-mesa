@@ -35,6 +35,7 @@
 #include "util/cache_ops.h"
 #include "util/log.h"
 #include "util/hash_table.h"
+#include "util/set.h"
 #include "util/u_debug.h"
 #include "util/os_time.h"
 
@@ -205,7 +206,10 @@ hk_destroy_cmd_buffer(struct vk_command_buffer *vk_cmd_buffer)
    hk_free_resettable_cmd_buffer(cmd);
    util_dynarray_fini(&cmd->large_bos);
    free(cmd->retained_set);
+   if (cmd->m5_pushed_images)
+      _mesa_set_destroy(cmd->m5_pushed_images, NULL);
    util_dynarray_fini(&cmd->sync_pass_records);
+   util_dynarray_fini(&cmd->oq_ends);
    vk_command_buffer_finish(&cmd->vk);
    vk_free(&pool->vk.alloc, cmd);
 }
@@ -296,6 +300,9 @@ hk_reset_cmd_buffer(struct vk_command_buffer *vk_cmd_buffer,
    cmd->geom_instance_count = 0;
    cmd->uses_heap = false;
    hk_sync_reset(cmd);
+   if (cmd->m5_pushed_images)
+      _mesa_set_clear(cmd->m5_pushed_images, NULL);
+   util_dynarray_clear(&cmd->oq_ends);
 
    memset(&cmd->state, 0, sizeof(cmd->state));
    for (unsigned i = 0; i < HK_G17P_BG_EOT_CACHE_ENTRIES; ++i)
@@ -322,6 +329,8 @@ hk_CmdExecuteCommands(VkCommandBuffer commandBuffer,
       cmd->vk.base.device->command_dispatch_table;
    const struct hk_conditional_render_state primary_conditional =
       cmd->state.conditional;
+
+   hk_flush_deferred_clears(cmd);
 
    /* Secondary command buffers are materialized by replaying their common
     * command queues into the primary.  Their last bound state is therefore
@@ -461,17 +470,6 @@ hk_pool_cs_alloc(struct hk_cmd_buffer *cmd, uint32_t size, uint32_t alignment)
    return hk_pool_alloc_from(cmd, uploader, size, alignment, HK_CMD_BO_MAIN);
 }
 
-static struct agx_ptr
-hk_pool_root_alloc(struct hk_cmd_buffer *cmd, uint32_t size,
-                   uint32_t alignment)
-{
-   struct hk_device *dev = hk_cmd_buffer_device(cmd);
-   if (!agx_native_graphics(&dev->dev))
-      return hk_pool_alloc(cmd, size, alignment);
-
-   return hk_pool_alloc_from(cmd, &cmd->uploader.root, size, alignment,
-                             HK_CMD_BO_ROOT);
-}
 
 struct agx_ptr
 hk_pool_vdm_primary_alloc(struct hk_cmd_buffer *cmd, uint32_t size,
@@ -796,6 +794,7 @@ hk_EndCommandBuffer(VkCommandBuffer commandBuffer)
           "must end rendering before ending the command buffer");
 
    perf_debug(cmd, "End command buffer");
+   hk_flush_deferred_clears(cmd);
    hk_sync_flush_pending_timestamp(cmd);
    hk_cmd_buffer_end_compute(cmd);
    hk_cmd_buffer_end_compute_internal(cmd, &cmd->current_cs.post_gfx);
@@ -821,6 +820,7 @@ hk_EndCommandBuffer(VkCommandBuffer commandBuffer)
    hk_cmd_buffer_publish_cached_uploads(cmd);
    hk_cmd_buffer_publish_root_uploads(cmd);
 
+   hk_cmd_print_upload_stats(cmd);
    return vk_command_buffer_end(&cmd->vk);
 }
 
@@ -847,28 +847,53 @@ hk_dependency_has_host_read(const VkDependencyInfo *info)
    return false;
 }
 
-/* Whether any barrier in the dependency makes writes visible to later reads.
- * An execution-only dependency (both access masks zero) inside a render pass
- * instance needs no tile store. */
-static bool
-hk_dependency_has_memory_scope(const VkDependencyInfo *info)
+/* Images are compared as whole resources. Subresource-disjoint barriers may
+ * still split, and aliasable/sparse attachments disable the unwritten-image
+ * proof. Never infer disjointness from different Vulkan handles alone.
+ */
+static uint32_t
+hk_classify_pass_barrier(struct hk_cmd_buffer *cmd, const VkDependencyInfo *info)
 {
-   for (uint32_t i = 0; i < info->memoryBarrierCount; ++i) {
-      if (info->pMemoryBarriers[i].dstAccessMask)
-         return true;
-   }
+   const struct hk_rendering_state *render = &cmd->state.gfx.render;
+   VkImage images[HK_MAX_RTS + 2];
+   struct hk_barrier_state state = {
+      .shader_writes = render->barrier_shader_writes,
+      .pre_graphics = cmd->current_cs.pre_gfx != NULL,
+      .post_graphics = cmd->current_cs.post_gfx != NULL,
+      .tilebuffer_spilled = agx_tilebuffer_spills(&render->tilebuffer),
+      .attachments = images,
+   };
+   const struct hk_attachment *attachments[HK_MAX_RTS + 2];
+   unsigned count = 0;
+   for (unsigned i = 0; i < render->color_att_count; ++i)
+      attachments[count++] = &render->color_att[i];
+   attachments[count++] = &render->depth_att;
+   attachments[count++] = &render->stencil_att;
 
-   for (uint32_t i = 0; i < info->bufferMemoryBarrierCount; ++i) {
-      if (info->pBufferMemoryBarriers[i].dstAccessMask)
-         return true;
+   bool aliases = false;
+   for (unsigned i = 0; i < count; ++i) {
+      if (!attachments[i]->iview)
+         continue;
+      struct vk_image *image = attachments[i]->iview->vk.image;
+      aliases |= hk_barrier_image_may_alias(
+         image->create_flags, image->tiling, image->external_handle_types);
+      const VkImageAspectFlags aspect =
+         i < render->color_att_count ? VK_IMAGE_ASPECT_COLOR_BIT :
+         i == render->color_att_count ? VK_IMAGE_ASPECT_DEPTH_BIT :
+                                       VK_IMAGE_ASPECT_STENCIL_BIT;
+      if (!hk_barrier_attachment_may_write(
+             attachments[i]->layout, aspect,
+             attachments[i]->clear ? VK_ATTACHMENT_LOAD_OP_CLEAR :
+                                      attachments[i]->load_op,
+             attachments[i]->resolve_mode))
+         continue;
+      /* Do not mark a shared image client_visible while recording in parallel. */
+      images[state.attachment_count++] =
+         (VkImage)(uintptr_t)vk_object_to_u64_handle(&image->base);
    }
+   state.attachments_alias = state.attachment_count && aliases;
 
-   for (uint32_t i = 0; i < info->imageMemoryBarrierCount; ++i) {
-      if (info->pImageMemoryBarriers[i].dstAccessMask)
-         return true;
-   }
-
-   return false;
+   return hk_barrier_classify(info, &state);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -883,28 +908,44 @@ hk_CmdPipelineBarrier2(VkCommandBuffer commandBuffer,
 
    perf_debug(cmd, "Pipeline barrier");
 
-   /* Inside a render pass instance both scopes are limited to that instance
-    * (Vulkan 1.3, 7.6.1: "If vkCmdPipelineBarrier2 is called inside a render
-    * pass instance, the first synchronization scope includes only commands
-    * that occur earlier in submission order within the same subpass" and
-    * likewise for the second). Nothing after the pass learns anything from
-    * it, but software graphics stages on CDM must observe it within the pass.
-    * Input attachments are
-    * lowered to texture loads (nir_lower_input_attachments in hk_shader.c),
-    * so a dependency with a memory scope needs the tile buffer stored and
-    * reloaded, which is a render split. The continuation stream then waits
-    * on the stream it continues, see hk_sync_stream_created. */
+   if (!agx_native_graphics(&dev->dev)) {
+      hk_cmd_buffer_end_compute(cmd);
+      hk_cmd_buffer_end_graphics(cmd);
+      /* Preserve the same conservative ordering in the shared submit graph,
+       * including kernels that advertise exact prior barriers on AGX2. */
+      hk_sync_barrier(cmd, HK_SYNC_ALL, HK_SYNC_ALL);
+      return;
+   }
+
+   /* M5: a render pass instance that ended may still be continued by the
+    * next one if this dependency is framebuffer-local. */
+   if (unlikely(cmd->state.pass_merge.valid))
+      hk_m5_pass_merge_barrier(cmd, pDependencyInfo);
+
+   /* Host availability is recorded against the work already recorded. */
+   if (cmd->state.deferred_clear_count &&
+       hk_dependency_has_host_read(pDependencyInfo))
+      hk_flush_deferred_clears(cmd);
+
+   /* In-pass dependencies stay scoped to the API pass, even when its
+    * physical render must end. Keep local attachment operations in tile
+    * memory; descriptor/input-attachment reads still require a store because
+    * the compiler lowers them to texture fetches. Software vertex work needs
+    * a boundary only when the destination scope can name it.
+    */
    if (cmd->sync.in_pass) {
       uint8_t src_kinds, dst_kinds;
-      hk_sync_dependency_kinds(pDependencyInfo, &src_kinds, &dst_kinds);
-      /* Software stages cannot cross an in-pass execution dependency by
-       * extending a stream positioned before its source render. End that
-       * stream too, even if the barrier has no memory access masks. */
-      const bool software_stages = src_kinds && dst_kinds &&
-         (cmd->current_cs.pre_gfx || cmd->current_cs.post_gfx);
-      if ((hk_dependency_has_memory_scope(pDependencyInfo) || software_stages) &&
-          cmd->current_cs.gfx) {
-         hk_cmd_buffer_end_graphics(cmd);
+      hk_sync_dependency_kinds(pDependencyInfo, hk_sync_image_class(cmd),
+                            &src_kinds, &dst_kinds);
+      const uint32_t reasons = hk_classify_pass_barrier(cmd, pDependencyInfo);
+      if (reasons) {
+         if (hk_cmd_buffer_end_graphics(cmd)) {
+            cmd->state.barrier_stats.splits++;
+            u_foreach_bit(r, reasons)
+               cmd->state.barrier_stats.reason[r]++;
+         }
+      } else if (cmd->current_cs.gfx) {
+         cmd->state.barrier_stats.kept++;
       }
       /* Ending an empty render can replace its clear with a CDM job. Capture
        * the first scope only after that replacement has its physical stream. */
@@ -913,7 +954,8 @@ hk_CmdPipelineBarrier2(VkCommandBuffer commandBuffer,
    }
 
    uint8_t src_kinds, dst_kinds;
-   hk_sync_dependency_kinds(pDependencyInfo, &src_kinds, &dst_kinds);
+   hk_sync_dependency_kinds(pDependencyInfo, hk_sync_image_class(cmd),
+                            &src_kinds, &dst_kinds);
 
    /* Compute work that stays in the open compute stream is ordered by the
     * stream itself; what it needs at a barrier is visibility. Every native
@@ -946,6 +988,12 @@ hk_CmdPipelineBarrier2(VkCommandBuffer commandBuffer,
       hk_ensure_cs_has_space(cmd, flush, AGX3_CDM_BARRIER_SIZE);
       hk_cdm_cache_flush(dev, flush);
    }
+
+   /* The dependency this barrier recorded is the one a continued instance
+    * applies to its stream (hk_sync_merge_rendering()); a stream it created
+    * or extended still ends the candidacy there. */
+   if (unlikely(cmd->state.pass_merge.valid))
+      cmd->state.pass_merge.sync_epoch = cmd->sync.epoch;
 }
 
 __attribute__((hot)) void
@@ -1019,6 +1067,7 @@ hk_bind_descriptor_sets(struct hk_cmd_buffer *cmd,
       pipeline_layout->dynamic_descriptor_offset[info->firstSet];
 
    bool root_changed = false;
+   bool binding_changed = false;
    uint32_t next_dyn_offset = 0;
    for (uint32_t i = 0; i < info->descriptorSetCount; ++i) {
       unsigned s = i + info->firstSet;
@@ -1026,6 +1075,7 @@ hk_bind_descriptor_sets(struct hk_cmd_buffer *cmd,
 
       if (desc->sets[s] != set ||
           (desc->push_active & BITFIELD_BIT(s))) {
+         binding_changed = true;
          if (set != NULL) {
             root_changed |= desc->root.sets[s] != hk_descriptor_set_addr(set);
             desc->root.sets[s] = hk_descriptor_set_addr(set);
@@ -1074,13 +1124,19 @@ hk_bind_descriptor_sets(struct hk_cmd_buffer *cmd,
    }
    assert(dyn_buffer_start <= HK_MAX_DYNAMIC_BUFFERS);
    assert(next_dyn_offset <= info->dynamicOffsetCount);
+   root_changed |= desc->dynamic_buffer_end < dyn_buffer_start;
    desc->dynamic_buffer_end = MAX2(desc->dynamic_buffer_end, dyn_buffer_start);
 
-   /* Preserve all descriptor bookkeeping even if the root's immutable bytes
-    * can be reused.  Other paths keep the prior unconditional invalidation.
-    */
-   desc->root_dirty |= root_changed ||
-      !hk_g17p_can_retain_descriptor_root(cmd, desc);
+   hk_upload_stat(cmd, descriptor_binds, 1);
+   const bool retain_root = hk_g17p_can_retain_descriptor_root(cmd, desc);
+   if (!root_changed && !binding_changed && retain_root) {
+      hk_upload_stat(cmd, descriptor_noops, 1);
+      return;
+   }
+
+   /* CPU-decoded descriptor programs retain their conservative invalidation:
+    * their inputs can change in set memory without changing its address. */
+   desc->root_dirty |= root_changed || !retain_root;
    desc->generation++;
 }
 
@@ -1093,6 +1149,7 @@ hk_CmdBindDescriptorSets2KHR(
 
    if (pBindDescriptorSetsInfo->stageFlags & (VK_SHADER_STAGE_ALL_GRAPHICS |
        VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT)) {
+      hk_m5_pass_merge_note_set_bind(cmd);
       hk_bind_descriptor_sets(cmd, &cmd->state.gfx.descriptors,
                               pBindDescriptorSetsInfo);
    }
@@ -1166,12 +1223,70 @@ hk_cmd_push_descriptors(struct hk_cmd_buffer *cmd,
    return desc->push[set];
 }
 
+/* Whether a descriptor of this type names an image view. */
+static inline bool
+hk_descriptor_type_has_image_view(VkDescriptorType type)
+{
+   return type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER ||
+          type == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE ||
+          type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE ||
+          type == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+}
+
+/* M5 render pass continuation: the image views a graphics push descriptor
+ * update writes (hk_m5_pass_merge_note_push()). */
+static void
+hk_m5_note_push_writes(struct hk_cmd_buffer *cmd, uint32_t count,
+                       const VkWriteDescriptorSet *writes)
+{
+   if (!agx_chip_native_agx3(hk_cmd_buffer_device(cmd)->dev.chip))
+      return;
+
+   for (uint32_t i = 0; i < count; ++i) {
+      if (!hk_descriptor_type_has_image_view(writes[i].descriptorType))
+         continue;
+      for (uint32_t j = 0; j < writes[i].descriptorCount; ++j) {
+         VK_FROM_HANDLE(hk_image_view, iview,
+                        writes[i].pImageInfo[j].imageView);
+         if (iview)
+            hk_m5_pass_merge_note_push(cmd, iview);
+      }
+   }
+}
+
+static void
+hk_m5_note_push_template(struct hk_cmd_buffer *cmd,
+                         const struct vk_descriptor_update_template *template,
+                         const void *data)
+{
+   if (!agx_chip_native_agx3(hk_cmd_buffer_device(cmd)->dev.chip))
+      return;
+
+   for (uint32_t i = 0; i < template->entry_count; ++i) {
+      const struct vk_descriptor_template_entry *entry = &template->entries[i];
+      if (!hk_descriptor_type_has_image_view(entry->type))
+         continue;
+      for (uint32_t j = 0; j < entry->array_count; ++j) {
+         const VkDescriptorImageInfo *info =
+            (const void *)((const uint8_t *)data + entry->offset +
+                           j * entry->stride);
+         VK_FROM_HANDLE(hk_image_view, iview, info->imageView);
+         if (iview)
+            hk_m5_pass_merge_note_push(cmd, iview);
+      }
+   }
+}
+
 static void
 hk_push_descriptor_set(struct hk_cmd_buffer *cmd,
                        struct hk_descriptor_state *desc,
                        const VkPushDescriptorSetInfoKHR *info)
 {
    VK_FROM_HANDLE(vk_pipeline_layout, pipeline_layout, info->layout);
+
+   if (desc == &cmd->state.gfx.descriptors)
+      hk_m5_note_push_writes(cmd, info->descriptorWriteCount,
+                             info->pDescriptorWrites);
 
    struct hk_push_descriptor_set *push_set =
       hk_cmd_push_descriptors(cmd, desc, info->set);
@@ -1216,11 +1331,14 @@ hk_cmd_buffer_flush_push_descriptors(struct hk_cmd_buffer *cmd,
 {
    u_foreach_bit(set_idx, desc->push_dirty) {
       struct hk_push_descriptor_set *push_set = desc->push[set_idx];
-      const uint64_t push_set_addr = hk_pool_upload(
-         cmd, push_set->data, sizeof(push_set->data), HK_MIN_UBO_ALIGNMENT);
+      /* Only the bytes the pushed layout uses; the rest is never read */
+      const uint32_t size = MAX2(push_set->size, HK_MIN_UBO_ALIGNMENT);
+      assert(size <= sizeof(push_set->data));
+      const uint64_t push_set_addr =
+         hk_pool_upload(cmd, push_set->data, size, HK_MIN_UBO_ALIGNMENT);
 
       desc->root.sets[set_idx] = push_set_addr;
-      desc->set_sizes[set_idx] = sizeof(push_set->data);
+      desc->set_sizes[set_idx] = size;
    }
 
    desc->root_dirty = true;
@@ -1248,56 +1366,15 @@ hk_CmdPushDescriptorSetWithTemplate2KHR(
    struct hk_descriptor_set_layout *set_layout = vk_to_hk_descriptor_set_layout(
       pipeline_layout->set_layouts[pPushDescriptorSetWithTemplateInfo->set]);
 
+   if (desc == &cmd->state.gfx.descriptors)
+      hk_m5_note_push_template(cmd, template,
+                               pPushDescriptorSetWithTemplateInfo->pData);
+
    hk_push_descriptor_set_update_template(
       push_set, set_layout, template,
       pPushDescriptorSetWithTemplateInfo->pData);
 }
 
-__attribute__((hot)) uint64_t
-hk_cmd_buffer_upload_root(struct hk_cmd_buffer *cmd,
-                          VkPipelineBindPoint bind_point)
-{
-   struct hk_device *dev = hk_cmd_buffer_device(cmd);
-   struct hk_descriptor_state *desc = hk_get_descriptors_state(cmd, bind_point);
-   struct hk_root_descriptor_table *root = &desc->root;
-
-   struct agx_ptr root_ptr = hk_pool_root_alloc(cmd, sizeof(*root), 8);
-
-   /* A HAL200 tail built for the old root names it and must be rebuilt
-    * before publication. */
-   if (bind_point == VK_PIPELINE_BIND_POINT_GRAPHICS &&
-       cmd->state.gfx.root && root_ptr.gpu != cmd->state.gfx.root)
-      cmd->state.gfx.g17p_bind_tail.valid = false;
-   if (!root_ptr.gpu)
-      return 0;
-
-   root->root_desc_addr = root_ptr.gpu;
-   root->printf_buffer_address = dev->dev.printf_buffer_address;
-   root->sampler_heap_address =
-      dev->samplers.table.bo && dev->samplers.table.bo->va
-         ? dev->samplers.table.bo->va->addr
-         : 0;
-
-   /* Dynamic buffers past the highest one ever bound are read by no bound
-    * layout: copy the table around them. */
-   const size_t head_B = hk_root_descriptor_offset(dynamic_buffers) +
-                         desc->dynamic_buffer_end * sizeof(root->dynamic_buffers[0]);
-   const size_t tail_B = hk_root_descriptor_offset(set_dynamic_buffer_start);
-   memcpy(root_ptr.cpu, root, head_B);
-   memcpy((uint8_t *)root_ptr.cpu + tail_B, (const uint8_t *)root + tail_B,
-          sizeof(*root) - tail_B);
-
-   /* Cached G17P roots need explicit CPU-to-GPU publication. Clean just this
-    * table now; vkEndCommandBuffer completes all recorded root cleans with a
-    * single fence before submission can consume them. */
-   if (agx_native_graphics(&dev->dev) && util_has_cache_ops()) {
-      util_flush_range_no_fence(root_ptr.cpu, head_B);
-      util_flush_range_no_fence((uint8_t *)root_ptr.cpu + tail_B,
-                                sizeof(*root) - tail_B);
-   }
-
-   return root_ptr.gpu;
-}
 
 static uint64_t
 hk_upload_native_spilled_rt_descs(struct hk_cmd_buffer *cmd)
@@ -2803,6 +2880,48 @@ refused:
 
 static uint64_t
 hk_upload_usc_words_internal(struct hk_cmd_buffer *cmd, struct hk_shader *s,
+                             struct hk_linked_shader *linked);
+
+uint64_t
+hk_m5_multi_draw_vertex_program(struct hk_cmd_buffer *cmd, struct hk_shader *s,
+                                struct hk_linked_shader *linked)
+{
+   struct hk_graphics_state *gfx = &cmd->state.gfx;
+   struct hk_g17p_graphics_ioto_cache_entry *cached = &gfx->g17p_ioto[0];
+   const struct hk_g17p_launch *launch = hk_g17p_launch_slot(cmd, 0, linked);
+
+   /* No command was recorded between the records of one multi-draw, so
+    * every range the previous record's launch replay derived from the root,
+    * the descriptor sets and their buffers (hk_g17p_launch_replay()) is
+    * unchanged; only the draw-parameter and draw-index ranges follow the
+    * record. The previous record left that launch's loader and ranges as the
+    * stage's last publication. Anything else takes the general path. */
+   if (s->info.stage == MESA_SHADER_VERTEX && !s->info.agx3_gen1_fragment_rq &&
+       launch->valid && launch->s == s && launch->linked == linked &&
+       launch->loader && cached->loader == launch->loader &&
+       cached->loader_linked == linked && cached->loader_program &&
+       launch->flags == hk_g17p_launch_flags(cmd, s)) {
+      struct agx3_ioto_uniform_range ranges[HK_AGX3_G17P_GRAPHICS_MAX_RANGES];
+      const unsigned count = launch->count;
+      memcpy(ranges, cached->loader_ranges, count * sizeof(ranges[0]));
+      for (unsigned i = 0; i < count; ++i) {
+         if (launch->source[i] == HK_G17P_RANGE_SOURCE_DRAW_PARAMS)
+            ranges[i].address = gfx->draw_params;
+         else if (launch->source[i] == HK_G17P_RANGE_SOURCE_DRAW_ID)
+            ranges[i].address = gfx->draw_id_ptr;
+      }
+
+      if (hk_g17p_patch_plan_fits(&launch->loader->plan, ranges)) {
+         return hk_g17p_gfx_loader_publish(cmd, linked, cached, launch->loader,
+                                           ranges, count);
+      }
+   }
+
+   return hk_upload_usc_words_internal(cmd, s, linked);
+}
+
+static uint64_t
+hk_upload_usc_words_internal(struct hk_cmd_buffer *cmd, struct hk_shader *s,
                              struct hk_linked_shader *linked)
 {
    struct hk_device *dev = hk_cmd_buffer_device(cmd);
@@ -3059,21 +3178,11 @@ hk_apply_conditional_rendering(struct hk_cmd_buffer *cmd, uint64_t source,
    return vk_command_buffer_has_error(&cmd->vk) ? 0 : output.gpu;
 }
 
-bool
-hk_cs_init_graphics(struct hk_cmd_buffer *cmd, struct hk_cs *cs)
+static void
+hk_cs_capture_fragment_attachments(const struct hk_device *dev,
+                                   const struct hk_rendering_state *render,
+                                   struct hk_cs *cs)
 {
-   struct hk_device *dev = hk_cmd_buffer_device(cmd);
-   struct hk_rendering_state *render = &cmd->state.gfx.render;
-   uint8_t *map = cs->current;
-
-   /* Even a clear-only stream needs a stable root alias before EndCommandBuffer.
-    * Linked chunks acquire theirs in hk_cmd_buffer_emit_cs_jump. */
-   if (hk_g17p_vdm_low_window_enabled(&dev->dev) &&
-       !hk_g17p_vdm_compact(cmd, cs->addr))
-      return false;
-
-   hk_drm_attachment_set_init(&cs->fragment_attachments);
-
    /* Retain the image allocation spans now. A command buffer may contain
     * several VDM commands with different render state, while queue submission
     * happens only after all of them have been recorded. */
@@ -3148,6 +3257,26 @@ hk_cs_init_graphics(struct hk_cmd_buffer *cmd, struct hk_cs *cs)
 
       hk_drm_attachment_set_add(&cs->fragment_attachments, plane->addr, size);
    }
+}
+
+bool
+hk_cs_init_graphics(struct hk_cmd_buffer *cmd, struct hk_cs *cs)
+{
+   struct hk_device *dev = hk_cmd_buffer_device(cmd);
+   struct hk_rendering_state *render = &cmd->state.gfx.render;
+   uint8_t *map = cs->current;
+
+   /* Even a clear-only stream needs a stable root alias before EndCommandBuffer.
+    * Linked chunks acquire theirs in hk_cmd_buffer_emit_cs_jump. */
+   if (hk_g17p_vdm_low_window_enabled(&dev->dev) &&
+       !hk_g17p_vdm_compact(cmd, cs->addr))
+      return false;
+
+   hk_drm_attachment_set_init(&cs->fragment_attachments);
+
+   /* Only the native AGX3 path submits the spans (hk_queue.c). */
+   if (agx_native_graphics(&dev->dev))
+      hk_cs_capture_fragment_attachments(dev, render, cs);
 
    if (agx_native_graphics(&dev->dev)) {
       /* The kext preserves a zero final VDM word when this selector is the
@@ -3392,7 +3521,21 @@ clear_attachment_as_image(struct hk_cmd_buffer *cmd,
                           struct hk_attachment *att, unsigned aspect)
 {
    struct hk_image_view *view = att->iview;
-   if (!att->clear || !view || !(view->vk.aspects & aspect))
+   if (!att->clear || !view)
+      return;
+
+   /* A depth/stencil attachment uses every aspect of its image whatever the
+    * view's aspect mask says (the mask is ignored for render pass depth/stencil
+    * attachments), so a depth-only view bound as the stencil attachment must
+    * still have its stencil cleared. Its view format then names only the depth
+    * aspect, so take the format from the image. Colour keeps the view format,
+    * in which the clear value is expressed.
+    */
+   const bool zs = aspect & (VK_IMAGE_ASPECT_DEPTH_BIT |
+                             VK_IMAGE_ASPECT_STENCIL_BIT);
+   const VkImageAspectFlags aspects = zs ? view->vk.image->aspects
+                                         : view->vk.aspects;
+   if (!(aspects & aspect))
       return;
 
    const uint32_t layer_count = render->view_mask
@@ -3404,11 +3547,11 @@ clear_attachment_as_image(struct hk_cmd_buffer *cmd,
       .levelCount = 1,
       .baseArrayLayer = view->vk.base_array_layer,
       .baseMipLevel = view->vk.base_mip_level,
-      .aspectMask = view->vk.aspects & aspect,
+      .aspectMask = aspects & aspect,
    };
 
    assert(util_bitcount(range.aspectMask) == 1);
-   VkFormat format = att->vk_format;
+   VkFormat format = zs ? view->vk.image->format : att->vk_format;
 
    if (aspect == VK_IMAGE_ASPECT_DEPTH_BIT) {
       format = vk_format_depth_only(format);
@@ -3535,4 +3678,371 @@ hk_optimize_empty_vdm(struct hk_cmd_buffer *cmd)
    list_del(&cs->node);
    hk_cs_destroy(cs);
    return true;
+}
+
+/*
+ * Deferred whole-image clears (native AGX3).
+ *
+ * A vkCmdClearColorImage or vkCmdClearDepthStencilImage of a whole
+ * single-level, single-layer attachment image is a compute job: a fill of
+ * the entire allocation for a plain image, a metadata fast clear for a
+ * compressed one. Applications commonly clear an image this way and
+ * then begin a full-area render pass that loads it, which reads the whole
+ * image back into the tilebuffer. Minecraft clears six 2976x1872 images
+ * per frame like that: 138 MB of fills, then the loads.
+ *
+ * Instead such a clear is remembered. When the next render pass covers the
+ * whole image with it as an attachment that it loads (or does not care
+ * about) and stores (or does not care about), the attachment's load
+ * becomes a load-op clear of the same value: the tilebuffer starts with the
+ * clear value and the pass stores the image, which is what the fill
+ * followed by the load and the store produces. Anything else records the
+ * fill first: any other work, through hk_cmd_buffer_get_cs_general(); a
+ * render pass that does not take the clear; the end of the command buffer;
+ * and the commands below that order or observe earlier work without
+ * recording any. A pass that may also read the image's memory takes the
+ * load-op clear and records the fill as well, before the pass
+ * (hk_deferred_clear_layout_use()). The fill is then recorded after the
+ * barriers that followed the clear, so it is followed by a transfer-to-all
+ * barrier of its own: later work still waits for it.
+ */
+static bool
+hk_deferred_clear_image_whole(const struct hk_image *image,
+                              uint32_t range_count,
+                              const VkImageSubresourceRange *ranges,
+                              VkImageAspectFlags aspects)
+{
+   if (range_count != 1 || image->vk.image_type != VK_IMAGE_TYPE_2D ||
+       image->vk.mip_levels != 1 || image->vk.array_layers != 1 ||
+       image->vk.extent.depth != 1 || image->vk.samples != 1 ||
+       image->vk.tiling != VK_IMAGE_TILING_OPTIMAL ||
+       ranges[0].aspectMask != aspects || ranges[0].baseMipLevel != 0 ||
+       vk_image_subresource_level_count(&image->vk, &ranges[0]) != 1 ||
+       ranges[0].baseArrayLayer != 0 ||
+       vk_image_subresource_layer_count(&image->vk, &ranges[0]) != 1)
+      return false;
+
+   return true;
+}
+
+bool
+hk_defer_clear(struct hk_cmd_buffer *cmd, struct hk_image *image,
+               VkImageAspectFlags aspects, const VkClearValue *value,
+               uint32_t range_count, const VkImageSubresourceRange *ranges)
+{
+   struct hk_device *dev = hk_cmd_buffer_device(cmd);
+   struct hk_physical_device *pdev = hk_device_physical(dev);
+   const VkImageUsageFlags attachment =
+      aspects == VK_IMAGE_ASPECT_COLOR_BIT
+         ? VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
+         : VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+   if (!agx_chip_native_agx3(dev->dev.chip) || cmd->in_meta ||
+       cmd->vk.pool->queue_family_index >= pdev->queue_family_count ||
+       !(pdev->queue_families[cmd->vk.pool->queue_family_index].queue_flags &
+         VK_QUEUE_GRAPHICS_BIT) ||
+       !(image->vk.usage & attachment) ||
+       aspects != (image->vk.aspects &
+                   (aspects == VK_IMAGE_ASPECT_COLOR_BIT
+                       ? VK_IMAGE_ASPECT_COLOR_BIT
+                       : (VK_IMAGE_ASPECT_DEPTH_BIT |
+                          VK_IMAGE_ASPECT_STENCIL_BIT))) ||
+       !hk_deferred_clear_image_whole(image, range_count, ranges, aspects))
+      return false;
+
+   /* The deferred clear overwrites the whole image, whether it becomes a
+    * load-op clear or a fill: a pending store of it is dead. */
+   if (cmd->state.pending_z_store.cs &&
+       cmd->state.pending_z_store.image == image &&
+       (aspects & VK_IMAGE_ASPECT_DEPTH_BIT))
+      hk_kill_pending_z_store(cmd);
+
+   /* A later clear of the same image replaces the earlier one. */
+   for (unsigned i = 0; i < cmd->state.deferred_clear_count; ++i) {
+      struct hk_deferred_clear *e = &cmd->state.deferred_clear[i];
+      if (e->image == image) {
+         e->aspects = aspects;
+         e->value = *value;
+         return true;
+      }
+   }
+
+   if (cmd->state.deferred_clear_count == HK_MAX_DEFERRED_CLEARS)
+      hk_flush_deferred_clears(cmd);
+
+   cmd->state.deferred_clear[cmd->state.deferred_clear_count++] =
+      (struct hk_deferred_clear){
+         .image = image,
+         .aspects = aspects,
+         .value = *value,
+      };
+   return true;
+}
+
+/* A buffer command (copy, fill, update) cannot access an image except
+ * through memory the two share. Keep the deferred clears across one whose
+ * buffer ranges miss every image they clear; call it for each range of the
+ * command before recording it, and clear deferred_clear_hold after. */
+void
+hk_deferred_clears_hold_buffer(struct hk_cmd_buffer *cmd, uint64_t addr,
+                               uint64_t size)
+{
+   /* The same holds for the depth image of a pending store. */
+   const struct hk_image *z_image = cmd->state.pending_z_store.cs
+                                       ? cmd->state.pending_z_store.image
+                                       : NULL;
+   if (z_image) {
+      for (unsigned p = 0; p < z_image->plane_count; ++p) {
+         const uint64_t base = z_image->planes[p].addr;
+         const uint64_t end = base + z_image->planes[p].layout.size_B;
+         if (!base || (addr < end && base < addr + size)) {
+            cmd->state.pending_z_store.cs = NULL;
+            break;
+         }
+      }
+   }
+
+   if (!cmd->state.deferred_clear_count) {
+      if (cmd->state.pending_z_store.cs)
+         cmd->state.deferred_clear_hold = true;
+      return;
+   }
+
+   for (unsigned i = 0; i < cmd->state.deferred_clear_count; ++i) {
+      const struct hk_image *image = cmd->state.deferred_clear[i].image;
+      for (unsigned p = 0; p < image->plane_count; ++p) {
+         const uint64_t base = image->planes[p].addr;
+         const uint64_t end = base + image->planes[p].layout.size_B;
+         if (!base || (addr < end && base < addr + size)) {
+            hk_flush_deferred_clears(cmd);
+            return;
+         }
+      }
+   }
+   cmd->state.deferred_clear_hold = true;
+}
+
+void
+hk_flush_deferred_clears(struct hk_cmd_buffer *cmd)
+{
+   /* Whatever observes the deferred clears may also read a pending store. */
+   cmd->state.pending_z_store.cs = NULL;
+   cmd->state.deferred_clear_hold = false;
+   if (!cmd->state.deferred_clear_count || cmd->state.deferred_clear_flushing)
+      return;
+
+   struct hk_device *dev = hk_cmd_buffer_device(cmd);
+   cmd->state.deferred_clear_flushing = true;
+   for (unsigned i = 0; i < cmd->state.deferred_clear_count; ++i) {
+      const struct hk_deferred_clear *e = &cmd->state.deferred_clear[i];
+      const VkImageSubresourceRange range = {
+         .aspectMask = e->aspects,
+         .levelCount = 1,
+         .layerCount = 1,
+      };
+      uint32_t colour[4];
+      if (e->aspects == VK_IMAGE_ASPECT_COLOR_BIT) {
+         memcpy(colour, e->value.color.uint32, sizeof(colour));
+      } else {
+         colour[0] = fui(e->value.depthStencil.depth);
+         colour[1] = e->value.depthStencil.stencil;
+         colour[2] = colour[3] = 0;
+      }
+
+      hk_sync_xfer_begin(cmd);
+      hk_clear_image(cmd, e->image, PIPE_FORMAT_NONE, colour, &range, true);
+      hk_sync_xfer_end(cmd);
+   }
+   cmd->state.deferred_clear_count = 0;
+
+   /* The barriers that followed the clears were recorded before the fills;
+    * order everything recorded from now on after them, as
+    * hk_CmdPipelineBarrier2() does outside a render pass. */
+   struct hk_cs *cs = cmd->current_cs.cs;
+   if (cs && cs->stats.cmds > 0 && cs->current != cs->strong_flush_end) {
+      hk_ensure_cs_has_space(cmd, cs, AGX3_CDM_BARRIER_SIZE);
+      hk_cdm_cache_flush(dev, cs);
+   }
+   hk_sync_barrier(cmd, HK_SYNC_XFER, HK_SYNC_ALL);
+   cmd->state.deferred_clear_flushing = false;
+}
+
+/* How a pass may use a deferred clear for an attachment of the given aspect
+ * in this layout. A load-op clear lands in the tilebuffer, not in memory.
+ *
+ * In an attachment layout the pass can access the image only as that
+ * attachment, so the load-op clear replaces the fill. In GENERAL, a
+ * feedback-loop or the local-read layout the pass may also read the image's
+ * memory, as a sampled or storage image, an input attachment (lowered to a
+ * texture load) or through local read; it still takes the load-op clear in
+ * place of the load, but the fill is recorded before the pass. Every layout
+ * is GENERAL under unified image layouts, which zink uses. A read-only
+ * aspect takes nothing: the clear is recorded as a fill. */
+enum hk_deferred_clear_use {
+   HK_DEFERRED_CLEAR_UNUSED,
+   HK_DEFERRED_CLEAR_LOAD,
+   HK_DEFERRED_CLEAR_LOAD_AND_FILL,
+};
+
+static enum hk_deferred_clear_use
+hk_deferred_clear_layout_use(VkImageLayout layout, VkImageAspectFlags aspect)
+{
+   bool attachment;
+   switch (layout) {
+   case VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL:
+      attachment = true;
+      break;
+   case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+      attachment = aspect == VK_IMAGE_ASPECT_COLOR_BIT;
+      break;
+   case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+      attachment = aspect != VK_IMAGE_ASPECT_COLOR_BIT;
+      break;
+   case VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL:
+   case VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL:
+      attachment = aspect == VK_IMAGE_ASPECT_DEPTH_BIT;
+      break;
+   case VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL:
+   case VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL:
+      attachment = aspect == VK_IMAGE_ASPECT_STENCIL_BIT;
+      break;
+   case VK_IMAGE_LAYOUT_GENERAL:
+   case VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT:
+   case VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR:
+      return HK_DEFERRED_CLEAR_LOAD_AND_FILL;
+   default:
+      return HK_DEFERRED_CLEAR_UNUSED;
+   }
+   return attachment ? HK_DEFERRED_CLEAR_LOAD : HK_DEFERRED_CLEAR_UNUSED;
+}
+
+/* The deferred clear of the image an attachment views, if the attachment can
+ * take it as its load-op clear (see above); *fill is set when the clear must
+ * also be recorded as a fill before the pass. */
+static struct hk_deferred_clear *
+hk_deferred_clear_for(struct hk_cmd_buffer *cmd, const VkRenderingInfo *info,
+                      const VkRenderingAttachmentInfo *att,
+                      VkImageAspectFlags aspect, bool *fill)
+{
+   if (!att || !att->imageView)
+      return NULL;
+
+   enum hk_deferred_clear_use use =
+      hk_deferred_clear_layout_use(att->imageLayout, aspect);
+   if (use == HK_DEFERRED_CLEAR_UNUSED)
+      return NULL;
+
+   /* An input-attachment feedback flag reads the attachment in the pass. */
+   const VkRenderingAttachmentFlagsInfoKHR *flags =
+      vk_find_struct_const(att->pNext, RENDERING_ATTACHMENT_FLAGS_INFO_KHR);
+   if (flags && flags->flags)
+      use = HK_DEFERRED_CLEAR_LOAD_AND_FILL;
+
+   VK_FROM_HANDLE(hk_image_view, view, att->imageView);
+   struct hk_image *image = container_of(view->vk.image, struct hk_image, vk);
+   struct hk_deferred_clear *e = NULL;
+   for (unsigned i = 0; i < cmd->state.deferred_clear_count; ++i) {
+      if (cmd->state.deferred_clear[i].image == image)
+         e = &cmd->state.deferred_clear[i];
+   }
+
+   if (!e || !(e->aspects & aspect) ||
+       (att->loadOp != VK_ATTACHMENT_LOAD_OP_LOAD &&
+        att->loadOp != VK_ATTACHMENT_LOAD_OP_DONT_CARE) ||
+       (att->storeOp != VK_ATTACHMENT_STORE_OP_STORE &&
+        att->storeOp != VK_ATTACHMENT_STORE_OP_DONT_CARE) ||
+       view->vk.view_type != VK_IMAGE_VIEW_TYPE_2D ||
+       view->vk.format != image->vk.format ||
+       view->vk.base_mip_level != 0 || view->vk.level_count != 1 ||
+       view->vk.base_array_layer != 0 || view->vk.layer_count != 1 ||
+       info->renderArea.offset.x != 0 || info->renderArea.offset.y != 0 ||
+       info->renderArea.extent.width != image->vk.extent.width ||
+       info->renderArea.extent.height != image->vk.extent.height)
+      return NULL;
+
+   *fill = use == HK_DEFERRED_CLEAR_LOAD_AND_FILL;
+   return e;
+}
+
+const VkRenderingInfo *
+hk_take_deferred_clears(struct hk_cmd_buffer *cmd, const VkRenderingInfo *info,
+                        VkRenderingInfo *copy,
+                        VkRenderingAttachmentInfo *color,
+                        VkRenderingAttachmentInfo *depth,
+                        VkRenderingAttachmentInfo *stencil)
+{
+   if (cmd->in_meta || (info->flags & VK_RENDERING_RESUMING_BIT) ||
+       info->viewMask || info->layerCount != 1 ||
+       info->colorAttachmentCount > HK_MAX_RTS)
+      return info;
+
+   struct hk_deferred_clear *col[HK_MAX_RTS] = {NULL};
+   bool col_fill[HK_MAX_RTS] = {false}, z_fill = false, s_fill = false;
+   for (unsigned i = 0; i < info->colorAttachmentCount; ++i) {
+      col[i] = hk_deferred_clear_for(cmd, info, &info->pColorAttachments[i],
+                                     VK_IMAGE_ASPECT_COLOR_BIT, &col_fill[i]);
+   }
+   struct hk_deferred_clear *z = hk_deferred_clear_for(
+      cmd, info, info->pDepthAttachment, VK_IMAGE_ASPECT_DEPTH_BIT, &z_fill);
+   struct hk_deferred_clear *s = hk_deferred_clear_for(
+      cmd, info, info->pStencilAttachment, VK_IMAGE_ASPECT_STENCIL_BIT,
+      &s_fill);
+
+   /* A depth/stencil clear is taken only if every aspect it cleared is. */
+   struct hk_deferred_clear *zs[2] = {z, s};
+   for (unsigned i = 0; i < 2; ++i) {
+      struct hk_deferred_clear *e = zs[i];
+      if (e && (((e->aspects & VK_IMAGE_ASPECT_DEPTH_BIT) && z != e) ||
+                ((e->aspects & VK_IMAGE_ASPECT_STENCIL_BIT) && s != e))) {
+         if (z == e)
+            z = NULL;
+         if (s == e)
+            s = NULL;
+      }
+   }
+
+   bool any = z || s;
+   for (unsigned i = 0; i < info->colorAttachmentCount; ++i)
+      any |= col[i] != NULL;
+   if (!any)
+      return info;
+
+   *copy = *info;
+   for (unsigned i = 0; i < info->colorAttachmentCount; ++i) {
+      color[i] = info->pColorAttachments[i];
+      if (col[i]) {
+         color[i].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+         color[i].clearValue = col[i]->value;
+      }
+   }
+   copy->pColorAttachments = color;
+   if (z) {
+      *depth = *info->pDepthAttachment;
+      depth->loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+      depth->clearValue = z->value;
+      copy->pDepthAttachment = depth;
+   }
+   if (s) {
+      *stencil = *info->pStencilAttachment;
+      stencil->loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+      stencil->clearValue = s->value;
+      copy->pStencilAttachment = stencil;
+   }
+
+   /* Drop the taken clears that need no fill; the caller records the rest
+    * before the pass. */
+   unsigned kept = 0;
+   for (unsigned i = 0; i < cmd->state.deferred_clear_count; ++i) {
+      struct hk_deferred_clear *e = &cmd->state.deferred_clear[i];
+      bool taken = e == z || e == s;
+      bool fill = (e == z && z_fill) || (e == s && s_fill);
+      for (unsigned j = 0; j < info->colorAttachmentCount; ++j) {
+         taken |= e == col[j];
+         fill |= e == col[j] && col_fill[j];
+      }
+      if (!taken || fill)
+         cmd->state.deferred_clear[kept++] = *e;
+   }
+   cmd->state.deferred_clear_count = kept;
+   return copy;
 }

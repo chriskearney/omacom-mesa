@@ -97,7 +97,9 @@ struct hk_agx3_leaf_args {
    REF(hk_agx3_leaf_job) jobs;
    REF(uint32_t) status;
    uint32_t job_count;
-   uint32_t reserved;
+   /* Slots from the traversal base to output_bvh, added to every child
+    * reference (see libagx/gen1_as.h). Zero when output_bvh is the base. */
+   uint32_t slot_bias;
 };
 
 #define HK_AGX3_LEAF_SUCCESS 0

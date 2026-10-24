@@ -7055,6 +7055,10 @@ bool nir_opt_dce_impl(nir_function_impl *impl);
 bool nir_opt_dce(nir_shader *shader);
 
 bool nir_opt_dead_cf(nir_shader *shader);
+/* Opt in only when local ray-query mutations in dead control flow may be
+ * discarded. The default entrypoint keeps the original side-effect rules. */
+bool nir_opt_dead_cf_with_options(nir_shader *shader,
+                                  bool eliminate_local_ray_queries);
 
 bool nir_opt_dead_write_vars(nir_shader *shader);
 

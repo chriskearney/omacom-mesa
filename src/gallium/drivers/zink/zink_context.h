@@ -228,6 +228,9 @@ void
 zink_update_barriers(struct zink_context *ctx, bool is_compute,
                      struct pipe_resource *index, struct pipe_resource *indirect, struct pipe_resource *indirect_draw_count);
 
+void
+zink_update_lazy_feedback_loops(struct zink_context *ctx);
+
 
 bool
 zink_cmd_debug_marker_begin(struct zink_context *ctx, VkCommandBuffer cmdbuf, const char *fmt, ...);

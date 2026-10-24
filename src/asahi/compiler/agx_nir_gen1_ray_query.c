@@ -38,7 +38,9 @@ agx_nir_gen1_vertex_position_address(nir_builder *b, nir_def *instance,
 {
    nir_def *blas = nir_load_global(b, 1, 64, nir_iadd_imm(b, instance, 88), .align_mul = 8);
    nir_def *id = nir_load_global(b, 1, 32, nir_iadd_imm(b, blas, 176), .align_mul = 4);
-   nir_def *entry = nir_iadd_imm(b, nir_u2u64(b, nir_imul_imm(b, nir_iand_imm(b, id, 0x7ff), 16)),
+   /* The sparse directory is indexed by the full 20-bit AS resource ID.
+    * The former 11-bit mask aliased every later page onto the first page. */
+   nir_def *entry = nir_iadd_imm(b, nir_u2u64(b, nir_imul_imm(b, id, 16)),
                                  AGX_GEN1_VERTEX_DIRECTORY_VA);
    nir_def *table = nir_load_global(b, 1, 64, entry, .align_mul = 8);
    nir_def *vertices = nir_load_global(b, 1, 32, nir_iadd_imm(b, table, 8), .align_mul = 4);
@@ -395,18 +397,6 @@ agx_nir_lower_gen1_ray_query(nir_shader *shader,
    }
 
    nir_builder b = nir_builder_create(impl);
-   if (fragment && layout->context_uniform) {
-      b.cursor = nir_before_impl(impl);
-      nir_def *context = nir_load_preamble(&b, 1, 64,
-         .base = layout->context_uniform);
-      for (unsigned i = 0; i < 6; ++i) {
-         nir_def *header = nir_load_global(&b, 4, 32,
-            nir_iadd_imm(&b, context, 16 * i), .align_mul = 16);
-         nir_store_scs_agx(&b, header, .base = 0x6000 + 16 * i);
-      }
-      nir_store_scs_agx(&b, nir_load_global(&b, 4, 32,
-         nir_iadd_imm(&b, context, 104), .align_mul = 8), .base = 0x6068);
-   }
    util_dynarray_foreach(&ops, nir_intrinsic_instr *, op) {
       nir_intrinsic_instr *intr = *op;
       b.cursor = nir_before_instr(&intr->instr);
@@ -481,7 +471,7 @@ agx_nir_lower_gen1_ray_query(nir_shader *shader,
          if(layout->candidates) nir_push_if(&b,nir_inot(&b,nir_load_deref(&b,started)));
          nir_def *address = nir_load_deref(&b, as);
          nir_def *selector = nir_load_preamble(&b, 1, 64, .base = layout->bvh_uniform);
-         if (layout->context_uniform && !fragment) {
+         if (layout->context_uniform) {
             nir_def *context=nir_load_preamble(&b,1,64,.base=layout->context_uniform);
             for(unsigned i=0;i<6;i++) {
                nir_def *header = nir_load_global(&b,4,32,

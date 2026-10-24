@@ -42,6 +42,10 @@ enum agx_bo_flags {
     * the userspace cache, clear it before returning it to the caller. */
    AGX_BO_ZERO_ON_REUSE = 1 << 6,
 
+   /* Short-lived backing whose release must immediately close the GEM handle,
+    * including objects which fail before their first successful export. */
+   AGX_BO_NO_CACHE = 1 << 7,
+
 };
 
 enum agx_va_flags {
@@ -53,6 +57,9 @@ enum agx_va_flags {
 
    /* Ordinary allocations never occupy the capture/replay address region. */
    AGX_VA_CAPTURE_REPLAY = (1 << 2),
+
+   /* Take the lowest free address instead of the heap's default end. */
+   AGX_VA_LOW = (1 << 3),
 };
 
 struct agx_va {

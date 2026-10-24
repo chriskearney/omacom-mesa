@@ -206,6 +206,17 @@ agx_draw_index_range_B(struct agx_draw d)
    return range_B;
 }
 
+/* Bytes of the hardware index fetch window for `span_B` bytes of indices
+ * starting at `ib`. The window is whole dwords from the dword that holds the
+ * first index. The bound range is exact and may end inside a dword, so count
+ * to the dword holding its last byte. With a dword-aligned binding this is
+ * the old rounding of the range itself. */
+static inline uint64_t
+agx_index_fetch_window_B(uint64_t ib, uint64_t span_B)
+{
+   return (span_B + (ib & 3) + 3) & ~(uint64_t)3;
+}
+
 static inline unsigned
 agx_draw_index_range_el(struct agx_draw d)
 {
@@ -234,7 +245,9 @@ agx_draw_indirect_index_buffer_size_word(struct agx_draw d,
 {
    assert(d.indexed && agx_is_indirect(d.b));
 
-   const uint64_t dwords = ((uint64_t)agx_draw_index_range_B(d) + 3) >> 2;
+   const uint64_t dwords = agx_index_fetch_window_B(
+                              agx_draw_index_buffer(d),
+                              agx_draw_index_range_B(d)) >> 2;
    if (dwords == 0 || dwords > (uint64_t)0xffffffffu)
       return false;
 
@@ -251,7 +264,7 @@ agx_primitive_restart_index(enum agx_index_size index_size)
 static bool
 agx_direct_draw_overreads_indices(struct agx_draw d)
 {
-   uint32_t range_B = agx_indices_to_B(d.start + d.b.count[0], d.index_size);
+   uint64_t range_B = ((uint64_t)d.start + d.b.count[0]) << d.index_size;
    return range_B > d.index_buffer_range_B;
 }
 
@@ -293,7 +306,9 @@ agx_vdm_draw_supported(enum agx_chip chip, struct agx_draw draw,
       chip, (uint8_t)topology, draw.indexed, draw.restart,
       (uint8_t)draw.index_size, ib, draw.b.count[0], draw.b.count[1],
       draw.indexed ? draw.index_bias : draw.start,
-      draw.indexed ? (align(agx_draw_index_range_B(draw), 4) >> 2) : 0, &words);
+      draw.indexed ? (uint32_t)(agx_index_fetch_window_B(
+                               ib, agx_draw_index_range_B(draw)) >> 2)
+                         : 0, &words);
 }
 
 static inline GLOBAL uint32_t *
@@ -345,9 +360,13 @@ agx_cdm_launch(GLOBAL uint32_t *out, enum agx_chip chip, struct agx_grid grid,
    return out;
 }
 
+/* `restart_index` is the value an indexed draw's indices are compared with
+ * when draw.restart is set. Index List records that carry their own restart
+ * State Update write it there; older records take it from the separate
+ * VDM_STATE_RESTART_INDEX the caller emits. */
 static inline GLOBAL uint32_t *
 agx_vdm_draw(GLOBAL uint32_t *out, enum agx_chip chip, struct agx_draw draw,
-             enum agx_primitive topology)
+             enum agx_primitive topology, uint32_t restart_index)
 {
    uint64_t ib = draw.indexed ? agx_draw_index_buffer(draw) : 0;
 
@@ -362,11 +381,7 @@ agx_vdm_draw(GLOBAL uint32_t *out, enum agx_chip chip, struct agx_draw draw,
             size_valid && agx_vdm_index_list_indirect_pack_words(
                              chip, (uint8_t)topology, draw.indexed,
                              draw.restart, (uint8_t)draw.index_size, ib,
-                             draw.b.ptr,
-                             draw.indexed
-                                ? agx_primitive_restart_index(
-                                     draw.index_size)
-                                : 0,
+                             draw.b.ptr, draw.indexed ? restart_index : 0,
                              size_word, &words);
          assert(valid);
          if (!valid)
@@ -381,7 +396,9 @@ agx_vdm_draw(GLOBAL uint32_t *out, enum agx_chip chip, struct agx_draw draw,
             chip, (uint8_t)topology, draw.indexed, draw.restart,
             (uint8_t)draw.index_size, ib, draw.b.count[0], draw.b.count[1],
             draw.indexed ? draw.index_bias : draw.start,
-            draw.indexed ? (align(agx_draw_index_range_B(draw), 4) >> 2) : 0,
+            draw.indexed ? (uint32_t)(agx_index_fetch_window_B(
+                               ib, agx_draw_index_range_B(draw)) >> 2)
+                         : 0,
             &words);
          assert(valid);
          if (!valid)
@@ -445,7 +462,8 @@ agx_vdm_draw(GLOBAL uint32_t *out, enum agx_chip chip, struct agx_draw draw,
 
    if (draw.indexed) {
       agx_push(out, INDEX_LIST_BUFFER_SIZE, cfg) {
-         cfg.size = align(agx_draw_index_range_B(draw), 4);
+         cfg.size =
+            agx_index_fetch_window_B(ib, agx_draw_index_range_B(draw));
       }
    }
 
@@ -813,8 +831,32 @@ agx_usc_words_precomp(GLOBAL uint32_t *out, CONST struct agx_shader *s,
 }
 
 static inline uint32_t
-agx_robust_index_clamped_count(uint32_t requested, uint32_t available)
+agx_robust_index_available(uint32_t first, uint32_t range_B,
+                           enum agx_index_size index_size)
 {
+   const uint64_t start_B = (uint64_t)first << index_size;
+   return start_B < range_B ? (range_B - start_B) >> index_size : 0;
+}
+
+/* Also used by host tests: copy exactly the accessible bytes, including a
+ * short or unaligned source, and zero every byte of the extension. A uint32
+ * index can require 128 bytes of padding, more than one byte per lane. */
+static inline void
+agx_robust_index_copy(GLOBAL uint8_t *dst, CONST uint8_t *src,
+                      uint32_t available_B, uint32_t output_B, uint32_t lane)
+{
+   for (uint64_t i = lane; i < output_B; i += 32)
+      dst[i] = i < available_B ? src[i] : 0;
+}
+
+static inline uint32_t
+agx_robust_index_clamped_count(uint32_t requested, uint32_t available,
+                                enum agx_primitive topology)
+{
+   /* Repeated zero indices are visible points, not degenerate primitives. */
+   if (topology == AGX_PRIMITIVE_POINTS)
+      return requested;
+
    const uint32_t limit =
       available > 0xffffffffu - 32
          ? 0xffffffffu
@@ -850,6 +892,7 @@ static inline GLOBAL uint32_t *
 agx_vdm_draw_robust_index(GLOBAL uint32_t *out, enum agx_chip chip,
                           struct agx_draw draw,
                           enum agx_primitive topology,
+                          uint32_t restart_index,
                           uint32_t draw_state_context_offset,
                           bool render_state_emitted,
                           uint64_t empty_draw_jump)
@@ -898,7 +941,7 @@ agx_vdm_draw_robust_index(GLOBAL uint32_t *out, enum agx_chip chip,
             *out++ = draw_state_context_offset;
 
          *out++ = 0x40000001u;
-         *out++ = agx_primitive_restart_index(draw.index_size);
+         *out++ = restart_index;
       }
 
       for (unsigned i = 0; i < words.count; ++i)
@@ -934,6 +977,18 @@ libagx_draw_robust_index_vdm_size(enum agx_chip chip,
 
    return size_B;
 }
+
+/* A batch shares its index binding, topology and heap. Every record keeps its
+ * own source arguments, VDM destination and native state/empty-draw link. */
+struct libagx_robust_index_draw {
+   uint64_t vdm;
+   uint64_t command;
+   uint64_t empty_draw_jump;
+   uint32_t draw_state_offset;
+   uint32_t render_state_emitted;
+};
+static_assert(sizeof(struct libagx_robust_index_draw) == 32,
+              "robust index batch host/device ABI");
 
 static inline unsigned
 libagx_remap_adj_count(unsigned count, enum mesa_prim prim)

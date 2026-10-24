@@ -620,6 +620,106 @@ TEST(NativeForms, PhiUsesOtherEdgeWhenPreferredRegisterIsLive)
    ralloc_free(mem);
 }
 
+TEST(NativeForms, PhiWithAgreeingInputsIsAssignedBeforeEarlierPhis)
+{
+   void *mem = ralloc_context(NULL);
+   agx_builder *b = agx_test_builder(mem);
+   agx_shader_key key = {};
+   key.dev.encoding = AGX_ISA_ENCODING_AGX3B;
+   key.dev.chip = AGX_CHIP_G17P;
+   key.is_helper = true;
+   b->shader->key = &key;
+   b->shader->stage = MESA_SHADER_FRAGMENT;
+   b->shader->any_cf = true;
+   b->shader->nir = rzalloc(mem, nir_shader);
+   b->shader->nir->info.stage = MESA_SHADER_FRAGMENT;
+   agx_block *entry = agx_start_block(b->shader);
+   agx_block *left = agx_test_block(b->shader);
+   agx_block *right = agx_test_block(b->shader);
+   agx_block *join = agx_test_block(b->shader);
+   agx_block_add_successor(entry, left);
+   agx_block_add_successor(entry, right);
+   agx_block_add_successor(left, join);
+   agx_block_add_successor(right, join);
+   agx_index incoming[2];
+   for (unsigned side = 0; side < 2; ++side) {
+      b->cursor = agx_after_block(side ? right : left);
+      incoming[side] = agx_preload(b, agx_register(2, AGX_SIZE_32));
+   }
+   b->cursor = agx_after_block(join);
+   /* The constant phi comes first and has no register to follow. */
+   agx_index constant = agx_temp(b->shader, AGX_SIZE_32);
+   agx_instr *first = agx_phi_to(b, constant, 2);
+   first->src[0] = agx_immediate(1);
+   first->src[1] = agx_immediate(2);
+   agx_index value = agx_temp(b->shader, AGX_SIZE_32);
+   agx_instr *phi = agx_phi_to(b, value, 2);
+   phi->src[0] = incoming[0];
+   phi->src[1] = incoming[1];
+   agx_instr *use = agx_unit_test(b, value);
+   agx_instr *constant_use = agx_unit_test(b, constant);
+   agx_ra(b->shader);
+   ASSERT_FALSE(b->shader->ra_failed);
+   EXPECT_EQ(use->src[0].value, 2u);
+   EXPECT_NE(constant_use->src[0].value, 2u);
+   unsigned copies = 0;
+   agx_foreach_instr_global(b->shader, I)
+      copies += I->op == AGX_OPCODE_MOV;
+   EXPECT_EQ(copies, 0u);
+   ralloc_free(mem);
+}
+
+TEST(NativeForms, PhiFallbackLeavesLaterPhiInputsFree)
+{
+   void *mem = ralloc_context(NULL);
+   agx_builder *b = agx_test_builder(mem);
+   agx_shader_key key = {};
+   key.dev.encoding = AGX_ISA_ENCODING_AGX3B;
+   key.dev.chip = AGX_CHIP_G17P;
+   key.is_helper = true;
+   b->shader->key = &key;
+   b->shader->stage = MESA_SHADER_FRAGMENT;
+   b->shader->any_cf = true;
+   b->shader->nir = rzalloc(mem, nir_shader);
+   b->shader->nir->info.stage = MESA_SHADER_FRAGMENT;
+   agx_block *entry = agx_start_block(b->shader);
+   agx_block *header = agx_test_block(b->shader);
+   agx_block *body = agx_test_block(b->shader);
+   agx_block *exit = agx_test_block(b->shader);
+   agx_block_add_successor(entry, header);
+   agx_block_add_successor(header, body);
+   agx_block_add_successor(header, exit);
+   agx_block_add_successor(body, header);
+   header->loop_header = true;
+   agx_index input = agx_preload(b, agx_register(2, AGX_SIZE_32));
+   b->cursor = agx_after_block(header);
+   /* The counter phi comes first and knows none of its inputs yet. */
+   agx_index counter = agx_temp(b->shader, AGX_SIZE_32);
+   agx_index next_counter = agx_temp(b->shader, AGX_SIZE_32);
+   agx_instr *count_phi = agx_phi_to(b, counter, 2);
+   count_phi->src[0] = agx_immediate(0);
+   count_phi->src[1] = next_counter;
+   agx_index value = agx_temp(b->shader, AGX_SIZE_32);
+   agx_index next_value = agx_temp(b->shader, AGX_SIZE_32);
+   agx_instr *phi = agx_phi_to(b, value, 2);
+   phi->src[0] = input;
+   phi->src[1] = next_value;
+   b->cursor = agx_after_block(body);
+   agx_iadd_to(b, next_value, value, agx_immediate(1), 0);
+   agx_iadd_to(b, next_counter, counter, agx_immediate(1), 0);
+   b->cursor = agx_after_block(exit);
+   agx_instr *use = agx_unit_test(b, value);
+   agx_unit_test(b, counter);
+   agx_ra(b->shader);
+   ASSERT_FALSE(b->shader->ra_failed);
+   EXPECT_EQ(use->src[0].value, 2u);
+   unsigned copies = 0;
+   agx_foreach_instr_global(b->shader, I)
+      copies += I->op == AGX_OPCODE_MOV;
+   EXPECT_EQ(copies, 0u);
+   ralloc_free(mem);
+}
+
 TEST(NativeForms, TransientTextureVectorBecomesScalarBeforeAnyEviction)
 {
    for (unsigned mode = 0; mode < 4; ++mode) {
@@ -811,6 +911,69 @@ TEST(NativeForms, NegatedSqrtStepReachesPacker)
    }
 }
 
+TEST(NativeForms, G17PHalfSqrtStepAcceptsLastUse)
+{
+   for (unsigned hint : {0u, 1u, 2u}) {
+      void *mem = ralloc_context(NULL);
+      agx_builder *b = agx_test_builder(mem);
+      agx_shader_key key = {};
+      key.dev.encoding = AGX_ISA_ENCODING_AGX3B;
+      key.dev.chip = AGX_CHIP_G17P;
+      b->shader->key = &key;
+      b->shader->stage = MESA_SHADER_COMPUTE;
+      b->shader->max_reg = 7;
+      agx_index src = agx_register(3, AGX_SIZE_16);
+      src.cache = hint == 1;
+      src.discard = hint == 2;
+      agx_srsqrt_to(b, agx_register(4, AGX_SIZE_32), src);
+      agx_stop(b);
+      util_dynarray binary;
+      util_dynarray_init(&binary, mem);
+      ASSERT_TRUE(agx3_pack_binary(b->shader, &binary));
+      uint8_t expected[AGX3_ALU_MAX_LENGTH], length;
+      ASSERT_TRUE(agx3_alu_sqrt_step_half(
+         AGX_ISA_ENCODING_AGX3B, 4, 3, AGX3_ALU_HINT_CACHE, true, 0,
+         expected, &length));
+      ASSERT_GE(binary.size, length);
+      EXPECT_EQ(memcmp(binary.data, expected, length), 0);
+      util_dynarray_fini(&binary);
+      ralloc_free(mem);
+   }
+}
+
+TEST(NativeForms, G17PHalfComparisonSelectsIntegerBits)
+{
+   for (unsigned selected : {1u, 2u, 0xffu, 0x3c00u, 0x8000u, 0xffffu}) {
+      for (unsigned arm : {2u, 3u}) {
+         SCOPED_TRACE(selected);
+         SCOPED_TRACE(arm);
+         void *mem = ralloc_context(NULL);
+         agx_builder *b = agx_test_builder(mem);
+         agx_shader_key key = {};
+         key.dev.encoding = AGX_ISA_ENCODING_AGX3B;
+         key.dev.chip = AGX_CHIP_G17P;
+         b->shader->key = &key;
+         agx_index x = agx_preload(b, agx_register(4, AGX_SIZE_16));
+         agx_index y = agx_preload(b, agx_register(5, AGX_SIZE_16));
+         agx_index alternatives[] = {agx_immediate(selected), x};
+         agx_instr *sel = agx_fcmpsel_to(
+            b, agx_temp(b->shader, AGX_SIZE_16), x, y,
+            alternatives[arm == 3], alternatives[arm == 2], AGX_FCOND_LT);
+         agx_materialize_agx3_alu_constants(b->shader);
+         const agx_instr *constant = NULL;
+         agx_foreach_instr_global(b->shader, I) {
+            if (I->nr_dests && agx_is_equiv(I->dest[0], sel->src[arm]))
+               constant = I;
+         }
+         ASSERT_NE(constant, nullptr);
+         EXPECT_EQ(constant->op, AGX_OPCODE_MOV_IMM);
+         EXPECT_EQ(constant->imm, selected);
+         EXPECT_EQ(constant->dest[0].size, AGX_SIZE_16);
+         ralloc_free(mem);
+      }
+   }
+}
+
 TEST(NativeForms, HalfModifiedMultiplyAndSelect)
 {
    for (bool select : {false, true}) {
@@ -847,6 +1010,59 @@ TEST(NativeForms, HalfModifiedMultiplyAndSelect)
       EXPECT_TRUE(agx_compile_shader_nir(b.shader, &key, &part));
       EXPECT_GT(part.info.main_size, 0u);
       free(part.binary);
+   }
+}
+
+TEST(NativeForms, ImageStoreUsesDataTypeAcrossChipsAndFormats)
+{
+   const struct {
+      nir_alu_type type;
+      pipe_format format;
+   } cases[] = {
+      {nir_type_uint32, PIPE_FORMAT_NONE},
+      {nir_type_uint32, PIPE_FORMAT_R32_UINT},
+      {nir_type_uint32, PIPE_FORMAT_R32G32B32A32_UINT},
+      {nir_type_int32, PIPE_FORMAT_NONE},
+      {nir_type_int32, PIPE_FORMAT_R32_SINT},
+      {nir_type_int32, PIPE_FORMAT_R32G32B32A32_SINT},
+      {nir_type_float32, PIPE_FORMAT_NONE},
+      {nir_type_float32, PIPE_FORMAT_R32_FLOAT},
+      {nir_type_float32, PIPE_FORMAT_R32G32B32A32_FLOAT},
+      {nir_type_invalid, PIPE_FORMAT_R32_UINT},
+   };
+   for (const auto &c : cases) {
+      std::vector<uint8_t> reference;
+      for (agx_chip chip : {AGX_CHIP_G17P, AGX_CHIP_G16G}) {
+         SCOPED_TRACE(::testing::Message() << chip << " " << c.type << " "
+                                          << c.format);
+         nir_builder b = nir_builder_init_simple_shader(
+            MESA_SHADER_COMPUTE, &agx_nir_options, "image store data type");
+         nir_def *input = agx_test_load_preamble(&b, 4, 32, 4);
+         nir_intrinsic_instr *store = nir_image_store(
+            &b, nir_imm_intN_t(&b, 1, 16),
+            nir_imm_ivec4(&b, 0, 0, 0, 0), nir_imm_intN_t(&b, 0, 16),
+            input, nir_imm_intN_t(&b, 0, 16));
+         nir_intrinsic_set_image_dim(store, GLSL_SAMPLER_DIM_2D);
+         nir_intrinsic_set_format(store, c.format);
+         nir_intrinsic_set_src_type(store, c.type);
+         agx_shader_key key = {};
+         key.dev.encoding = AGX_ISA_ENCODING_AGX3B;
+         key.dev.chip = chip;
+         key.no_preamble = true;
+         key.reserved_preamble = 16;
+         agx_preprocess_nir(b.shader);
+         agx_shader_part part = {};
+         ASSERT_TRUE(agx_compile_shader_nir(b.shader, &key, &part));
+         ASSERT_GT(part.info.binary_size, 0u);
+         const uint8_t *code = static_cast<const uint8_t *>(part.binary);
+         std::vector<uint8_t> binary(code, code + part.info.binary_size);
+         if (reference.empty())
+            reference = binary;
+         else
+            EXPECT_EQ(binary, reference);
+         free(part.binary);
+         ralloc_free(b.shader);
+      }
    }
 }
 
@@ -930,22 +1146,24 @@ TEST(NativeForms, TexturePublicationWaitPreservesUnrelatedResult)
 TEST(NativeForms, MinmaxReusesUniformCopiedForComparison)
 {
    for (agx_fcond cond : {AGX_FCOND_LTN, AGX_FCOND_GTN}) {
-      void *mem = ralloc_context(NULL);
-      agx_shader_key key = {};
-      key.dev.encoding = AGX_ISA_ENCODING_AGX3B;
-      key.dev.chip = AGX_CHIP_G17P;
-      agx_builder *b = agx_test_builder(mem);
-      b->shader->key = &key;
-      agx_instr *I = agx_alloc_instr(b, AGX_OPCODE_FCMPSEL, 1, 4);
-      I->dest[0] = agx_temp(b->shader, AGX_SIZE_32);
-      I->src[0] = I->src[2] = agx_uniform(8, AGX_SIZE_32);
-      I->src[1] = I->src[3] = agx_immediate(176); /* -1.0 minifloat */
-      I->fcond = cond;
-      agx_builder_insert(&b->cursor, I);
-      agx_lower_uniform_sources(b->shader);
-      EXPECT_EQ(I->src[0].type, AGX_INDEX_NORMAL);
-      EXPECT_TRUE(agx_is_equiv(I->src[0], I->src[2]));
-      ralloc_free(mem);
+      for (unsigned immediate : {0u, 176u}) {
+         void *mem = ralloc_context(NULL);
+         agx_shader_key key = {};
+         key.dev.encoding = AGX_ISA_ENCODING_AGX3B;
+         key.dev.chip = AGX_CHIP_G17P;
+         agx_builder *b = agx_test_builder(mem);
+         b->shader->key = &key;
+         agx_instr *I = agx_alloc_instr(b, AGX_OPCODE_FCMPSEL, 1, 4);
+         I->dest[0] = agx_temp(b->shader, AGX_SIZE_32);
+         I->src[0] = I->src[2] = agx_uniform(8, AGX_SIZE_32);
+         I->src[1] = I->src[3] = agx_immediate(immediate);
+         I->fcond = cond;
+         agx_builder_insert(&b->cursor, I);
+         agx_lower_uniform_sources(b->shader);
+         EXPECT_EQ(I->src[0].type, AGX_INDEX_NORMAL);
+         EXPECT_TRUE(agx_is_equiv(I->src[0], I->src[2]));
+         ralloc_free(mem);
+      }
    }
 }
 
@@ -1019,6 +1237,32 @@ TEST(NativeForms, RectangleImplicitLodOutsideFragment)
          nir_validate_shader(b.shader, "rectangle level zero");
          ralloc_free(b.shader);
       }
+   }
+}
+
+TEST(NativeForms, ImageWriteHighUniformHeap)
+{
+   for (unsigned uniform : {252u, 256u, 296u, 508u}) {
+      void *mem = ralloc_context(NULL);
+      agx_shader_key key = {};
+      key.dev.encoding = AGX_ISA_ENCODING_AGX3B;
+      key.dev.chip = AGX_CHIP_G16G;
+      agx_builder *b = agx_test_builder(mem);
+      b->shader->key = &key;
+      b->shader->stage = MESA_SHADER_COMPUTE;
+      agx_index data = agx_register(16, AGX_SIZE_32);
+      data.channels_m1 = 3;
+      agx_index coord = agx_register(24, AGX_SIZE_32);
+      coord.channels_m1 = 1;
+      agx_image_write(b, data, coord, agx_zero(),
+                      agx_uniform(uniform, AGX_SIZE_64),
+                      agx_register(28, AGX_SIZE_32), AGX_DIM_2D, true);
+      agx_stop(b);
+      util_dynarray binary;
+      util_dynarray_init(&binary, mem);
+      EXPECT_TRUE(agx3_pack_binary(b->shader, &binary)) << uniform;
+      util_dynarray_fini(&binary);
+      ralloc_free(mem);
    }
 }
 
@@ -3010,4 +3254,75 @@ TEST(NativeForms, SchedulerSsaBookkeepingStaysWithinEachBlock)
          }
       }
    }
+}
+
+/* AGX2 preamble lowering replaces an unpromoted bindless sampler token with
+ * its heap index. The main shader must still request the sampler heap. */
+TEST(LegacySamplers, UnpromotedIndexNeedsHeap)
+{
+   for (bool dynamic : {false, true}) {
+      for (bool border : {false, true}) {
+         SCOPED_TRACE(::testing::Message() << "dynamic=" << dynamic
+                                         << " border=" << border);
+         nir_builder b = nir_builder_init_simple_shader(
+            MESA_SHADER_COMPUTE, &agx_nir_options, "AGX2 sampler heap");
+         b.shader->info.workgroup_size[0] = 1;
+         b.shader->info.workgroup_size[1] = 1;
+         b.shader->info.workgroup_size[2] = 1;
+         nir_def *index = dynamic
+            ? nir_u2u16(&b, nir_channel(&b, nir_load_global_invocation_id(&b, 32), 0))
+            : nir_imm_intN_t(&b, 28, 16);
+         nir_def *sampler = border ? index : nir_bindless_sampler_agx(
+            &b, nir_imm_int(&b, 24), index);
+         nir_def *texture = nir_bindless_image_agx(&b, nir_imm_int(&b, 0));
+         nir_tex_instr *tex = nir_tex_instr_create(b.shader, 4);
+         tex->op = nir_texop_txl;
+         tex->sampler_dim = GLSL_SAMPLER_DIM_2D;
+         tex->coord_components = 2;
+         tex->dest_type = nir_type_float32;
+         tex->src[0] = nir_tex_src_for_ssa(nir_tex_src_backend1,
+            nir_vec2(&b, nir_imm_float(&b, 0.25), nir_imm_float(&b, 0.5)));
+         tex->src[1] = nir_tex_src_for_ssa(nir_tex_src_lod, nir_imm_float(&b, 0));
+         tex->src[2] = nir_tex_src_for_ssa(nir_tex_src_texture_handle, texture);
+         tex->src[3] = nir_tex_src_for_ssa(nir_tex_src_sampler_handle, sampler);
+         nir_def_init(&tex->instr, &tex->def, 4, 32);
+         nir_builder_instr_insert(&b, &tex->instr);
+         nir_store_global(&b, &tex->def, nir_imm_int64(&b, 0x1000), .align_mul = 16);
+         agx_shader_key key = {};
+         key.dev.encoding = AGX_ISA_ENCODING_AGX2;
+         key.dev.chip = AGX_CHIP_G13G;
+         key.promote_textures = false;
+         agx_preprocess_nir(b.shader);
+         agx_shader_part part = {};
+         bool ok = agx_compile_shader_nir(b.shader, &key, &part);
+         EXPECT_TRUE(ok);
+         if (ok)
+            EXPECT_TRUE(part.info.uses_sampler_heap);
+         free(part.binary);
+         ralloc_free(b.shader);
+      }
+   }
+}
+
+TEST(LegacyFragments, SideEffectsRetainUpstreamLateDepth)
+{
+   nir_builder b = nir_builder_init_simple_shader(
+      MESA_SHADER_FRAGMENT, &agx_nir_options, "legacy side effects");
+   b.shader->info.writes_memory = true;
+   nir_store_global(&b, nir_imm_int(&b, 1), nir_imm_int64(&b, 0x1000),
+                    .align_mul = 4);
+   EXPECT_TRUE(agx_nir_lower_frag_sidefx(b.shader, false));
+   EXPECT_NE(b.shader->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_DEPTH), 0u);
+   unsigned never = 0, masks = 0;
+   nir_foreach_block(block, nir_shader_get_entrypoint(b.shader)) {
+      nir_foreach_instr(instr, block) {
+         if (instr->type != nir_instr_type_intrinsic) continue;
+         auto op = nir_instr_as_intrinsic(instr)->intrinsic;
+         never += op == nir_intrinsic_load_depth_never_agx;
+         masks += op == nir_intrinsic_sample_mask_agx;
+      }
+   }
+   EXPECT_EQ(never, 1u);
+   EXPECT_EQ(masks, 0u);
+   ralloc_free(b.shader);
 }

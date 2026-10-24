@@ -319,3 +319,115 @@ TEST_F(nir_opt_dead_cf_test, unreachable_phi)
    ASSERT_TRUE(exec_list_is_empty(&nir_impl_last_block(b->impl)->instr_list));
    ASSERT_FALSE(nir_opt_dead_cf(b->shader));
 }
+
+static nir_def *
+build_query(nir_builder *b)
+{
+   nir_variable *q = nir_local_variable_create(b->impl, glsl_uint64_t_type(), "q");
+   q->data.ray_query = true;
+   nir_def *rq = &nir_build_deref_var(b, q)->def;
+   nir_rq_initialize(b, rq, nir_imm_int64(b, 0), nir_imm_int(b, 0),
+                     nir_imm_int(b, 255), nir_imm_vec3(b, 0, 0, 0),
+                     nir_imm_float(b, 0), nir_imm_vec3(b, 0, 0, 1),
+                     nir_imm_float(b, 10));
+   return rq;
+}
+
+static nir_def *
+load_query_type(nir_builder *b, nir_def *rq, bool committed)
+{
+   nir_intrinsic_instr *load = nir_intrinsic_instr_create(b->shader,
+                                                         nir_intrinsic_rq_load);
+   load->num_components = 1;
+   load->src[0] = nir_src_for_ssa(rq);
+   nir_intrinsic_set_ray_query_value(load, nir_ray_query_value_intersection_type);
+   nir_intrinsic_set_committed(load, committed);
+   nir_def_init(&load->instr, &load->def, 1, 32);
+   nir_builder_instr_insert(b, &load->instr);
+   return &load->def;
+}
+
+TEST_F(nir_opt_dead_cf_test, dead_query_loop)
+{
+   nir_def *rq = build_query(b);
+   nir_push_loop(b);
+   nir_break_if(b, nir_inot(b, nir_rq_proceed(b, 1, rq)));
+   load_query_type(b, rq, false);
+   nir_pop_loop(b, NULL);
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_FALSE(nir_opt_dead_cf(b->shader));
+   ASSERT_TRUE(nir_opt_dead_cf_with_options(b->shader, true));
+   ASSERT_FALSE(nir_block_get_following_loop(nir_start_block(b->impl)));
+   nir_validate_shader(b->shader, NULL);
+}
+
+TEST_F(nir_opt_dead_cf_test, query_state_escapes_loop)
+{
+   nir_def *rq = build_query(b);
+   nir_push_loop(b);
+   nir_break_if(b, nir_inot(b, nir_rq_proceed(b, 1, rq)));
+   nir_pop_loop(b, NULL);
+   nir_variable *var = nir_deref_instr_get_variable(nir_def_as_deref(rq));
+   nir_def *again = &nir_build_deref_var(b, var)->def;
+   nir_def *type = load_query_type(b, again, true);
+   nir_store_global(b, type, nir_imm_int64(b, 4096));
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_FALSE(nir_opt_dead_cf_with_options(b->shader, true));
+   nir_validate_shader(b->shader, NULL);
+}
+
+TEST_F(nir_opt_dead_cf_test, query_state_escapes_if)
+{
+   nir_def *rq = build_query(b);
+   nir_push_if(b, nir_ieq_imm(b, nir_load_local_invocation_index(b), 0));
+   nir_rq_proceed(b, 1, rq);
+   nir_pop_if(b, NULL);
+   nir_rq_proceed(b, 1, rq);
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_FALSE(nir_opt_dead_cf_with_options(b->shader, true));
+   nir_validate_shader(b->shader, NULL);
+}
+
+TEST_F(nir_opt_dead_cf_test, query_result_escapes_if)
+{
+   nir_def *rq = build_query(b);
+   nir_push_if(b, nir_ieq_imm(b, nir_load_local_invocation_index(b), 0));
+   nir_def *more = nir_rq_proceed(b, 1, rq);
+   nir_push_else(b, NULL);
+   nir_def *no = nir_imm_false(b);
+   nir_pop_if(b, NULL);
+   nir_def *result = nir_if_phi(b, more, no);
+   nir_store_global(b, nir_b2i32(b, result), nir_imm_int64(b, 4096));
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_FALSE(nir_opt_dead_cf_with_options(b->shader, true));
+   nir_validate_shader(b->shader, NULL);
+}
+
+TEST_F(nir_opt_dead_cf_test, dead_query_with_live_query_in_same_loop)
+{
+   nir_def *dead = build_query(b);
+   nir_def *live = build_query(b);
+   nir_push_loop(b);
+   nir_rq_proceed(b, 1, dead);
+   nir_break_if(b, nir_inot(b, nir_rq_proceed(b, 1, live)));
+   nir_pop_loop(b, NULL);
+   nir_def *type = load_query_type(b, live, true);
+   nir_store_global(b, type, nir_imm_int64(b, 4096));
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_FALSE(nir_opt_dead_cf_with_options(b->shader, true));
+   nir_validate_shader(b->shader, NULL);
+}
+
+TEST_F(nir_opt_dead_cf_test, dead_query_if)
+{
+   nir_push_if(b, nir_ieq_imm(b, nir_load_local_invocation_index(b), 0));
+   nir_def *rq = build_query(b);
+   nir_rq_proceed(b, 1, rq);
+   load_query_type(b, rq, false);
+   nir_pop_if(b, NULL);
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_FALSE(nir_opt_dead_cf(b->shader));
+   ASSERT_TRUE(nir_opt_dead_cf_with_options(b->shader, true));
+   ASSERT_FALSE(nir_block_get_following_if(nir_start_block(b->impl)));
+   nir_validate_shader(b->shader, NULL);
+}

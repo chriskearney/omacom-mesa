@@ -365,7 +365,7 @@ check_query_lod_custom_border_bindings(void)
          nir_tex_instr_src_index(query, nir_tex_src_sampler_handle);
       assert(handle_idx >= 0);
       nir_def *handle = query->src[handle_idx].src.ssa;
-      const bool lowered = agx_nir_lower_custom_border_g17p(nir);
+      const bool lowered = agx_nir_lower_custom_border_g17p(nir, true);
       unsigned count = 0;
       for (unsigned i = 0; i < query->num_srcs; ++i) {
          if (query->src[i].src_type == nir_tex_src_sampler_handle) {
@@ -1731,9 +1731,15 @@ main(void)
           agx_chip_name(dev->chip), vs_ok ? "ok" : "refused",
           fs_ok ? "ok" : "refused", linked_ok ? "ok" : "refused");
 
-   if (!agx2 && agx_resource(dst)->layout.compressed) {
+   /* G17P compresses this 2408x1506 RGBA8 render target, so the clear, the
+    * flush and the blit above took the compressed end-of-tile PBE and
+    * background texture; an unencodable descriptor would have aborted in
+    * agx_native_descriptor_rejected(). Other AGX3 parts keep it plain. */
+   if (!agx2 &&
+       agx_resource(dst)->layout.compressed != (dev->chip == AGX_CHIP_G17P)) {
       fprintf(stderr,
-              "AGX3 render target selected an unencodable compressed PBE\n");
+              "AGX3 render target compression does not follow the G17P "
+              "policy\n");
       status = 1;
    }
 

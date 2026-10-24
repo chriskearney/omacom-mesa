@@ -34,6 +34,11 @@
 #define ZINK_BIND_TRANSIENT (1u << 30) //transient fb attachment
 #define ZINK_BIND_VIDEO (1u << 31)
 
+/* the image has (or must get) ATTACHMENT_FEEDBACK_LOOP usage under
+ * driver_workarounds.lazy_feedback_loop_usage
+ */
+#define ZINK_RESOURCE_FLAG_FEEDBACK_LOOP PIPE_RESOURCE_FLAG_DRV_PRIV
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -80,6 +85,8 @@ bool
 zink_resource_object_init_storage(struct zink_context *ctx, struct zink_resource *res);
 bool
 zink_resource_object_init_mutable(struct zink_context *ctx, struct zink_resource *res);
+bool
+zink_resource_object_init_feedback_loop(struct zink_context *ctx, struct zink_resource *res);
 
 VkDeviceAddress
 zink_resource_get_address(struct zink_screen *screen, struct zink_resource *res);

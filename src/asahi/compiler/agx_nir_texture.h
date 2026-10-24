@@ -14,6 +14,9 @@
 /* Software border query for an unfiltered gather, rather than interpolation. */
 #define AGX_TEXTURE_FLAG_BORDER_UNFILTERED (1 << 2)
 
+/* G17P custom-border gather probe: non-comparing clamp-to-one sampler. */
+#define AGX_TEXTURE_FLAG_BORDER_NONCOMPARE (1 << 3)
+
 /* Texel buffers lowered to (at most) 16384x16384 2D textures */
 #define AGX_TEXTURE_BUFFER_WIDTH      16384
 #define AGX_TEXTURE_BUFFER_MAX_HEIGHT 16384

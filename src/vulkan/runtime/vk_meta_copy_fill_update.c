@@ -51,6 +51,8 @@ struct vk_meta_copy_buffer_key {
 struct vk_meta_copy_image_view {
    VkImageViewType type;
    bool depth_stencil_aspect_views;
+   /* vk_meta_copy_image_properties::copied_layers_src_view */
+   bool copied_layers;
 
    union {
       struct {
@@ -444,12 +446,14 @@ get_compute_copy_pipeline(
 }
 
 static VkResult
-copy_create_src_image_view(struct vk_command_buffer *cmd,
-                           struct vk_meta_device *meta, struct vk_image *img,
-                           const struct vk_meta_copy_image_view *view_info,
-                           VkImageAspectFlags aspect,
-                           const VkImageSubresourceLayers *subres,
-                           VkImageView *view_out)
+copy_create_src_image_view_layers(struct vk_command_buffer *cmd,
+                                  struct vk_meta_device *meta,
+                                  struct vk_image *img,
+                                  const struct vk_meta_copy_image_view *view_info,
+                                  VkImageAspectFlags aspect,
+                                  const VkImageSubresourceLayers *subres,
+                                  uint32_t base_layer, uint32_t layer_count,
+                                  VkImageView *view_out)
 {
    const VkImageViewUsageCreateInfo usage = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO,
@@ -477,8 +481,8 @@ copy_create_src_image_view(struct vk_command_buffer *cmd,
          .aspectMask = view_aspects,
          .baseMipLevel = subres->mipLevel,
          .levelCount = 1,
-         .baseArrayLayer = 0,
-         .layerCount = img->array_layers,
+         .baseArrayLayer = base_layer,
+         .layerCount = layer_count,
       },
    };
 
@@ -499,6 +503,19 @@ copy_create_src_image_view(struct vk_command_buffer *cmd,
    }
 
    return vk_meta_create_image_view(cmd, meta, &info, view_out);
+}
+
+static VkResult
+copy_create_src_image_view(struct vk_command_buffer *cmd,
+                           struct vk_meta_device *meta, struct vk_image *img,
+                           const struct vk_meta_copy_image_view *view_info,
+                           VkImageAspectFlags aspect,
+                           const VkImageSubresourceLayers *subres,
+                           VkImageView *view_out)
+{
+   return copy_create_src_image_view_layers(cmd, meta, img, view_info, aspect,
+                                            subres, 0, img->array_layers,
+                                            view_out);
 }
 
 static VkResult
@@ -1968,12 +1985,25 @@ copy_image_prepare_gfx_desc_set(
    };
    uint32_t desc_count = 0;
 
+   /* The copied layers of an array, or the copied slices of a 3D image */
+   uint32_t base_layer = 0, layer_count = src_img->array_layers;
+   if (key->src.view.copied_layers) {
+      if (src_img->image_type == VK_IMAGE_TYPE_3D) {
+         base_layer = region->srcOffset.z;
+         layer_count = region->extent.depth;
+      } else {
+         base_layer = region->srcSubresource.baseArrayLayer;
+         layer_count =
+            vk_image_subresource_layer_count(src_img, &region->srcSubresource);
+      }
+   }
+
    u_foreach_bit(a, src_aspects) {
       assert(desc_count < ARRAY_SIZE(iviews));
 
-      VkResult result = copy_create_src_image_view(
+      VkResult result = copy_create_src_image_view_layers(
          cmd, meta, src_img, &key->src.view, 1 << a, &region->srcSubresource,
-         &iviews[desc_count++]);
+         base_layer, layer_count, &iviews[desc_count++]);
       if (unlikely(result != VK_SUCCESS))
          return result;
    }
@@ -2113,9 +2143,15 @@ copy_image_prepare_gfx_push_const(struct vk_command_buffer *cmd,
 {
    struct vk_device *dev = cmd->base.device;
    const struct vk_device_dispatch_table *disp = &dev->dispatch_table;
+   /* A view of the copied layers only starts at the first one. */
+   VkOffset3D src_offset = region->srcOffset;
+   uint32_t src_base_layer = region->srcSubresource.baseArrayLayer;
+   if (key->src.view.copied_layers) {
+      src_offset.z = 0;
+      src_base_layer = 0;
+   }
    VkOffset3D src_img_offs =
-      base_layer_as_offset(key->src.view.type, region->srcOffset,
-                           region->srcSubresource.baseArrayLayer);
+      base_layer_as_offset(key->src.view.type, src_offset, src_base_layer);
 
    struct vk_meta_copy_image_fs_info info = {
       .dst_to_src_offs = {
@@ -2272,11 +2308,18 @@ copy_image_region_gfx(struct vk_command_buffer *cmd,
 
    assert(aspect_masks_valid(src_img, dst_img, region));
 
+   /* A view of copied 3D slices is a 2D array of them. */
+   const bool src_copied_layers = src_props->copied_layers_src_view;
+   const VkImageViewType src_view_type =
+      src_copied_layers && src_img->image_type == VK_IMAGE_TYPE_3D
+         ? VK_IMAGE_VIEW_TYPE_2D_ARRAY
+         : vk_image_sampled_view_type(src_img);
+
    struct vk_meta_copy_image_key key = {
       .key_type = VK_META_OBJECT_KEY_COPY_IMAGE_GFX,
       .samples = src_img->samples,
       .src.aspects = region->srcSubresource.aspectMask,
-      .src.view = img_copy_view_info(vk_image_sampled_view_type(src_img),
+      .src.view = img_copy_view_info(src_view_type,
                                      region->srcSubresource.aspectMask, src_img,
                                      src_props),
       .dst.aspects = region->dstSubresource.aspectMask,
@@ -2284,6 +2327,7 @@ copy_image_region_gfx(struct vk_command_buffer *cmd,
                                      region->dstSubresource.aspectMask, dst_img,
                                      dst_props),
    };
+   key.src.view.copied_layers = src_copied_layers;
 
    VkPipelineLayout pipeline_layout;
    VkPipeline pipeline;

@@ -8,7 +8,9 @@ libasahi_agx_files = files(
   'agx_liveness.c',
   'agx_insert_waits.c',
   'agx_nir_lower_address.c',
+  'agx_nir_lower_fma_rte.c',
   'agx_nir_scalarize_int64.c',
+  'agx_nir_lower_divmod64.c',
   'agx_nir_lower_atomics.c',
   'agx_nir_opt_select_load.c',
   'agx_nir_lower_cull_distance.c',
@@ -178,12 +180,15 @@ if with_tests
          'test/test-rte-fma.cpp',
          'test/test-border-index.cpp',
          'test/test-aligned-bounds.cpp',
+         'test/test-agx2-image-acquire.cpp',
          'test/test-byte-swap.cpp',
          'test/test-minmax-canonical.cpp',
          'test/test-selected-f2i.cpp',
          'test/test-buffer-format-groups.cpp',
          'test/test-scalarize-int64.cpp',
+         'test/test-lower-divmod64.cpp',
          'test/test-spill-fallback.cpp',
+         'test/test-rt-register-pressure.cpp',
          'test/test-uniform-remat.cpp',
          'test/test-lower-pseudo.cpp',
          'test/test-lower-parallel-copy.cpp',
@@ -264,9 +269,34 @@ if with_tests
     suite : ['asahi'],
   )
 
+  test('agx3_gen1_wait',
+    executable('agx3_gen1_wait_test', files('test/test-gen1-wait.c'),
+      c_args : [c_msvc_compat_args, no_override_init_args],
+      gnu_symbol_visibility : 'hidden',
+      dependencies : [idep_nir, idep_mesautil],
+      link_with : [libasahi_compiler]), suite : ['asahi'])
   test(
     'agx3_gen1_ray_query',
     executable('agx3_gen1_ray_query_test', files('test/test-gen1-ray-query.c'),
+      c_args : [c_msvc_compat_args, no_override_init_args],
+      gnu_symbol_visibility : 'hidden',
+      dependencies : [idep_nir, idep_mesautil],
+      link_with : [libasahi_compiler]),
+    suite : ['asahi'],
+  )
+  test(
+    'agx3_gen1_null_as',
+    executable('agx3_gen1_null_as_test', files('test/test-gen1-null-as.c'),
+      c_args : [c_msvc_compat_args, no_override_init_args],
+      gnu_symbol_visibility : 'hidden',
+      dependencies : [idep_nir, idep_mesautil],
+      link_with : [libasahi_compiler]),
+    suite : ['asahi'],
+  )
+
+  test(
+    'agx3_gen1_terminate',
+    executable('agx3_gen1_terminate_test', files('test/test-gen1-terminate.c'),
       c_args : [c_msvc_compat_args, no_override_init_args],
       gnu_symbol_visibility : 'hidden',
       dependencies : [idep_nir, idep_mesautil],
@@ -310,6 +340,16 @@ if with_tests
       dependencies : [idep_nir, idep_mesautil],
       link_with : [libasahi_compiler],
     ),
+    suite : ['asahi'],
+  )
+
+  test(
+    'agx3_gen1_position_fetch',
+    executable('agx3_gen1_position_fetch_test', files('test/test-gen1-position-fetch.c'),
+      c_args : [c_msvc_compat_args, no_override_init_args],
+      gnu_symbol_visibility : 'hidden',
+      dependencies : [idep_nir, idep_mesautil],
+      link_with : [libasahi_compiler]),
     suite : ['asahi'],
   )
 

@@ -13,8 +13,8 @@ gen1_serial_handles(global uint64_t *image,
    return *(global uint32_t *)((global uint8_t *)image + image[14]);
 }
 
-/* kind 0: compacted storage; kind 1: current storage span. Both include the
- * prefix required when Vulkan places the destination at an unaligned offset.
+/* kind 0: compacted storage; kind 1: current storage span. The image needs
+ * no alignment prefix: it is valid at any slot-aligned destination.
  * Live GPU metadata includes retained topology, not CPU-last-recorded flags.
  */
 KERNEL(1)
@@ -32,7 +32,7 @@ libagx_gen1_as_property(global uint64_t *image, global uint64_t *metadata,
    else {
       uint64_t span = kind == 0 ? libagx_gen1_as_compacted_span(&live)
                                 : live.storage_bytes;
-      *report = span + LIBAGX_GEN1_AS_ALIGNMENT_SLACK;
+      *report = span;
    }
 }
 
@@ -86,7 +86,7 @@ libagx_gen1_as_serialize(global uint64_t *serialized, global uint64_t *image,
    if (cl_global_id.x != 0) return;
    for (uint32_t i = 0; i < 4; ++i) serialized[i] = uuid[i];
    serialized[4] = libagx_gen1_as_serial_size(&live, handles);
-   serialized[5] = libagx_gen1_as_compacted_span(&live) + LIBAGX_GEN1_AS_ALIGNMENT_SLACK;
+   serialized[5] = libagx_gen1_as_compacted_span(&live);
    serialized[6] = handles;
    global uint64_t *records = serialized + 7 + handles + LIBAGX_GEN1_AS_METADATA_STRIDE / 8;
    if (handles) {
@@ -210,6 +210,69 @@ libagx_gen1_as_copy(global uint64_t *destination, global uint64_t *source,
       live.resource_id = destination_id;
       *(global struct libagx_gen1_as_metadata *)destination_metadata = live;
    }
+}
+
+static inline global uint32_t *
+gen1_rebase_image(global uint64_t *base, uint32_t serialized)
+{
+   return serialized
+      ? (global uint32_t *)((global uint8_t *)base +
+                            libagx_gen1_as_serial_image_offset(base[6]))
+      : (global uint32_t *)base;
+}
+
+/* Moves an image to a structure whose traversal base is delta slots further
+ * from its image (see gen1_as.h): one invocation per slot adds delta to the
+ * child reference of every node slot below the tail. Serialized images are
+ * stored with delta 0. Instance images also need
+ * libagx_gen1_as_restore_records afterwards.
+ */
+KERNEL(32)
+libagx_gen1_as_rebase(global uint64_t *base, uint32_t serialized, uint32_t delta)
+{
+   global uint32_t *image = gen1_rebase_image(base, serialized);
+   global uint64_t *words = (global uint64_t *)image;
+   uint64_t slot = cl_global_id.x;
+   if (!words[LIBAGX_GEN1_AS_SIZE_WORD] || slot == 1 || slot == 2 ||
+       slot >= words[LIBAGX_GEN1_AS_TAIL_WORD] / LIBAGX_GEN1_AS_SLOT_BYTES)
+      return;
+   global uint32_t *node = image + slot * (LIBAGX_GEN1_AS_SLOT_BYTES / 4);
+   if (!libagx_gen1_as_is_node(node[0]))
+      return;
+   uint32_t child = libagx_gen1_as_child_slot(node[10], node[12]) + delta;
+   node[10] = (node[10] & 0xffff0000u) | (child >> 16);
+   node[12] = (node[12] & 0xffff0000u) | (child & 0xffffu);
+}
+
+/* The second slot of an instance record starts with the instance's lower x
+ * bound, which libagx_gen1_as_rebase may have taken for a node marker. One
+ * invocation per instance rewrites that slot from the unmodified source.
+ */
+KERNEL(32)
+libagx_gen1_as_restore_records(global uint64_t *base, uint32_t serialized,
+                               global uint64_t *source_base,
+                               uint32_t source_serialized,
+                               global uint64_t *metadata)
+{
+   struct libagx_gen1_as_metadata live =
+      *(global struct libagx_gen1_as_metadata *)metadata;
+   global uint8_t *image = (global uint8_t *)gen1_rebase_image(base, serialized);
+   global uint8_t *source =
+      (global uint8_t *)gen1_rebase_image(source_base, source_serialized);
+   global uint64_t *words = (global uint64_t *)source;
+   uint64_t i = cl_global_id.x;
+   if (live.geometry_type != 2u || !words[LIBAGX_GEN1_AS_SIZE_WORD] ||
+       i >= live.leaf_bound)
+      return;
+   global uint64_t *pointers =
+      (global uint64_t *)(source + words[LIBAGX_GEN1_AS_POINTER_WORD]);
+   if (pointers[2 * i + 1] != 1)
+      return;
+   uint64_t offset = pointers[2 * i] - 4 + LIBAGX_GEN1_AS_SLOT_BYTES;
+   global uint64_t *dst = (global uint64_t *)(image + offset);
+   global uint64_t *src = (global uint64_t *)(source + offset);
+   for (uint32_t w = 0; w < LIBAGX_GEN1_AS_SLOT_BYTES / 8; ++w)
+      dst[w] = src[w];
 }
 
 /* Replaces the existing empty-header GPU write; it is not another dispatch. */

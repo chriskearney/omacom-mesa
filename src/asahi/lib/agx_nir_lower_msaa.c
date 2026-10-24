@@ -6,6 +6,7 @@
 
 #include "agx_abi.h"
 #include "agx_compile.h"
+#include "agx_nir.h"
 #include "agx_tilebuffer.h"
 #include "nir.h"
 #include "nir_builder.h"
@@ -102,6 +103,48 @@ lower_to_per_sample(nir_builder *b, nir_intrinsic_instr *intr, void *data)
    default:
       return false;
    }
+}
+
+static bool
+lower_to_per_sample_agx2(nir_builder *b, nir_intrinsic_instr *intr, void *data)
+{
+   b->cursor = nir_before_instr(&intr->instr);
+
+   switch (intr->intrinsic) {
+   case nir_intrinsic_load_sample_id: {
+      nir_def *mask = nir_u2u32(b, nir_load_active_samples_agx(b));
+      nir_def *bit = nir_ufind_msb(b, mask);
+      nir_def_replace(&intr->def, nir_u2uN(b, bit, intr->def.bit_size));
+      return true;
+   }
+
+   case nir_intrinsic_load_local_pixel_agx:
+   case nir_intrinsic_store_local_pixel_agx:
+   case nir_intrinsic_store_zs_agx:
+   case nir_intrinsic_demote_samples:
+   case nir_intrinsic_sample_mask_agx: {
+      /* Fragment I/O inside the loop should only affect active samples. */
+      unsigned mask_index =
+         (intr->intrinsic == nir_intrinsic_store_local_pixel_agx) ? 1 : 0;
+
+      nir_def *mask = intr->src[mask_index].ssa;
+      nir_def *id_mask = nir_load_active_samples_agx(b);
+      nir_def *converted = nir_u2uN(b, id_mask, mask->bit_size);
+
+      nir_src_rewrite(&intr->src[mask_index], nir_iand(b, mask, converted));
+      return true;
+   }
+
+   default:
+      return false;
+   }
+}
+
+bool
+agx_nir_lower_to_per_sample_agx2(nir_shader *shader)
+{
+   return nir_shader_intrinsics_pass(shader, lower_to_per_sample_agx2,
+                                     nir_metadata_control_flow, NULL);
 }
 
 bool
@@ -672,6 +715,35 @@ agx_nir_lower_monolithic_msaa(nir_shader *shader, uint8_t nr_samples)
       nir_lower_single_sampled(shader, &lss_opts);
    } else if (shader->info.fs.uses_sample_shading) {
       agx_nir_lower_to_per_sample(shader);
+      agx_nir_wrap_per_sample_loop(shader, nr_samples);
+   }
+
+   return true;
+}
+
+/*
+ * Lower a fragment shader into a monolithic pixel shader, with static sample
+ * count, blend state, and tilebuffer formats in the shader key. For dynamic,
+ * epilogs must be used, which have separate lowerings.
+ */
+bool
+agx_nir_lower_monolithic_msaa_agx2(nir_shader *shader, uint8_t nr_samples)
+{
+   assert(shader->info.stage == MESA_SHADER_FRAGMENT);
+   assert(nr_samples == 1 || nr_samples == 2 || nr_samples == 4);
+
+   agx_nir_lower_sample_mask(shader);
+
+   /* In single sampled programs, interpolateAtSample needs to return the
+    * center pixel.
+    */
+   if (nr_samples == 1) {
+      nir_lower_single_sampled_options lss_opts = {
+         .lower_sample_mask_in = true,
+      };
+      nir_lower_single_sampled(shader, &lss_opts);
+   } else if (shader->info.fs.uses_sample_shading) {
+      agx_nir_lower_to_per_sample_agx2(shader);
       agx_nir_wrap_per_sample_loop(shader, nr_samples);
    }
 

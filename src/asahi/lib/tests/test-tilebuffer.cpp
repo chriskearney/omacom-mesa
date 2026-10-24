@@ -6,6 +6,8 @@
 #include "util/format/u_format.h"
 #include "agx_tilebuffer.h"
 #include "agx_bg_eot_key.h"
+#include "agx_g17p_compression.h"
+#include "layout/layout.h"
 
 #include <vector>
 #include <gtest/gtest.h>
@@ -780,4 +782,125 @@ TEST_F(SampleDepthOrder, StencilSamplesKeepExistingHoist)
 {
    EXPECT_EQ(zs_tile_order(2, false, true),
              (std::vector<char>{'K', 'Z', 'Z', 'T', 'T'}));
+}
+
+static struct agx_tilebuffer_layout
+g17p_single_sample_layout(const enum pipe_format *formats, unsigned count,
+                          bool layered)
+{
+   return agx_build_tilebuffer_layout_with_limits(
+      formats, count, 1, layered, AGX_G17P_MAX_BYTES_PER_SAMPLE, 32768, 2048);
+}
+
+/* A spilled compressed render target needs in-place decompression, which
+ * has no G17P build, so no compressed G17P colour format may ever spill.
+ * Every renderable format takes at most 16 bytes of a sample and every
+ * compressed one at most 8, so eight targets need at most 7 * 16 + 8 = 120
+ * bytes, the G17P per-sample limit. Check the bound and every placement.
+ */
+TEST(Tilebuffer, G17PCompressedColourNeverSpills)
+{
+   for (unsigned f = 1; f < PIPE_FORMAT_COUNT; ++f) {
+      const enum pipe_format format = (enum pipe_format)f;
+      if (ail_pixel_format[format].renderable == PIPE_FORMAT_NONE ||
+          util_format_is_depth_or_stencil(format))
+         continue;
+
+      enum pipe_format one[AGX_MAX_RENDER_TARGETS] = {format};
+      const auto tib = g17p_single_sample_layout(one, 1, false);
+      EXPECT_FALSE(tib.spilled[0]) << util_format_name(format);
+      EXPECT_LE(tib.sample_size_B, 16u) << util_format_name(format);
+   }
+
+   static const enum pipe_format widest[] = {
+      PIPE_FORMAT_R32G32B32A32_FLOAT,
+      PIPE_FORMAT_R32G32B32A32_UINT,
+      PIPE_FORMAT_R32G32B32A32_SINT,
+   };
+
+   unsigned admitted = 0;
+   for (unsigned f = 1; f < PIPE_FORMAT_COUNT; ++f) {
+      const enum pipe_format format = (enum pipe_format)f;
+      if (!agx_g17p_compression_color_format(format))
+         continue;
+
+      ++admitted;
+      const char *name = util_format_name(format);
+      EXPECT_NE(ail_pixel_format[format].renderable, PIPE_FORMAT_NONE) << name;
+      EXPECT_FALSE(util_format_is_depth_or_stencil(format)) << name;
+      EXPECT_LE(util_format_get_blocksize(format), 8u) << name;
+      EXPECT_TRUE(ail_can_compress(format, 16, 16, 1)) << name;
+      EXPECT_FALSE(ail_can_compress(format, 15, 16, 1)) << name;
+
+      /* The end-of-tile store class is the image's own class. */
+      EXPECT_TRUE(ail_formats_compatible(
+         format, agx_g17p_rt0_pbe_format(util_format_linear(format))))
+         << name;
+
+      enum pipe_format one[AGX_MAX_RENDER_TARGETS] = {format};
+      EXPECT_LE(g17p_single_sample_layout(one, 1, false).sample_size_B, 8u)
+         << name;
+
+      for (enum pipe_format wide : widest) {
+         for (unsigned slot = 0; slot < AGX_MAX_RENDER_TARGETS; ++slot) {
+            enum pipe_format formats[AGX_MAX_RENDER_TARGETS];
+            for (unsigned rt = 0; rt < AGX_MAX_RENDER_TARGETS; ++rt)
+               formats[rt] = rt == slot ? format : wide;
+
+            for (bool layered : {false, true}) {
+               const auto tib = g17p_single_sample_layout(
+                  formats, AGX_MAX_RENDER_TARGETS, layered);
+               EXPECT_FALSE(tib.spilled[slot])
+                  << name << " in slot " << slot << " next to "
+                  << util_format_name(wide);
+            }
+         }
+      }
+   }
+
+   /* Honeykrisp's 46 Vulkan formats are 41 pipe formats (the five
+    * A8B8G8R8 PACK32 formats are R8G8B8A8); Gallium adds 12 X variants. */
+   EXPECT_EQ(admitted, 53u);
+
+   /* An X variant is its A variant's channel class, type and tilebuffer
+    * format, so it compresses identically. */
+   static const enum pipe_format x_variants[][2] = {
+      {PIPE_FORMAT_R8G8B8X8_UNORM, PIPE_FORMAT_R8G8B8A8_UNORM},
+      {PIPE_FORMAT_R8G8B8X8_SNORM, PIPE_FORMAT_R8G8B8A8_SNORM},
+      {PIPE_FORMAT_R8G8B8X8_UINT, PIPE_FORMAT_R8G8B8A8_UINT},
+      {PIPE_FORMAT_R8G8B8X8_SINT, PIPE_FORMAT_R8G8B8A8_SINT},
+      {PIPE_FORMAT_R8G8B8X8_SRGB, PIPE_FORMAT_R8G8B8A8_SRGB},
+      {PIPE_FORMAT_B8G8R8X8_UNORM, PIPE_FORMAT_B8G8R8A8_UNORM},
+      {PIPE_FORMAT_B8G8R8X8_SRGB, PIPE_FORMAT_B8G8R8A8_SRGB},
+      {PIPE_FORMAT_R10G10B10X2_UNORM, PIPE_FORMAT_R10G10B10A2_UNORM},
+      {PIPE_FORMAT_B10G10R10X2_UNORM, PIPE_FORMAT_B10G10R10A2_UNORM},
+      {PIPE_FORMAT_R16G16B16X16_UINT, PIPE_FORMAT_R16G16B16A16_UINT},
+      {PIPE_FORMAT_R16G16B16X16_SINT, PIPE_FORMAT_R16G16B16A16_SINT},
+      {PIPE_FORMAT_R16G16B16X16_FLOAT, PIPE_FORMAT_R16G16B16A16_FLOAT},
+   };
+   for (const auto &pair : x_variants) {
+      const char *name = util_format_name(pair[0]);
+      EXPECT_TRUE(agx_g17p_compression_color_format(pair[0])) << name;
+      EXPECT_TRUE(agx_g17p_compression_color_format(pair[1])) << name;
+      EXPECT_EQ(ail_pixel_format[pair[0]].channels,
+                ail_pixel_format[pair[1]].channels) << name;
+      EXPECT_EQ(ail_pixel_format[pair[0]].type,
+                ail_pixel_format[pair[1]].type) << name;
+      EXPECT_EQ(ail_pixel_format[pair[0]].renderable,
+                ail_pixel_format[pair[1]].renderable) << name;
+      EXPECT_EQ(util_format_get_blocksize(pair[0]),
+                util_format_get_blocksize(pair[1])) << name;
+   }
+
+   /* No packed-float, shared-exponent, 16-byte, depth or stencil format. */
+   static const enum pipe_format refused[] = {
+      PIPE_FORMAT_R11G11B10_FLOAT, PIPE_FORMAT_R9G9B9E5_FLOAT,
+      PIPE_FORMAT_R32G32B32A32_FLOAT, PIPE_FORMAT_R32G32B32A32_UINT,
+      PIPE_FORMAT_Z32_FLOAT, PIPE_FORMAT_Z16_UNORM, PIPE_FORMAT_S8_UINT,
+      PIPE_FORMAT_R4G4B4A4_UNORM, PIPE_FORMAT_B5G5R5A1_UNORM,
+      PIPE_FORMAT_A8_UNORM, PIPE_FORMAT_L8_UNORM,
+   };
+   for (enum pipe_format format : refused)
+      EXPECT_FALSE(agx_g17p_compression_color_format(format))
+         << util_format_name(format);
 }

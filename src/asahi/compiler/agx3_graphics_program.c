@@ -16,6 +16,10 @@
 
 #include <string.h>
 
+/* Read once: it is consulted for every background and end-of-tile program */
+DEBUG_GET_ONCE_BOOL_OPTION(zero_colour_release_diagnostic,
+                           "ASAHI_G17P_ZERO_COLOUR_RELEASE_DIAGNOSTIC", false)
+
 static bool
 graphics_state_tail(const struct agx3_g17p_graphics_program_desc *desc,
                     struct agx_ioto_state_tail_output *tail)
@@ -226,8 +230,7 @@ graphics_program_write_unpublished(
    const unsigned colour_classes =
       !desc->fragment ? 0
       : desc->colour_classes ? desc->colour_classes
-      : debug_get_bool_option("ASAHI_G17P_ZERO_COLOUR_RELEASE_DIAGNOSTIC", false)
-         ? 0 : 1;
+      : debug_get_option_zero_colour_release_diagnostic() ? 0 : 1;
 
    struct agx_ioto_state_tail_output tail;
    if (!graphics_state_tail(desc, &tail))

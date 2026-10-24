@@ -69,7 +69,6 @@ void agx_nir_gen1_ray_core_words(struct nir_builder *b, nir_def *origin,
                                nir_def *bounds_min, nir_def *bounds_max,
                                nir_def *cull_mode, nir_def *flag16, nir_def *words[2]);
 
-#define AGX_GEN1_TRAVERSAL_POLL_BOUND (1u << 16)
 #define AGX_GEN1_CANDIDATE_REFILL_BOUND (1u << 16)
 
 nir_def *agx_nir_gen1_trace_opaque_with_status(struct nir_builder *b, nir_def *bvh,

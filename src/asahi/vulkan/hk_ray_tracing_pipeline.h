@@ -28,6 +28,8 @@
 #include "vk_pipeline.h"
 #include "vk_pipeline_layout.h"
 
+extern const struct vk_pipeline_ops hk_ray_tracing_pipeline_ops;
+
 struct hk_api_shader;
 struct hk_device;
 struct nir_shader;
@@ -46,6 +48,8 @@ struct hk_ray_tracing_pipeline {
    struct vk_pipeline base;
 
    struct vk_pipeline_layout *layout;
+
+   uint8_t binary_key[32];
 
    uint32_t stage_count;
    uint32_t group_count;

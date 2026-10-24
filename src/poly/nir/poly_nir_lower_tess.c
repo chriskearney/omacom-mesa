@@ -39,19 +39,33 @@ poly_tcs_output_stride(const nir_shader *nir)
 }
 
 static nir_def *
-tcs_out_addr(nir_builder *b, nir_intrinsic_instr *intr, nir_def *vertex_id)
+tcs_out_addr(nir_builder *b, nir_intrinsic_instr *intr, nir_def *vertex_id,
+             bool compact_levels)
 {
    nir_io_semantics sem = nir_intrinsic_io_semantics(intr);
 
    nir_def *offset = nir_get_io_offset_src(intr)->ssa;
+   /* Tessellation levels are compact scalar arrays. An indirect index left
+    * by nir_lower_io is a component offset, not a varying-slot offset.
+    * Adding it to the location turns outer[1] into inner[0], and outer[2:3]
+    * into per-vertex outputs, leaving outer factors unwritten and culling the
+    * patch before its evaluation shader can run. Constant indices have
+    * already been folded into component by nir_lower_io.
+    */
+   bool tess_level = compact_levels &&
+      (sem.location == VARYING_SLOT_TESS_LEVEL_OUTER ||
+       sem.location == VARYING_SLOT_TESS_LEVEL_INNER);
    nir_def *addr = poly_tcs_out_address(
       b, nir_load_tess_param_buffer_poly(b), tcs_unrolled_id(b), vertex_id,
-      nir_iadd_imm(b, offset, sem.location),
+      tess_level ? nir_imm_int(b, sem.location)
+                 : nir_iadd_imm(b, offset, sem.location),
       nir_imm_int(b, util_last_bit(b->shader->info.patch_outputs_written)),
       nir_imm_int(b, b->shader->info.tess.tcs_vertices_out),
       nir_imm_int64(b, poly_tcs_per_vertex_outputs(b->shader)));
 
    addr = nir_iadd_imm(b, addr, nir_intrinsic_component(intr) * 4);
+   if (tess_level)
+      addr = nir_iadd(b, addr, nir_u2u64(b, nir_ishl_imm(b, offset, 2)));
 
    return addr;
 }
@@ -95,7 +109,7 @@ tcs_load_input(nir_builder *b, nir_intrinsic_instr *intr)
 
 static nir_def *
 lower_tcs_impl(nir_builder *b, nir_intrinsic_instr *intr,
-               bool can_ignore_shader_out_barriers)
+               bool can_ignore_shader_out_barriers, bool compact_levels)
 {
    switch (intr->intrinsic) {
    case nir_intrinsic_barrier: {
@@ -178,14 +192,14 @@ lower_tcs_impl(nir_builder *b, nir_intrinsic_instr *intr,
                                            nir_load_tess_param_buffer_poly(b));
 
    case nir_intrinsic_load_output: {
-      nir_def *addr = tcs_out_addr(b, intr, nir_undef(b, 1, 32));
+      nir_def *addr = tcs_out_addr(b, intr, nir_undef(b, 1, 32), compact_levels);
       nir_def *value = nir_load_global(b, intr->def.num_components, 32, addr,
                                        .align_mul = 4);
       return nir_u2uN(b, value, intr->def.bit_size);
    }
 
    case nir_intrinsic_load_per_vertex_output: {
-      nir_def *addr = tcs_out_addr(b, intr, intr->src[0].ssa);
+      nir_def *addr = tcs_out_addr(b, intr, intr->src[0].ssa, compact_levels);
       nir_def *value = nir_load_global(b, intr->def.num_components, 32, addr,
                                        .align_mul = 4);
       return nir_u2uN(b, value, intr->def.bit_size);
@@ -198,14 +212,14 @@ lower_tcs_impl(nir_builder *b, nir_intrinsic_instr *intr,
                 VARYING_SLOT_TESS_LEVEL_INNER);
 
       nir_store_global(b, nir_u2u32(b, intr->src[0].ssa),
-                       tcs_out_addr(b, intr, nir_undef(b, 1, 32)),
+                       tcs_out_addr(b, intr, nir_undef(b, 1, 32), compact_levels),
                        .write_mask = nir_intrinsic_write_mask(intr));
       return NIR_LOWER_INSTR_PROGRESS_REPLACE;
    }
 
    case nir_intrinsic_store_per_vertex_output: {
       nir_store_global(b, nir_u2u32(b, intr->src[0].ssa),
-                       tcs_out_addr(b, intr, intr->src[1].ssa),
+                       tcs_out_addr(b, intr, intr->src[1].ssa, compact_levels),
                        .write_mask = nir_intrinsic_write_mask(intr));
       return NIR_LOWER_INSTR_PROGRESS_REPLACE;
    }
@@ -215,12 +229,19 @@ lower_tcs_impl(nir_builder *b, nir_intrinsic_instr *intr,
    }
 }
 
+struct tcs_options {
+   bool ignore_barriers;
+   bool compact_levels;
+};
+
 static bool
 lower_tcs(nir_builder *b, nir_intrinsic_instr *intr, void *data)
 {
    b->cursor = nir_before_instr(&intr->instr);
 
-   nir_def *repl = lower_tcs_impl(b, intr, !!(uintptr_t)data);
+   const struct tcs_options *options = data;
+   nir_def *repl = lower_tcs_impl(b, intr, options->ignore_barriers,
+                                 options->compact_levels);
    if (!repl)
       return false;
 
@@ -232,11 +253,20 @@ lower_tcs(nir_builder *b, nir_intrinsic_instr *intr, void *data)
 }
 
 bool
+poly_nir_lower_tcs_with_options(nir_shader *tcs,
+                                bool can_ignore_shader_out_barriers,
+                                bool compact_levels)
+{
+   struct tcs_options options = {can_ignore_shader_out_barriers, compact_levels};
+   return nir_shader_intrinsics_pass(tcs, lower_tcs, nir_metadata_control_flow,
+                                     &options);
+}
+
+bool
 poly_nir_lower_tcs(nir_shader *tcs, bool can_ignore_shader_out_barriers)
 {
-   return nir_shader_intrinsics_pass(
-      tcs, lower_tcs, nir_metadata_control_flow,
-      (void *)(uintptr_t)can_ignore_shader_out_barriers);
+   return poly_nir_lower_tcs_with_options(tcs, can_ignore_shader_out_barriers,
+                                         false);
 }
 
 static nir_def *

@@ -5,6 +5,31 @@
 #include <stdint.h>
 #include "drm-uapi/asahi_drm.h"
 
+/* Prefixes belong to an occurrence in the ioctl payload, not the recorded
+ * command buffer: simultaneous-use command buffers can appear more than once.
+ * On exact-prior kernels the initial queue ordinals replace legacy header0.
+ * Validate before mutating either output. */
+static inline bool
+hk_drm_serialize_prefix(struct drm_asahi_cmd_header *h, uint64_t prior[2],
+                         uint32_t vdm_before, uint32_t cdm_before,
+                         const uint64_t initial[2], bool exact)
+{
+   if (vdm_before >= DRM_ASAHI_BARRIER_NONE ||
+       cdm_before >= DRM_ASAHI_BARRIER_NONE)
+      return false;
+
+   const uint32_t before[2] = {vdm_before, cdm_before};
+   uint16_t barriers[2];
+   for (unsigned sq = 0; sq < 2; ++sq) {
+      bool historical = exact && before[sq] == 0;
+      barriers[sq] = historical ? DRM_ASAHI_BARRIER_NONE : before[sq];
+      prior[sq] = historical ? initial[sq] : 0;
+   }
+   h->vdm_barrier = barriers[0];
+   h->cdm_barrier = barriers[1];
+   return true;
+}
+
 /* Rebase one command when an API submission is split into ioctl slices.
  * Preserve an intentional header0 (all earlier ioctls), but an exact source
  * N in an earlier slice becomes initial_ordinal+N, not the broader header0.

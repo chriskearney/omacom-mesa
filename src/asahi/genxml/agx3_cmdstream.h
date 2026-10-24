@@ -697,7 +697,8 @@ agx3_cdm_sstt_flush_invalidate_validate(enum agx_chip chip,
 {
    return chip == AGX_CHIP_G17P && packed &&
           available >= AGX3_CDM_SSTT_FLUSH_INVALIDATE_SIZE &&
-          agx3_cmdstream_load_le32(packed) == UINT32_C(0x60024102);
+          agx3_cmdstream_load_le32((const uint8_t *)packed) ==
+             UINT32_C(0x60024102);
 }
 
 /* endVirtualSubstream and the Gen7 first-class substream emitter encode the

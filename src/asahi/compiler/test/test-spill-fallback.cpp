@@ -60,3 +60,68 @@ TEST(SpillFallback, EdgeStoresReportScratchDuringRematerialization)
       ralloc_free(mem);
    }
 }
+
+/* A value live through a G17P loop that the loop never reads stays spilled
+ * across the loop when the loop body needs every register, instead of being
+ * spilled in the body and reloaded on the back edge on every iteration. */
+TEST(SpillLoopHeader, LiveThroughValueStaysSpilledAcrossLoop)
+{
+   void *mem = ralloc_context(NULL);
+   agx_builder *b = agx_test_builder(mem);
+   agx_shader_key key = {};
+   key.dev.encoding = AGX_ISA_ENCODING_AGX3B;
+   key.dev.chip = AGX_CHIP_G17P;
+   key.has_scratch = true;
+   b->shader->key = &key;
+   b->shader->stage = MESA_SHADER_FRAGMENT;
+   b->shader->any_cf = true;
+
+   agx_block *entry = agx_start_block(b->shader);
+   agx_block *header = agx_test_block(b->shader);
+   agx_block *body = agx_test_block(b->shader);
+   agx_block *exit = agx_test_block(b->shader);
+   header->loop_header = true;
+   agx_block_add_successor(entry, header);
+   agx_block_add_successor(header, body);
+   agx_block_add_successor(header, exit);
+   agx_block_add_successor(body, header);
+
+   /* None of the values is rematerializable */
+   b->cursor = agx_after_block(entry);
+   agx_index through =
+      agx_fadd(b, agx_uniform(0, AGX_SIZE_32), agx_uniform(2, AGX_SIZE_32));
+
+   /* Eight 32-bit values fill the sixteen halves left to values */
+   b->cursor = agx_after_block(body);
+   agx_index values[8];
+   for (unsigned i = 0; i < ARRAY_SIZE(values); ++i) {
+      values[i] = agx_fadd(b, agx_uniform(4 + 2 * i, AGX_SIZE_32),
+                           agx_uniform(2, AGX_SIZE_32));
+   }
+   for (agx_index value : values)
+      agx_unit_test(b, value);
+
+   b->cursor = agx_after_block(exit);
+   agx_unit_test(b, through);
+
+   agx_compute_liveness(b->shader);
+   agx_spill(b->shader, 16 + 8, false);
+
+   unsigned in_loop = 0, stores = 0, fills = 0;
+   agx_foreach_block(b->shader, block) {
+      agx_foreach_instr_in_block(block, I) {
+         if (I->op != AGX_OPCODE_MOV ||
+             !(I->dest[0].memory || I->src[0].memory))
+            continue;
+
+         in_loop += block == header || block == body;
+         stores += block == entry && I->dest[0].memory;
+         fills += block == exit && I->src[0].memory;
+      }
+   }
+
+   EXPECT_EQ(in_loop, 0u);
+   EXPECT_EQ(stores, 1u);
+   EXPECT_EQ(fills, 1u);
+   ralloc_free(mem);
+}

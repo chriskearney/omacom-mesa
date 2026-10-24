@@ -11,3 +11,6 @@
 
 VkResult hk_init_wsi(struct hk_physical_device *pdev);
 void hk_finish_wsi(struct hk_physical_device *pdev);
+
+VkResult hk_wsi_allocate_memory(VkDevice device, const VkMemoryAllocateInfo *info,
+   const VkAllocationCallbacks *alloc, VkDeviceMemory *out);

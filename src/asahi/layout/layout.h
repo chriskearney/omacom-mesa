@@ -591,16 +591,6 @@ ail_is_view_compatible(struct ail_layout *layout, enum pipe_format view)
  * We generally use ail enums instead of DRM format modifiers. These helpers
  * bridges the gap.
  */
-/*
- * Aurora-private modifier for AIL_TILING_INTERCHANGE (always compressed): one
- * memory plane, row pitch ail_get_interchange_stride_B(), the compression
- * metadata right after the macroblocks.  Must equal appledrm's definition.
- */
-#ifndef DRM_FORMAT_MOD_APPLE_INTERCHANGE_COMPRESSED
-#define DRM_FORMAT_MOD_APPLE_INTERCHANGE_COMPRESSED                            \
-   fourcc_mod_code(APPLE, 0x415552000003ULL)
-#endif
-
 static inline enum ail_tiling
 ail_drm_modifier_to_tiling(uint64_t modifier)
 {
@@ -610,7 +600,7 @@ ail_drm_modifier_to_tiling(uint64_t modifier)
    case DRM_FORMAT_MOD_APPLE_GPU_TILED:
    case DRM_FORMAT_MOD_APPLE_GPU_TILED_COMPRESSED:
       return AIL_TILING_GPU;
-   case DRM_FORMAT_MOD_APPLE_INTERCHANGE_COMPRESSED:
+   case DRM_FORMAT_MOD_APPLE_INTERCHANGE:
       return AIL_TILING_INTERCHANGE;
    default:
       UNREACHABLE("Unsupported modifier");
@@ -625,7 +615,7 @@ ail_is_drm_modifier_compressed(uint64_t modifier)
    case DRM_FORMAT_MOD_APPLE_GPU_TILED:
       return false;
    case DRM_FORMAT_MOD_APPLE_GPU_TILED_COMPRESSED:
-   case DRM_FORMAT_MOD_APPLE_INTERCHANGE_COMPRESSED:
+   case DRM_FORMAT_MOD_APPLE_INTERCHANGE:
       return true;
    default:
       UNREACHABLE("Unsupported modifier");

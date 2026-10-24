@@ -1941,7 +1941,8 @@ agx_compile_variant(struct agx_device *dev, struct pipe_context *pctx,
         key_->vs.custom_borders) ||
        (so->type == MESA_SHADER_COMPUTE && key_->cs.custom_borders));
    if (custom_borders)
-      NIR_PASS(_, nir, agx_nir_lower_custom_border_g17p);
+      NIR_PASS(_, nir, agx_nir_lower_custom_border_g17p,
+               dev->chip == AGX_CHIP_G17P);
 
    struct agx_unlinked_uvs_layout uvs = {0};
    bool translucent = false;
@@ -1993,6 +1994,12 @@ agx_compile_variant(struct agx_device *dev, struct pipe_context *pctx,
       agx_preprocess_nir(pre_gs);
    } else if (nir->info.stage == MESA_SHADER_FRAGMENT) {
       struct asahi_fs_shader_key *key = &key_->fs;
+
+      const bool native_msaa_fbfetch =
+         agx_native_graphics(dev) && key->nr_samples > 1 &&
+         nir->info.fs.uses_fbfetch_output;
+      if (native_msaa_fbfetch)
+         nir->info.fs.uses_sample_shading = true;
 
       /* Discards must be lowering before lowering MSAA to handle discards */
       NIR_PASS(_, nir, agx_nir_lower_discard_zs_emit);
@@ -2096,6 +2103,11 @@ agx_compile_variant(struct agx_device *dev, struct pipe_context *pctx,
             .base = AGX_ABI_FOUT_SAMPLE_MASK);
 
          NIR_PASS(_, nir, agx_nir_lower_to_per_sample);
+      }
+
+      if (native_msaa_fbfetch) {
+         NIR_PASS(_, nir, nir_opt_constant_folding);
+         NIR_PASS(_, nir, agx_nir_lower_g17p_tile_samples, key->nr_samples);
       }
 
       NIR_PASS(_, nir, agx_nir_lower_sample_mask);
@@ -4000,11 +4012,13 @@ agx_upload_samplers(struct agx_batch *batch, struct agx_compiled_shader *cs,
       const bool query_lod = cs->so && cs->so->info.uses_query_lod;
       unsigned count = nr_samplers;
       if (custom_borders)
-         count = AGX_GALLIUM_G17P_CUSTOM_BORDER_BASE +
+         count = (dev->chip == AGX_CHIP_G17P
+                     ? AGX_GALLIUM_G17P_BORDER_NONCOMPARE_BASE
+                     : AGX_GALLIUM_G17P_CUSTOM_BORDER_BASE) +
                  ctx->stage[stage].sampler_count;
       if (query_lod)
-         count = AGX_GALLIUM_G17P_QUERY_LOD_BASE +
-                 ctx->stage[stage].sampler_count;
+         count = MAX2(count, AGX_GALLIUM_G17P_QUERY_LOD_BASE +
+                             ctx->stage[stage].sampler_count);
       struct agx_ptr T = agx_pool_alloc_aligned(
          &batch->pool, sampler_length * count, 64);
       memset(T.cpu, 0, sampler_length * count);
@@ -4044,13 +4058,25 @@ agx_upload_samplers(struct agx_batch *batch, struct agx_compiled_shader *cs,
 
                uint8_t *clamp = (uint8_t *)T.cpu +
                                 sampler_length * clamp_handle;
-               const struct agx_gallium_native_sampler clamp_state =
+               struct agx_gallium_native_sampler clamp_state =
                   agx_native_sampler_state(
                      state, AGX_BORDER_COLOUR_TRANSPARENT_BLACK);
+               if (dev->chip == AGX_CHIP_G17P)
+                  clamp_state.compare_enable = false;
                if (!agx_gallium_pack_native_sampler(dev->chip, (void *)clamp,
                                                     &clamp_state))
                   agx_native_descriptor_rejected(dev,
                                                  "custom-border sampler");
+
+               if (dev->chip == AGX_CHIP_G17P) {
+                  clamp_state.border_colour = AGX_BORDER_COLOUR_OPAQUE_WHITE;
+                  uint8_t *probe = (uint8_t *)T.cpu + sampler_length *
+                     (AGX_GALLIUM_G17P_BORDER_NONCOMPARE_BASE + i);
+                  if (!agx_gallium_pack_native_sampler(dev->chip, (void *)probe,
+                                                       &clamp_state))
+                     agx_native_descriptor_rejected(dev,
+                                                    "custom-border probe sampler");
+               }
             }
          } else {
             const struct agx_gallium_native_sampler null_state = {
@@ -4156,9 +4182,13 @@ agx_update_descriptors(struct agx_batch *batch, struct agx_compiled_shader *cs)
       agx_upload_samplers(batch, cs, stage);
 
    struct agx_stage_uniforms *unif = &batch->stage_uniforms[stage];
+   const size_t size = agx_device(ctx->base.screen)->chip == AGX_CHIP_G17P
+                          ? sizeof(*unif)
+                          : offsetof(struct agx_stage_uniforms,
+                                     custom_border_compare_func);
 
    batch->uniforms.tables[AGX_SYSVAL_STAGE(stage)] =
-      agx_pool_upload_aligned(&batch->pool, unif, sizeof(*unif), 16);
+      agx_pool_upload_aligned(&batch->pool, unif, size, 16);
 }
 
 struct agx_g17p_graphics_template {
@@ -4680,7 +4710,8 @@ agx_g17p_append_compute(struct agx_batch *batch,
       if (!shader.cpu || !shader_bo)
          return agx_g17p_compute_failed("shader allocation");
 
-      agx3_build_container_lead(shader.cpu, dev->chip);
+      agx3_build_container_lead(shader.cpu, dev->chip,
+                                dev->params.num_cores_per_cluster);
       const uint8_t *bytes = binary;
       if (!agx3_build_code_block(
              (uint8_t *)shader.cpu + AGX3_CONTAINER_LEAD_SIZE, block_size,
@@ -6247,6 +6278,8 @@ agx_g17p_emit_bind_state(struct agx_batch *batch, uint8_t *out,
    const struct agx_ppp_hal200_fragment_control_fields control_fields = {
       .linked_control = linked_fragment_control,
       .shader_tri_merge_disable =
+         (dev->chip == AGX_CHIP_G17P &&
+          ctx->fs->b.info.needs_quad_derivatives) ||
          (batch->tilebuffer_layout.nr_samples > 1 &&
           ctx->fs->epilog_key.write_z) ||
          /* The linker's own merge-disable bit. */
@@ -6467,7 +6500,10 @@ agx_encode_state(struct agx_batch *batch, uint8_t *out,
       ppp_updates++;
    }
 
-   if (agx_native_graphics(dev) || IS_DIRTY(VS) || varyings_dirty) {
+   /* HAL200 retains the vertex state update independently of its bind tail
+    * and per-draw selector, just as the older VDM retains VS state. The old
+    * immutable uniform upload remains valid until vertex inputs change. */
+   if (IS_DIRTY(VS) || varyings_dirty) {
       struct agx_vdm_state_vertex_shader_word_0_packed counts;
       agx_pack(&counts, VDM_STATE_VERTEX_SHADER_WORD_0, cfg) {
          cfg.uniform_register_count = vs->b.info.push_count;
@@ -6535,6 +6571,9 @@ agx_encode_state(struct agx_batch *batch, uint8_t *out,
          memset(out, 0, 4);
          out += 4;
       }
+
+      if (unlikely(dev->debug & AGX_DBG_PERF))
+         ctx->perf.vs_emits++;
    }
 
    if (agx_native_graphics(dev))
@@ -8356,7 +8395,7 @@ agx_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
             &batch->pool, ctx->poly_stipple, sizeof(ctx->poly_stipple), 4);
       }
 
-      agx_upload_uniforms(batch);
+      agx_upload_uniforms(batch, ctx->gs ? ctx->gs->gs_copy : ctx->vs);
    }
 
    struct pipe_draw_info info_gs;
@@ -8478,12 +8517,14 @@ agx_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
 
    uint32_t draw_state_offset = 0;
    /* Native HAL200 indirect records always carry a draw-state selector.
-    * Republish state if the API issues an otherwise state-clean indirect
-    * draw; retaining a stale compact selector is not safe across batches. */
-   if (agx_native_graphics(dev) && indirect && !ctx->dirty)
-      ctx->dirty |= AGX_DIRTY_PRIM;
+    * A state-clean indirect draw needs only its bind tail and selector;
+    * dirtying PRIM would also relink varyings and rebuild the VS program. */
    uint8_t *out =
-      agx_encode_state(batch, batch->vdm.current, &draw_state_offset);
+      agx_native_graphics(dev) && indirect && !ctx->dirty
+         ? agx_g17p_emit_bind_state(batch, batch->vdm.current,
+                                    ctx->gs ? ctx->gs->gs_copy : ctx->vs,
+                                    &draw_state_offset)
+         : agx_encode_state(batch, batch->vdm.current, &draw_state_offset);
    if (!out)
       return;
 
@@ -8524,7 +8565,10 @@ agx_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
                           dev->chip, out, &draw, primitive,
                           info->restart_index, draw_state_offset);
    } else {
-      out = (void *)agx_vdm_draw((uint32_t *)out, dev->chip, draw, primitive);
+      out = (void *)agx_vdm_draw(
+         (uint32_t *)out, dev->chip, draw, primitive,
+         draw.restart ? info->restart_index
+                      : agx_primitive_restart_index(draw.index_size));
    }
 
    /* Barrier transform feedback writes on themselves for consistency.
@@ -8543,6 +8587,9 @@ agx_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
    assert(batch == agx_get_batch(ctx) && "batch should not change under us");
 
    batch->draws++;
+
+   if (unlikely(dev->debug & AGX_DBG_PERF))
+      ctx->perf.draws++;
 
    /* The scissor/zbias arrays are indexed with 16-bit integers, imposigin a
     * maximum of UINT16_MAX descriptors. Flush if the next draw would overflow
@@ -8620,7 +8667,7 @@ agx_launch(struct agx_batch *batch, struct agx_grid grid,
    }
 
    agx_update_descriptors(batch, cs);
-   agx_upload_uniforms(batch);
+   agx_upload_uniforms(batch, NULL);
 
    struct agx_device *dev = agx_device(ctx->base.screen);
    if (agx_native_graphics(dev)) {

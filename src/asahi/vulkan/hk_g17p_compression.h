@@ -4,8 +4,10 @@
  */
 #pragma once
 #include "asahi/lib/agx_chip.h"
+#include "hk_g17p_meta_copy_core.h"
 #include "vulkan/vulkan_core.h"
 #include <stdbool.h>
+#include <stddef.h>
 #include <string.h>
 
 /* G17P lossless compression policy.
@@ -25,16 +27,19 @@
  *    texels are excluded so that a single-sample tilebuffer never spills a
  *    compressed target (spilling needs libagx_decompress, which has no G17P
  *    binary): 8 targets x 8 B fit in the 120 B/sample G17P budget.
- *  - Depth: D16_UNORM, D32_SFLOAT and the D32_SFLOAT depth plane (plane 0)
- *    of D32_SFLOAT_S8_UINT, one level, one layer, one sample. Stencil
- *    planes stay plain. Zink stores GL Z24S8 as D32S8, so its depth plane
- *    is every GL depth buffer's ZLS traffic; buffer uploads into it take
- *    the graphics copy (R32_UINT PBE) and the stencil plane keeps the raw
- *    upload kernel.
+ *  - Depth: D16_UNORM, D32_SFLOAT and both planes of D32_SFLOAT_S8_UINT,
+ *    one level, one layer, one sample. The ZLS unit compresses the S8
+ *    stencil plane with the same metadata layout as depth (stencil
+ *    load/store compression bits 4/8), it is read through its R8_UINT
+ *    alias, and its clears are metadata fast clears. Zink stores GL Z24S8
+ *    as D32S8, so these planes carry every GL depth/stencil buffer's ZLS
+ *    traffic; buffer uploads into them take the graphics copy (R32_UINT
+ *    and R8_UINT PBEs).
  *
  * Images that may be shared with another process or device (external
- * memory, WSI, DRM modifiers) stay plain: the compositor and display paths
- * have their own compressed-format contracts.
+ * memory, WSI, DRM modifiers) stay plain under this private policy. Colour
+ * images are shared compressed only through the GPU_TILED_COMPRESSED
+ * modifier contract, see hk_g17p_shared_compression_eligible().
  *
  * This is the only G17P policy: every eligible image is compressed, with no
  * runtime opt-out.
@@ -126,24 +131,29 @@ static inline bool
 hk_g17p_compression_eligible(enum agx_chip chip, unsigned plane,
                              const VkImageCreateInfo *info)
 {
-   if (chip != AGX_CHIP_G17P || plane != 0 || !info)
+   if (chip != AGX_CHIP_G17P || !info ||
+       (plane != 0 && !(plane == 1 &&
+                        info->format == VK_FORMAT_D32_SFLOAT_S8_UINT)))
       return false;
 
    /* Shared images keep their plain layout contract. Read each header by
     * copy: the chain's structures have other types, and Mesa builds with
     * strict aliasing (gcc -O2 dropped the stores of a stack chain). */
    for (const void *next = info->pNext; next;) {
-      VkBaseInStructure ext;
-      memcpy(&ext, next, sizeof(ext));
-      if (ext.sType == VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO) {
+      VkStructureType type;
+      const void *following;
+      memcpy(&type, next, sizeof(type));
+      memcpy(&following, (const char *)next + offsetof(VkBaseInStructure, pNext),
+             sizeof(following));
+      if (type == VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO) {
          VkExternalMemoryImageCreateInfo external;
          memcpy(&external, next, sizeof(external));
          if (external.handleTypes)
             return false;
       }
-      if (ext.sType == HK_G17P_WSI_IMAGE_CREATE_INFO_MESA)
+      if (type == HK_G17P_WSI_IMAGE_CREATE_INFO_MESA)
          return false;
-      next = ext.pNext;
+      next = following;
    }
 
    VkImageCreateFlags allowed_flags =
@@ -180,20 +190,87 @@ hk_g17p_compression_eligible(enum agx_chip chip, unsigned plane,
       return false;
 
    if (hk_g17p_compression_color_format(info->format)) {
-      /* hk_CmdBlitImage2 generates RGBA8/BGRA8 UNORM mip chains with the raw
-       * AIL compute kernels (hk_g17p_compute_blit), which cannot write
-       * compression metadata; a compressed destination falls back to one
-       * render job per level. An image the application never renders to is
-       * written only by uploads and those blits, so keep it on the compute
-       * path. Images that are also attachments stay compressed. */
+      /* An RGBA8/BGRA8 UNORM mip chain the application never renders to is
+       * written only by uploads and mip blits. A plain image takes each
+       * upload as one raw compute copy and each mip level as a raw compute
+       * dispatch (hk_g17p_compute_blit). A compressed one takes each upload
+       * as a render pass, since G17P has no compute store that writes
+       * compressed tiles, and its mips through hk_g17p_compressed_blit.
+       * For small images the render passes dominate: 200 128x128 textures
+       * uploaded and mipmapped in one command buffer took 2.6 times as
+       * long compressed. From the size where a render pass also beats
+       * compute for a mip level (HK_G17P_MIP_PBE_MIN_TEXELS), compression
+       * wins: on the A18 Pro a 2048x2048 texture uploads in 0.55-0.64 of
+       * the time, generates its mips in 0.40-0.57 and samples in
+       * 0.69-0.84. Keep only the small ones plain. Images that are also
+       * attachments are compressed at any size. */
       if ((info->format == VK_FORMAT_R8G8B8A8_UNORM ||
            info->format == VK_FORMAT_B8G8R8A8_UNORM) &&
           info->mipLevels > 1 &&
-          !(info->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))
+          !(info->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) &&
+          !hk_g17p_mip_level_through_pbe(info->extent.width,
+                                         info->extent.height))
          return false;
       return true;
    }
 
    return hk_g17p_compression_depth_format(info->format) &&
           info->mipLevels == 1;
+}
+
+/* G17P colour images shared through DRM_FORMAT_MOD_APPLE_GPU_TILED_COMPRESSED.
+ *
+ * The modifier is the sharing contract. With one level, one layer and one
+ * sample, the G17P (legacy AIL policy) compressed allocation is a function of
+ * the format's block size and the extent alone: GPU tiling, the image, then
+ * its metadata, in one memory plane. Exporter and importer therefore derive
+ * the same layout, and import already follows the modifier through
+ * hk_map_compression(). The packets that read and write it are the ones the
+ * private policy above uses for single-level colour images: the compressed
+ * 2D PBE (end-of-tile stores, meta copies and uploads) and the compressed
+ * texture descriptor, with clears through the metadata fast clear.
+ *
+ * The shape is the private colour policy's restricted to one level, without
+ * its exclusion of external memory and WSI images and without a
+ * colour-attachment requirement: hk_image_init() makes every transfer
+ * destination renderable, so a swapchain image written only by blits or
+ * copies also takes the compressed PBE. WSI creates every swapchain image
+ * with ALIAS; aliasing images of identical parameters derive the same
+ * layout. Storage and host-transfer usages stay excluded. Feedback-loop
+ * usage is accepted on import only (zink adds it to every imported
+ * render-target dma-buf) and never chosen at allocation (hk_can_compress()
+ * refuses it). hk_image.c adds the PBE store-class check.
+ */
+static inline bool
+hk_g17p_shared_compression_shape(enum agx_chip chip, VkFormat format,
+                                 VkImageType type, VkImageCreateFlags flags,
+                                 VkImageUsageFlags usage)
+{
+   const VkImageCreateFlags allowed_flags =
+      VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT | VK_IMAGE_CREATE_EXTENDED_USAGE_BIT |
+      VK_IMAGE_CREATE_ALIAS_BIT;
+   const VkImageUsageFlags allowed_usage =
+      VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+      VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+      VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
+      VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
+      VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
+
+   return chip == AGX_CHIP_G17P && type == VK_IMAGE_TYPE_2D &&
+          !(flags & ~allowed_flags) && !(usage & ~allowed_usage) &&
+          hk_g17p_compression_color_format(format);
+}
+
+static inline bool
+hk_g17p_shared_compression_eligible(enum agx_chip chip, unsigned plane,
+                                    const VkImageCreateInfo *info)
+{
+   return plane == 0 && info &&
+          info->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT &&
+          hk_g17p_shared_compression_shape(chip, info->format,
+                                           info->imageType, info->flags,
+                                           info->usage) &&
+          info->extent.depth == 1 && info->mipLevels == 1 &&
+          info->arrayLayers == 1 && info->samples == VK_SAMPLE_COUNT_1_BIT &&
+          info->extent.width >= 16 && info->extent.height >= 16;
 }

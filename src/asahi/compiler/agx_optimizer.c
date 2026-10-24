@@ -1147,7 +1147,7 @@ agx_optimizer_select_guard(agx_context *ctx, agx_instr **defs, agx_instr *I)
                for (unsigned c = 0; c < d.count; ++c) {
                   for (unsigned delta = 0; delta < 2; ++delta) {
                      const uint64_t constant = d.cuts[c] - delta;
-                     if (constant >= 0x10000)
+                     if (constant >= 0x100)
                         continue;
                      agx_index sources[2] = {variable, agx_immediate(constant)};
                      agx_instr comparison = {

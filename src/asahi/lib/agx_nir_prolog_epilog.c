@@ -655,8 +655,8 @@ convert_scaled_output(nir_builder *b, nir_intrinsic_instr *intr, void *data)
    return true;
 }
 
-void
-agx_nir_fs_epilog(nir_builder *b, const void *key_)
+static void
+agx_nir_fs_epilog_native(nir_builder *b, const void *key_)
 {
    const struct agx_fs_epilog_key *key = key_;
    b->shader->info.stage = MESA_SHADER_FRAGMENT;
@@ -1046,6 +1046,16 @@ agx_nir_fs_epilog(nir_builder *b, const void *key_)
    b->shader->info.io_lowered = true;
    b->shader->info.fs.uses_fbfetch_output |= force_translucent;
    b->shader->info.fs.uses_sample_shading = key->link.sample_shading;
+}
+
+void
+agx_nir_fs_epilog(nir_builder *b, const void *key_)
+{
+   const struct agx_fs_epilog_key *key = key_;
+   if (!key->g17p_tile_formats)
+      agx_nir_fs_epilog_agx2(b, key);
+   else
+      agx_nir_fs_epilog_native(b, key);
 }
 
 /*
@@ -1770,7 +1780,7 @@ agx_nir_fs_epilog_g17p(nir_builder *b, const void *key_)
       struct agx_fs_epilog_key pixel = *key;
       pixel.link.sample_shading = false;
       pixel.defer_monolithic_msaa = true;
-      agx_nir_fs_epilog(b, &pixel);
+      agx_nir_fs_epilog_native(b, &pixel);
 
       struct agx_g17p_colour_layout layout;
       agx_g17p_colour_layout_init(&layout, key->link.loc_written,
@@ -1796,7 +1806,7 @@ agx_nir_fs_epilog_g17p(nir_builder *b, const void *key_)
       struct agx_fs_epilog_key pixel = *key;
       pixel.defer_monolithic_msaa = key->blend.alpha_to_coverage &&
                                     key->nr_samples > 1;
-      agx_nir_fs_epilog(b, &pixel);
+      agx_nir_fs_epilog_native(b, &pixel);
    }
 
    NIR_PASS(_, b->shader, agx_nir_lower_g17p_tile_samples, key->nr_samples);

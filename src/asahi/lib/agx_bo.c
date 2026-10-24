@@ -331,7 +331,7 @@ agx_bo_cache_put_locked(struct agx_device *dev, struct agx_bo *bo)
 static bool
 agx_bo_cache_put(struct agx_device *dev, struct agx_bo *bo)
 {
-   if (bo->flags & AGX_BO_SHARED) {
+   if (bo->flags & (AGX_BO_SHARED | AGX_BO_NO_CACHE)) {
       return false;
    } else {
       simple_mtx_lock(&dev->bo_cache.lock);

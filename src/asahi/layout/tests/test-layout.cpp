@@ -182,7 +182,7 @@ TEST(Linear, Packed422Rows)
 }
 
 /*
- * G17P Interchange (DRM_FORMAT_MOD_APPLE_INTERCHANGE_COMPRESSED).  The row
+ * G17P Interchange (DRM_FORMAT_MOD_APPLE_INTERCHANGE).  The row
  * pitch, data size and header offset are the contract with appledrm, which
  * requires pitch == ceil(w/16)*1024, header offset == data size and a buffer
  * of at least data + (8 << (log2ceil(tiles_x) + log2ceil(tiles_y))) bytes.
@@ -244,8 +244,10 @@ TEST(Interchange, OddSizes)
 
 TEST(Interchange, Modifier)
 {
-   EXPECT_EQ(DRM_FORMAT_MOD_APPLE_INTERCHANGE_COMPRESSED, 0x0c00415552000003ull);
-   EXPECT_EQ(ail_drm_modifier_to_tiling(DRM_FORMAT_MOD_APPLE_INTERCHANGE_COMPRESSED),
+   EXPECT_EQ(DRM_FORMAT_MOD_APPLE_GPU_TILED, 0x0c00000000000001ull);
+   EXPECT_EQ(DRM_FORMAT_MOD_APPLE_GPU_TILED_COMPRESSED, 0x0c00000000000002ull);
+   EXPECT_EQ(DRM_FORMAT_MOD_APPLE_INTERCHANGE, 0x0c00000000000003ull);
+   EXPECT_EQ(ail_drm_modifier_to_tiling(DRM_FORMAT_MOD_APPLE_INTERCHANGE),
              AIL_TILING_INTERCHANGE);
-   EXPECT_TRUE(ail_is_drm_modifier_compressed(DRM_FORMAT_MOD_APPLE_INTERCHANGE_COMPRESSED));
+   EXPECT_TRUE(ail_is_drm_modifier_compressed(DRM_FORMAT_MOD_APPLE_INTERCHANGE));
 }

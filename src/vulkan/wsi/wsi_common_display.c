@@ -1693,6 +1693,7 @@ wsi_get_modifiers_for_format(const struct wsi_display * const wsi,
     * are non-zero IDs.
     */
    assert(plane_id != 0);
+   *modifiers_count = 0;
 
    /* Get the properties of the plane */
    drmModeObjectProperties *props =
@@ -1709,6 +1710,9 @@ wsi_get_modifiers_for_format(const struct wsi_display * const wsi,
       const drmModePropertyPtr prop =
          drmModeGetProperty(wsi->fd, props->props[i]);
 
+      if (!prop)
+         continue;
+
       if (!strcmp(prop->name, "IN_FORMATS")) {
          blob_id = props->prop_values[i];
          drmModeFreeProperty(prop);
@@ -1721,13 +1725,17 @@ wsi_get_modifiers_for_format(const struct wsi_display * const wsi,
    /* Property not found, which means an old kernel, so definitely no modifiers
     * support.
     */
-   if (blob_id == 0)
+   if (blob_id == 0) {
+      drmModeFreeObjectProperties(props);
       return NULL;
+   }
 
    /* Grab the IN_FORMATS blob */
    drmModePropertyBlobRes *blob = drmModeGetPropertyBlob(wsi->fd, blob_id);
-   if (!blob)
+   if (!blob) {
+      drmModeFreeObjectProperties(props);
       return NULL;
+   }
 
    /* Get the formats and modifiers out of the blob */
    struct drm_format_modifier_blob *fmt_mod_blob = blob->data;
@@ -1738,12 +1746,22 @@ wsi_get_modifiers_for_format(const struct wsi_display * const wsi,
                                      fmt_mod_blob->modifiers_offset);
 
    /* Find the format we care about in the list */
-   size_t format_index = 0;
+   size_t format_index = fmt_mod_blob->count_formats;
    for (size_t i = 0; i < fmt_mod_blob->count_formats; i++) {
       if (blob_formats[i] == drm_format) {
          format_index = i;
          break;
       }
+   }
+
+   /* Never use another format's modifiers for scanout.  In particular, a
+    * plane must explicitly advertise Interchange for this format before it
+    * can be selected; missing IN_FORMATS or a missing format is not support.
+    */
+   if (format_index == fmt_mod_blob->count_formats) {
+      drmModeFreePropertyBlob(blob);
+      drmModeFreeObjectProperties(props);
+      return NULL;
    }
 
    /* Get the list of modifiers supported by that format */

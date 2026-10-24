@@ -73,7 +73,12 @@ struct hk_shader_info {
          uint32_t attribs_read;
          BITSET_DECLARE(attrib_components_read, AGX_MAX_ATTRIBS * 4);
          bool use_prolog;
-         uint8_t _pad[7];
+         /* G17P: the shader places the three vertices of a draw that starts
+          * at vertex 0 and instance 0 by the vertex index alone, on a
+          * triangle covering the whole clip-space square in front of the
+          * viewer (hk_vs_covers_clip_square()). */
+         bool covers_clip_square;
+         uint8_t _pad[6];
       } vs;
 
       struct {
@@ -93,7 +98,14 @@ struct hk_shader_info {
           * [0, 1] (computed only with the flag set). */
          bool g17p_colour_unit_range;
 
-         uint8_t _pad[5];
+         /* AGX3: the main part's depth/stencil test selector was folded to
+          * "this part tests" (hk_fs_key::static_tests); its epilog must not
+          * discard. */
+         bool static_tests;
+         /* G17P: the shader may leave pixels unwritten: it discards, demotes
+          * or writes the sample mask. */
+         bool may_kill;
+         uint8_t _pad[3];
       } fs;
 
       struct {
@@ -129,6 +141,16 @@ struct hk_shader_info {
     * Serialized with shader binary version 26 or newer.
     */
    bool g17p_default_layer_zero;
+
+   /* External API memory writes (stores, atomics, transform feedback). */
+   bool writes_external_memory;
+
+   /* The shader samples, loads, stores or queries texel contents of an image
+    * (any texture instruction or image access, bindless included). On G17P
+    * a render whose pre-rasterization shaders read no image does not order
+    * its vertex half after image-only barriers (hk_sync.h, HK_SYNC_GFX_IMG).
+    */
+   bool reads_images;
 
    /* The bounded G17P graphics/compute path lowers one Gen9 combined
     * image/sampler to native texture/sampler state 0. Command recording joins
@@ -181,6 +203,9 @@ struct hk_shader {
    struct agx_shader_part b;
 
    struct hk_shader_info info;
+   /* G17P-only root prefix; serialized separately in its version-35 payload.
+    * Keep hk_shader_info and version-34 payloads unchanged on other chips. */
+   uint32_t root_descriptor_size;
    struct agx_fragment_face_2_packed frag_face;
    struct agx_counts_packed counts;
 
@@ -194,6 +219,8 @@ struct hk_shader {
 
    const void *data_ptr;
    uint32_t data_size;
+   /* Process-unique identity of the immutable payload, shared by cache clones. */
+   uint64_t constant_data_id;
 
    /* BO for any uploaded shader part */
    /* Code heap chunk holding the binary, at bo_offset. */
@@ -677,3 +704,6 @@ struct spirv_to_nir_options
 hk_get_spirv_options(struct vk_physical_device *vk_pdev,
                      UNUSED mesa_shader_stage stage,
                      const struct vk_pipeline_robustness_state *rs);
+
+/* True when a native TES ray query runs in Poly's compute variant. */
+bool hk_tes_ray_queries_in_compute(const struct hk_device *dev);

@@ -877,10 +877,115 @@ min_algorithm(struct spill_ctx *ctx)
 }
 
 /*
- * TODO: Implement section 4.2 of the paper.
+ * Section 4.2 of the paper. A value live into a loop that nothing in the loop
+ * reads only needs a register again after the loop. Keeping it in one at the
+ * header pays off only if the loop never needs that register: once the body
+ * runs out of registers it spills the value, and the back edge then has to
+ * reload it into the register the header expects, so the value is spilled and
+ * reloaded on every iteration instead of once around the loop.
  *
- * For now, we implement the simpler heuristic in Hack's thesis: sort
- * the live-in set (+ destinations of phis) by next-use distance.
+ * Structured control flow lays a loop out contiguously from its header to its
+ * last back edge. Mark the values read in the loop and return the registers
+ * the loop's own peak pressure leaves for the others, which are live through
+ * the loop. Rematerializable values are evicted first, so they count only
+ * where an instruction reads or writes them.
+ */
+static unsigned
+loop_room_for_live_through(struct spill_ctx *ctx, BITSET_WORD *used)
+{
+   agx_block *header = ctx->block;
+   unsigned last = header->index;
+   agx_foreach_predecessor(header, pred) {
+      last = MAX2(last, (*pred)->index);
+   }
+
+   agx_foreach_block_from(ctx->shader, header, block) {
+      if (block->index > last)
+         break;
+
+      agx_foreach_instr_in_block(block, I) {
+         agx_foreach_ssa_src(I, s) {
+            /* Header phis read their entry sources before the loop */
+            if (I->op == AGX_OPCODE_PHI && block == header) {
+               agx_block **pred = util_dynarray_element(
+                  &header->predecessors, agx_block *, s);
+               if ((*pred)->index < header->index)
+                  continue;
+            }
+
+            if (I->src[s].value < ctx->n)
+               BITSET_SET(used, I->src[s].value);
+         }
+      }
+   }
+
+   BITSET_WORD *through = BITSET_CALLOC(ctx->n);
+   U_SPARSE_BITSET_FOREACH_SET(&header->live_in, v) {
+      if (v < ctx->n && !BITSET_TEST(used, v))
+         BITSET_SET(through, v);
+   }
+
+   BITSET_WORD *live = BITSET_CALLOC(ctx->n);
+   unsigned peak = 0;
+
+   agx_foreach_block_from(ctx->shader, header, block) {
+      if (block->index > last)
+         break;
+
+      memset(live, 0, BITSET_BYTES(ctx->n));
+      unsigned count = 0;
+      U_SPARSE_BITSET_FOREACH_SET(&block->live_out, v) {
+         if (v < ctx->n && !BITSET_TEST(through, v) && !ctx->remat[v]) {
+            BITSET_SET(live, v);
+            count += node_size(ctx, v);
+         }
+      }
+
+      agx_foreach_instr_in_block_rev(block, I) {
+         unsigned here = count;
+         agx_foreach_ssa_dest(I, d) {
+            const unsigned v = I->dest[d].value;
+            if (v >= ctx->n)
+               continue;
+
+            if (BITSET_TEST(live, v)) {
+               BITSET_CLEAR(live, v);
+               count -= node_size(ctx, v);
+            } else {
+               here += node_size(ctx, v);
+            }
+         }
+
+         if (I->op != AGX_OPCODE_PHI) {
+            agx_foreach_ssa_src(I, s) {
+               const unsigned v = I->src[s].value;
+               if (v >= ctx->n || BITSET_TEST(live, v) ||
+                   BITSET_TEST(through, v))
+                  continue;
+
+               here += node_size(ctx, v);
+               if (!ctx->remat[v]) {
+                  BITSET_SET(live, v);
+                  count += node_size(ctx, v);
+               }
+            }
+         }
+
+         peak = MAX2(peak, here);
+      }
+   }
+
+   free(live);
+   free(through);
+   return ctx->k > peak ? ctx->k - peak : 0;
+}
+
+/*
+ * Hack's thesis sorts the live-in set (+ destinations of phis) by next-use
+ * distance and takes as much as fits. On G17P, values read in the loop are
+ * taken first that way, and values live through the loop then fill only the
+ * room the loop leaves them (section 4.2 of the paper). A remat-only pass must
+ * not spill, so it keeps the thesis heuristic.
  */
 static ATTRIBUTE_NOINLINE void
 compute_w_entry_loop_header(struct spill_ctx *ctx)
@@ -902,18 +1007,39 @@ compute_w_entry_loop_header(struct spill_ctx *ctx)
    /* Sort by next-use distance */
    util_qsort_r(candidates, j, sizeof(struct candidate), cmp_dist, ctx);
 
-   /* Take as much as we can */
-   for (unsigned i = 0; i < j; ++i) {
-      unsigned node = candidates[i].node;
-      unsigned comps = node_size(ctx, node);
+   BITSET_WORD *used = NULL;
+   unsigned room = 0;
+   if (ctx->shader->key->dev.chip == AGX_CHIP_G17P && !ctx->remat_only) {
+      used = BITSET_CALLOC(ctx->n);
+      room = loop_room_for_live_through(ctx, used);
+   }
 
-      if ((ctx->nW + comps) <= ctx->k) {
-         insert_W(ctx, node);
-         sb->W_entry[sb->nW_entry++] = node;
+   /* Take as much as we can, values read in the loop first */
+   unsigned through = 0;
+   for (unsigned pass = 0; pass < (used ? 2 : 1); ++pass) {
+      for (unsigned i = 0; i < j; ++i) {
+         unsigned node = candidates[i].node;
+         unsigned comps = node_size(ctx, node);
+
+         if (used && BITSET_TEST(used, node) != (pass == 0))
+            continue;
+
+         if (used && pass == 1) {
+            if (through + comps > room)
+               continue;
+
+            through += comps;
+         }
+
+         if ((ctx->nW + comps) <= ctx->k) {
+            insert_W(ctx, node);
+            sb->W_entry[sb->nW_entry++] = node;
+         }
       }
    }
 
    assert(ctx->nW <= ctx->k);
+   free(used);
    free(candidates);
 }
 

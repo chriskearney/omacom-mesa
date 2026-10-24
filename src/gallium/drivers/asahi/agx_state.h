@@ -30,6 +30,7 @@
 #include "util/disk_cache.h"
 #include "util/hash_table.h"
 #include "util/rwlock.h"
+#include "util/set.h"
 #include "util/u_range.h"
 #include "agx_bg_eot.h"
 #include "agx_helpers.h"
@@ -43,6 +44,11 @@
 #else
 #define agx_msg(...) fprintf(stderr, __VA_ARGS__)
 #endif
+
+/* The CPU-wait fallbacks for failed fence imports and merges block without a
+ * timeout: log each one so a stalled process shows where it is waiting.
+ */
+#define agx_fallback_wait(fd, why)                                                (agx_msg("CPU wait on a fence: %s\n", why), sync_wait(fd, -1))
 
 #define AGX_NUM_TEXTURE_STATE_REGS 16
 
@@ -205,7 +211,14 @@ struct PACKED agx_stage_uniforms {
 
    /* LOD bias as float16 */
    uint16_t lod_bias[PIPE_MAX_SAMPLERS];
+
+   /* G17P shadow-gather border comparison, in pipe_compare_func order. Kept
+    * after the existing fields so classic shader bindings do not move. Each
+    * halfword has padding for Ioto's dword upload, including sampler 31. */
+   uint32_t custom_border_compare_func[PIPE_MAX_SAMPLERS];
 };
+
+#define AGX_BORDER_COMPARE_CLAMP_REF BITFIELD_BIT(8)
 
 /* In the architecture, there are 512 uniform registers, each 16-bits. In a
  * theoretical worst case, we could push to all of them. We use a worst-case
@@ -434,6 +447,9 @@ struct agx_batch {
    struct pipe_framebuffer_state key;
    uint64_t seqnum;
    uint32_t syncobj;
+   /* Failed waits retain these fences and all batch resources until exit. */
+   uint32_t failed_syncobjs[2];
+   bool submit_quarantined;
    uint32_t draws;
 
    /* Executable storage is owned by this batch's pipeline pool. */
@@ -470,6 +486,10 @@ struct agx_batch {
    struct agx_varyings_vs linked_varyings;
 
    struct agx_draw_uniforms uniforms;
+
+   /* CPU snapshot: never read back the write-combined GPU root upload. */
+   struct agx_draw_uniforms vs_root;
+   bool vs_root_valid;
    struct agx_stage_uniforms stage_uniforms[MESA_SHADER_STAGES];
 
    /* Heap descriptor if dynamic allocation is required */
@@ -483,12 +503,12 @@ struct agx_batch {
 
    struct agx_sampler_heap sampler_heap;
 
-   /* Resource list requirements, represented as a bit set indexed by BO
-    * handles (GEM handles on Linux, or IOGPU's equivalent on macOS)
+   /* Pointer membership for amortized O(1) insertion, plus a dense BO list
+    * for submission and retirement. Neither allocation depends on GEM handles.
     */
    struct {
-      BITSET_WORD *set;
-      unsigned bit_count;
+      struct set *set;
+      struct util_dynarray list; /* struct agx_bo * */
    } bo_list;
 
    /* If true, this batch contains a shader with a potentially incoherent write
@@ -669,6 +689,14 @@ struct agx_context {
    } linked;
    uint32_t dirty;
 
+   /* ASAHI_MESA_DEBUG=perf, accumulated until PIPE_FLUSH_END_OF_FRAME. */
+   struct {
+      uint64_t frame;
+      uint64_t draws;
+      uint64_t vs_emits;
+      uint64_t query_waits;
+   } perf;
+
    /* Heap for dynamic memory allocation for geometry/tessellation shaders */
    struct pipe_resource *heap;
 
@@ -768,6 +796,12 @@ struct agx_context {
    struct agx_bg_eot_cache bg_eot;
 
    bool any_faults;
+   bool submit_quarantined;
+
+   /* Work since the previous Gallium flush, including hazard-driven submits. */
+   struct {
+      uint64_t batches, mixed_batches, submits, failures;
+   } submit_perf;
    struct pipe_device_reset_callback reset;
 
    uint32_t syncobj;
@@ -957,6 +991,8 @@ struct agx_screen {
    struct agx_device dev;
    struct disk_cache *disk_cache;
 
+   /* Atomic: a context with unknown completion keeps the device alive. */
+   bool submit_quarantined;
    struct agx_bo *rodata;
 
    /* Shared timeline syncobj and value to serialize flushes across contexts */
@@ -1088,7 +1124,8 @@ agx_transfer(struct pipe_transfer *p)
 }
 
 void agx_upload_vbos(struct agx_batch *batch);
-void agx_upload_uniforms(struct agx_batch *batch);
+void agx_upload_uniforms(struct agx_batch *batch,
+                         struct agx_compiled_shader *hw_vs);
 
 void agx_set_sampler_uniforms(struct agx_batch *batch, mesa_shader_stage stage);
 
@@ -1111,6 +1148,7 @@ struct agx_lower_bindings_options {
    bool *uses_bindless_samplers;
    bool g17p_plain_txf_crawl;
    bool g17p_native_sampler_handles;
+   bool g17p_shadow_gather;
    bool g17p_bindless_storage;
    unsigned image_records;
    unsigned bindful_sampler_count;
@@ -1118,7 +1156,7 @@ struct agx_lower_bindings_options {
 
 bool agx_nir_lower_bindings(nir_shader *shader,
                        struct agx_lower_bindings_options *options);
-bool agx_nir_lower_custom_border_g17p(nir_shader *shader);
+bool agx_nir_lower_custom_border_g17p(nir_shader *shader, bool shadow_gather);
 bool agx_nir_rebind_g17p_texture_crawls(nir_shader *shader);
 bool agx_nir_lower_g17p_storage_records(nir_shader *shader,
                                         unsigned record_size_B);
@@ -1126,43 +1164,24 @@ bool agx_nir_lower_g17p_storage_records(nir_shader *shader,
 bool agx_batch_is_active(struct agx_batch *batch);
 bool agx_batch_is_submitted(struct agx_batch *batch);
 
-/* Add a BO to a batch. This needs to be amortized O(1) since it's called in
- * hot paths. To achieve this we model BO lists by bit sets */
-
+/* BO pointers remain stable while the batch holds its reference. */
 static bool
 agx_batch_uses_bo(struct agx_batch *batch, struct agx_bo *bo)
 {
-   if (bo->handle < batch->bo_list.bit_count)
-      return BITSET_TEST(batch->bo_list.set, bo->handle);
-   else
-      return false;
+   return _mesa_set_search(batch->bo_list.set, bo) != NULL;
 }
 
 static inline void
 agx_batch_add_bo_internal(struct agx_batch *batch, struct agx_bo *bo)
 {
-   /* Double the size of the BO list if we run out, this is amortized O(1) */
-   if (unlikely(bo->handle >= batch->bo_list.bit_count)) {
-      const unsigned bits_per_word = sizeof(BITSET_WORD) * 8;
-
-      unsigned bit_count =
-         MAX2(batch->bo_list.bit_count * 2,
-              util_next_power_of_two(ALIGN_POT(bo->handle + 1, bits_per_word)));
-
-      batch->bo_list.set = rerzalloc(
-         batch->ctx, batch->bo_list.set, BITSET_WORD,
-         batch->bo_list.bit_count / bits_per_word, bit_count / bits_per_word);
-      batch->bo_list.bit_count = bit_count;
-   }
-
-   if (BITSET_TEST(batch->bo_list.set, bo->handle))
+   bool found;
+   _mesa_set_search_or_add(batch->bo_list.set, bo, &found);
+   if (found)
       return;
 
-   /* The batch holds a single reference to each BO in the batch, released when
-    * the batch finishes execution.
-    */
+   /* One reference per distinct BO, released when the batch retires. */
+   util_dynarray_append(&batch->bo_list.list, bo);
    agx_bo_reference(bo);
-   BITSET_SET(batch->bo_list.set, bo->handle);
 }
 
 static inline void
@@ -1172,8 +1191,8 @@ agx_batch_add_bo(struct agx_batch *batch, struct agx_bo *bo)
    assert(agx_batch_uses_bo(batch, bo));
 }
 
-#define AGX_BATCH_FOREACH_BO_HANDLE(batch, handle)                             \
-   BITSET_FOREACH_SET(handle, (batch)->bo_list.set, batch->bo_list.bit_count)
+#define AGX_BATCH_FOREACH_BO(batch, entry) \
+   util_dynarray_foreach(&(batch)->bo_list.list, struct agx_bo *, entry)
 
 struct drm_asahi_cmd_compute;
 struct drm_asahi_cmd_render;
@@ -1196,6 +1215,7 @@ void agx_sync_writer(struct agx_context *ctx, struct agx_resource *rsrc,
 void agx_sync_readers(struct agx_context *ctx, struct agx_resource *rsrc,
                       const char *reason);
 void agx_sync_batch(struct agx_context *ctx, struct agx_batch *batch);
+bool agx_poll_batch(struct agx_context *ctx, struct agx_batch *batch);
 void agx_sync_all(struct agx_context *ctx, const char *reason);
 void agx_sync_batch_for_reason(struct agx_context *ctx, struct agx_batch *batch,
                                const char *reason);

@@ -384,6 +384,12 @@ zink_blit(struct pipe_context *pctx,
    const struct util_format_description *src_desc = util_format_description(info->src.format);
    const struct util_format_description *dst_desc = util_format_description(info->dst.format);
 
+   /* a blit within one level reads texels of the image it writes */
+   if (unlikely(zink_screen(pctx->screen)->driver_workarounds.lazy_feedback_loop_usage) &&
+       !ctx->blitting && info->src.resource == info->dst.resource &&
+       info->src.level == info->dst.level)
+      zink_resource_object_init_feedback_loop(ctx, zink_resource(info->dst.resource));
+
    struct zink_resource *src = zink_resource(info->src.resource);
    if (src->unflushed_transient)
       src = src->transient;

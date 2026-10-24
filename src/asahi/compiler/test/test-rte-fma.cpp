@@ -1,14 +1,18 @@
 /* SPDX-License-Identifier: MIT */
+#include <cstdlib>
+#include <fstream>
 #include <vector>
 #include <gtest/gtest.h>
 #include "agx_test.h"
 extern "C" {
 #include "asahi/layout/layout.h"
 #include "agx_compile.h"
+#include "agx_nir.h"
 }
 
 static std::vector<uint8_t>
-compile_native_fma(unsigned mode, unsigned components)
+compile_native_fma(unsigned mode, unsigned components,
+                   enum agx_chip chip = AGX_CHIP_G17P)
 {
    nir_builder b = nir_builder_init_simple_shader(
       MESA_SHADER_FRAGMENT, &agx_nir_options, "native fused FP32 operation");
@@ -24,8 +28,10 @@ compile_native_fma(unsigned mode, unsigned components)
       (enum pipe_format)AIL_ISA_FORMAT_I32);
    b.shader->info.outputs_written = BITFIELD64_BIT(FRAG_RESULT_DATA0);
    agx_shader_key key = {};
-   key.dev.encoding = AGX_ISA_ENCODING_AGX3B;
-   key.dev.chip = AGX_CHIP_G17P;
+   key.dev.encoding = (chip == AGX_CHIP_G13G || chip == AGX_CHIP_G14G)
+                         ? AGX_ISA_ENCODING_AGX2
+                         : AGX_ISA_ENCODING_AGX3B;
+   key.dev.chip = chip;
    key.no_preamble = true;
    key.reserved_preamble = 32;
    key.fs.nr_samples = 1;
@@ -35,7 +41,8 @@ compile_native_fma(unsigned mode, unsigned components)
    EXPECT_TRUE(compiled);
    std::vector<uint8_t> binary;
    if (compiled) {
-      const uint8_t *main = (const uint8_t *)part.binary + part.info.main_offset;
+      const uint8_t *main =
+         (const uint8_t *)part.binary + part.info.main_offset;
       binary.assign(main, main + part.info.main_size);
    }
    free(part.binary);
@@ -43,30 +50,117 @@ compile_native_fma(unsigned mode, unsigned components)
    return binary;
 }
 
-TEST(NativeFMA, ExplicitRTEKeepsTheNativeFusedProgram)
+TEST(NativeFMA, ExplicitRTERepairsTininess)
 {
    for (unsigned components = 1; components <= 4; ++components) {
       SCOPED_TRACE(components);
       auto plain = compile_native_fma(0, components);
-      auto rte = compile_native_fma(FLOAT_CONTROLS_ROUNDING_MODE_RTE_FP32,
-                                    components);
+      auto rte =
+         compile_native_fma(FLOAT_CONTROLS_ROUNDING_MODE_RTE_FP32, components);
       EXPECT_FALSE(plain.empty());
-      EXPECT_EQ(plain, rte);
+      EXPECT_NE(plain, rte);
    }
 }
 
-TEST(NativeFMA, FlushModesKeepTheNativeFusedProgram)
+TEST(NativeFMA, OnlyRTERequiresTheTininessRepair)
 {
    for (unsigned components = 1; components <= 4; ++components) {
       SCOPED_TRACE(components);
       auto plain = compile_native_fma(0, components);
       auto ftz = compile_native_fma(FLOAT_CONTROLS_DENORM_FLUSH_TO_ZERO_FP32,
                                     components);
-      auto rte_ftz = compile_native_fma(
-         FLOAT_CONTROLS_ROUNDING_MODE_RTE_FP32 |
-         FLOAT_CONTROLS_DENORM_FLUSH_TO_ZERO_FP32, components);
+      auto rte_ftz =
+         compile_native_fma(FLOAT_CONTROLS_ROUNDING_MODE_RTE_FP32 |
+                               FLOAT_CONTROLS_DENORM_FLUSH_TO_ZERO_FP32,
+                            components);
       EXPECT_FALSE(plain.empty());
       EXPECT_EQ(plain, ftz);
-      EXPECT_EQ(plain, rte_ftz);
+      EXPECT_NE(plain, rte_ftz);
+   }
+}
+
+struct fma_case {
+   uint32_t a, c, z, native, expected;
+};
+
+static void
+check_fma_case(fma_case t)
+{
+   nir_builder b = nir_builder_init_simple_shader(
+      MESA_SHADER_COMPUTE, &agx_nir_options, "exact FMA boundary");
+   nir_def *fixed =
+      agx_nir_fma_rte_fixup(&b, nir_imm_int(&b, t.a), nir_imm_int(&b, t.c),
+                            nir_imm_int(&b, t.z), nir_imm_int(&b, t.native));
+   nir_store_global(&b, fixed, nir_imm_int64(&b, 0), .align_mul = 4);
+   while (nir_opt_constant_folding(b.shader)) {
+   }
+   nir_intrinsic_instr *store =
+      nir_instr_as_intrinsic(nir_block_last_instr(nir_start_block(b.impl)));
+   ASSERT_TRUE(nir_src_is_const(store->src[0]));
+   EXPECT_EQ(nir_src_as_uint(store->src[0]), t.expected)
+      << std::hex << t.a << " " << t.c << " " << t.z;
+   ralloc_free(b.shader);
+}
+
+TEST(NativeFMA, NormalAddendAndCancellation)
+{
+   const fma_case cases[] = {
+      /* The hardware failure: a tiny product subtracted from FLT_MIN. */
+      {0x80800000, 0x00800000, 0x00800000, 0, 0x00800000},
+      {0x00800000, 0x00800000, 0x80800000, 0x80000000, 0x80800000},
+      /* Half a subnormal ULP: the even tie rounds to FLT_MIN. */
+      {0x9a000000, 0x1a000000, 0x00800000, 0, 0x00800000},
+      /* Just beyond the tie remains flushed. */
+      {0x9a000001, 0x1a000000, 0x00800000, 0, 0},
+      /* Product boundary with a flushed subnormal addend. */
+      {0x3f7fffff, 0x80800000, 0x800000fe, 0x80000000, 0x80800000},
+      /* Nonzero native results are never replaced. */
+      {0x80800000, 0x00800000, 0x00800000, 0x12345678, 0x12345678},
+   };
+   for (auto t : cases)
+      check_fma_case(t);
+}
+
+TEST(NativeFMA, ExactDyadicOracle)
+{
+   /* Optional extended oracle generated with exact rationals, independent of
+    * the shader's fixed-point algorithm. The normal test above has no files.
+    * python3 fma-rte-oracle.py /tmp/cases.txt
+    * AGX_FMA_RTE_CASES=/tmp/cases.txt agx_tests --gtest_filter=NativeFMA.*
+    */
+   const char *path = std::getenv("AGX_FMA_RTE_CASES");
+   if (!path)
+      GTEST_SKIP();
+   std::ifstream input(path);
+   ASSERT_TRUE(input.good());
+   fma_case t;
+   unsigned count = 0;
+   while (input >> std::hex >> t.a >> t.c >> t.z >> t.native >> t.expected) {
+      check_fma_case(t);
+      count++;
+   }
+   EXPECT_TRUE(input.eof());
+   EXPECT_GT(count, 20000u);
+}
+
+TEST(NativeFMA, PreserveModeIsUnchanged)
+{
+   auto preserve = compile_native_fma(FLOAT_CONTROLS_DENORM_PRESERVE_FP32, 1);
+   auto rte_preserve =
+      compile_native_fma(FLOAT_CONTROLS_DENORM_PRESERVE_FP32 |
+                            FLOAT_CONTROLS_ROUNDING_MODE_RTE_FP32,
+                         1);
+   EXPECT_FALSE(preserve.empty());
+   EXPECT_EQ(preserve, rte_preserve);
+}
+
+TEST(NativeFMA, LegacyAndOtherAGX3ChipsAreUnchanged)
+{
+   for (enum agx_chip chip : {AGX_CHIP_G13G, AGX_CHIP_G14G, AGX_CHIP_G15S, AGX_CHIP_G16G}) {
+      auto plain = compile_native_fma(0, 1, chip);
+      auto rte =
+         compile_native_fma(FLOAT_CONTROLS_ROUNDING_MODE_RTE_FP32, 1, chip);
+      EXPECT_FALSE(plain.empty());
+      EXPECT_EQ(plain, rte);
    }
 }

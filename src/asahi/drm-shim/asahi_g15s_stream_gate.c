@@ -28,10 +28,11 @@ refuse(const char *what)
    return false;
 }
 
-/* The kernel's known payloads are Aurora's flat layouts: render 384 bytes
- * (legacy 256 + prior 16 + ray_query 2 x 56), compute 136 bytes. */
-#define G15S_RENDER_KNOWN  384
-#define G15S_COMPUTE_KNOWN 136
+/* The kernel's known payloads are Aurora's flat layouts: render is the
+ * legacy command, prior 16 and ray_query 2 x 56 (448 bytes with the merged
+ * UAPI's timestamp copies), compute the command with its prior tail (200). */
+#define G15S_RENDER_KNOWN  sizeof(struct drm_asahi_cmd_render_with_ray_query)
+#define G15S_COMPUTE_KNOWN sizeof(struct drm_asahi_cmd_compute_with_prior)
 
 bool
 asahi_g15s_render_packet_validate(const struct drm_asahi_cmd_render *render,

@@ -67,11 +67,11 @@ load_stage_array(nir_builder *b, nir_def *index, unsigned components,
 }
 
 static nir_def *
-sampler_index(nir_builder *b, nir_tex_instr *tex)
+sampler_index(nir_builder *b, nir_tex_instr *tex, bool native)
 {
-   nir_def *index = nir_steal_tex_src(tex, nir_tex_src_sampler_offset);
-   if (index)
-      return index;
+   const int offset_idx = nir_tex_instr_src_index(tex, nir_tex_src_sampler_offset);
+   if (offset_idx >= 0)
+      return tex->src[offset_idx].src.ssa;
 
    const int handle_idx =
       nir_tex_instr_src_index(tex, nir_tex_src_sampler_handle);
@@ -86,6 +86,12 @@ sampler_index(nir_builder *b, nir_tex_instr *tex)
       if (handle.comp == 0 && load &&
           load->intrinsic == nir_intrinsic_load_sampler_handle_agx)
          return load->src[0].ssa;
+
+      /* Texture lowering has already mapped a native API index i to i+1.
+       * This also covers dynamic indices inside the immediate sampler bank,
+       * which did not need load_sampler_handle_agx during binding lowering. */
+      if (native)
+         return nir_iadd_imm(b, nir_u2u16(b, tex->src[handle_idx].src.ssa), -1);
    }
 
    return nir_imm_int(b, tex->sampler_index);
@@ -101,13 +107,13 @@ load_custom_border_sampler(nir_builder *b, nir_def *index)
 }
 
 static bool
-lower_custom_border_query(nir_builder *b, nir_tex_instr *tex)
+lower_custom_border_query(nir_builder *b, nir_tex_instr *tex, bool native_index)
 {
    if (tex->op != nir_texop_has_custom_border_color_agx &&
        tex->op != nir_texop_custom_border_color_agx)
       return false;
 
-   nir_def *index = sampler_index(b, tex);
+   nir_def *index = sampler_index(b, tex, native_index);
    nir_def *replacement;
 
    if (tex->op == nir_texop_has_custom_border_color_agx) {
@@ -128,7 +134,7 @@ lower_custom_border_query(nir_builder *b, nir_tex_instr *tex)
 
 static bool
 lower_sampler(nir_builder *b, nir_tex_instr *tex, bool wide_native_handle,
-              bool clamp_to_zero)
+              bool clamp_to_zero, bool native_index)
 {
    if (!nir_tex_instr_need_sampler(tex))
       return false;
@@ -140,13 +146,22 @@ lower_sampler(nir_builder *b, nir_tex_instr *tex, bool wide_native_handle,
        nir_tex_instr_src_index(tex, nir_tex_src_sampler_handle) >= 0)
       return false;
 
-   nir_def *index = sampler_index(b, tex);
+   nir_def *index = sampler_index(b, tex, native_index);
+   nir_steal_tex_src(tex, nir_tex_src_sampler_offset);
 
-   if (clamp_to_zero)
+   const bool noncompare =
+      tex->backend_flags & AGX_TEXTURE_FLAG_BORDER_NONCOMPARE;
+
+   if (clamp_to_zero || noncompare)
       nir_steal_tex_src(tex, nir_tex_src_sampler_handle);
 
-   nir_def *handle = clamp_to_zero ? load_custom_border_sampler(b, index)
-                                   : nir_load_sampler_handle_agx(b, index);
+   nir_def *handle = (clamp_to_zero || noncompare)
+                       ? load_custom_border_sampler(b, index)
+                       : nir_load_sampler_handle_agx(b, index);
+   if (noncompare)
+      handle = nir_iadd_imm(b, handle,
+         AGX_GALLIUM_G17P_BORDER_NONCOMPARE_BASE -
+         AGX_GALLIUM_G17P_CUSTOM_BORDER_BASE);
    if (wide_native_handle && tex->op == nir_texop_lod) {
       /* The ordinary table maps API i to native i+1. The query bank is
        * disjoint from both this bank and the custom-border companions. */
@@ -286,7 +301,7 @@ lower(nir_builder *b, nir_instr *instr, void *data)
    } else if (instr->type == nir_instr_type_tex) {
       nir_tex_instr *tex = nir_instr_as_tex(instr);
 
-      if (lower_custom_border_query(b, tex))
+      if (lower_custom_border_query(b, tex, options->g17p_shadow_gather))
          return true;
 
       const unsigned bindful_sampler_count =
@@ -295,6 +310,8 @@ lower(nir_builder *b, nir_instr *instr, void *data)
          nir_tex_instr_src_index(tex, nir_tex_src_sampler_offset) >= 0;
       const bool clamp_to_zero =
          tex->backend_flags & AGX_TEXTURE_FLAG_CLAMP_TO_0;
+      const bool noncompare =
+         tex->backend_flags & AGX_TEXTURE_FLAG_BORDER_NONCOMPARE;
       const bool sampler_outside_bindful =
          tex->sampler_index >= bindful_sampler_count ||
          (dynamic_sampler &&
@@ -303,9 +320,9 @@ lower(nir_builder *b, nir_instr *instr, void *data)
 
       const bool query_lod = options->g17p_native_sampler_handles &&
                              tex->op == nir_texop_lod;
-      if ((sampler_outside_bindful || clamp_to_zero || query_lod) &&
+      if ((sampler_outside_bindful || clamp_to_zero || noncompare || query_lod) &&
           lower_sampler(b, tex, options->g17p_native_sampler_handles,
-                        clamp_to_zero)) {
+                        clamp_to_zero, options->g17p_shadow_gather)) {
          progress = true;
          if (!clamp_to_zero)
             *uses_bindless_samplers = true;
@@ -355,11 +372,61 @@ has_custom_border(nir_builder *b, nir_tex_instr *tex)
                                   nir_type_bool1, false, false);
 }
 
-static bool
-lower_custom_border(nir_builder *b, nir_tex_instr *tex, UNUSED void *data)
+static nir_def *
+shadow_gather_border(nir_builder *b, nir_tex_instr *tex, nir_def *ordinary)
 {
+   /* Comparison results cannot identify border taps: for a reference outside
+    * [0, 1], comparisons against both zero and one may be equal even though
+    * the comparison against the API's floating-point border is different.
+    * Gather raw depth with two non-comparing samplers instead. Interior taps
+    * are bit-identical, border taps are zero versus one. */
+   nir_def *probe[2];
+   for (unsigned i = 0; i < 2; ++i) {
+      nir_tex_instr *raw = nir_instr_as_tex(nir_instr_clone(b->shader, &tex->instr));
+      raw->is_shadow = false;
+      raw->is_new_style_shadow = false;
+      raw->component = 0;
+      nir_builder_instr_insert(b, &raw->instr);
+      nir_steal_tex_src(raw, nir_tex_src_comparator);
+      raw->backend_flags |= i ? AGX_TEXTURE_FLAG_BORDER_NONCOMPARE
+                              : AGX_TEXTURE_FLAG_CLAMP_TO_0;
+      probe[i] = &raw->def;
+   }
+
+   struct agx_stage_uniforms *s = NULL;
+   nir_def *state = load_stage_array(
+      b, sampler_index(b, tex, true), 1, 16,
+      (uintptr_t)&s->custom_border_compare_func,
+      sizeof(s->custom_border_compare_func[0]), 2, PIPE_MAX_SAMPLERS);
+   nir_def *func = nir_iand_imm(b, state, 0xff);
+   nir_def *clamp = nir_ine_imm(b, nir_iand_imm(b, state,
+                                            AGX_BORDER_COMPARE_CLAMP_REF), 0);
+   nir_def *ref = tex->src[nir_tex_instr_src_index(tex,
+                                                nir_tex_src_comparator)].src.ssa;
+   ref = nir_bcsel(b, clamp, nir_fsat(b, ref), ref);
+   ref = nir_f2f32(b, ref);
+   nir_def *border = nir_channel(b, nir_build_texture_query(
+      b, tex, nir_texop_custom_border_color_agx, 4, nir_type_float32,
+      false, false), 0);
+   static_assert(PIPE_FUNC_LESS == (unsigned)COMPARE_FUNC_LESS, "compare order");
+   static_assert(PIPE_FUNC_GEQUAL == (unsigned)COMPARE_FUNC_GEQUAL, "compare order");
+   nir_def *compared = nir_ieq_imm(b, func, PIPE_FUNC_ALWAYS);
+   for (unsigned f = PIPE_FUNC_LESS; f <= PIPE_FUNC_GEQUAL; ++f) {
+      nir_def *value = nir_compare_func(b, (enum compare_func)f, ref, border);
+      compared = nir_ior(b, compared,
+                         nir_iand(b, nir_ieq_imm(b, func, f), value));
+   }
+
+   return nir_bcsel(b, nir_ieq(b, probe[0], probe[1]), ordinary,
+                    nir_b2fN(b, compared, tex->def.bit_size));
+}
+
+static bool
+lower_custom_border(nir_builder *b, nir_tex_instr *tex, void *data)
+{
+   const bool shadow_gather = *(bool *)data;
    if (!nir_tex_instr_need_sampler(tex) || nir_tex_instr_is_query(tex) ||
-       tex->is_shadow)
+       (tex->is_shadow && (!shadow_gather || tex->op != nir_texop_tg4)))
       return false;
 
    b->cursor = nir_after_instr(&tex->instr);
@@ -371,7 +438,9 @@ lower_custom_border(nir_builder *b, nir_tex_instr *tex, UNUSED void *data)
 
    nir_push_if(b, has_custom);
    nir_def *replaced;
-   {
+   if (tex->is_shadow) {
+      replaced = shadow_gather_border(b, tex, clamp_to_one);
+   } else {
       nir_instr *zero_instr = nir_instr_clone(b->shader, &tex->instr);
       nir_builder_instr_insert(b, zero_instr);
       nir_tex_instr *tex_zero = nir_instr_as_tex(zero_instr);
@@ -399,16 +468,17 @@ lower_custom_border(nir_builder *b, nir_tex_instr *tex, UNUSED void *data)
 }
 
 bool
-agx_nir_lower_custom_border_g17p(nir_shader *shader)
+agx_nir_lower_custom_border_g17p(nir_shader *shader, bool shadow_gather)
 {
    bool progress = nir_shader_tex_pass(shader, lower_custom_border,
-                                       nir_metadata_none, NULL);
+                                       nir_metadata_none, &shadow_gather);
 
    if (progress) {
       bool uses_bindless_samplers = false;
       struct agx_lower_bindings_options options = {
          .uses_bindless_samplers = &uses_bindless_samplers,
          .g17p_native_sampler_handles = true,
+         .g17p_shadow_gather = shadow_gather,
          .bindful_sampler_count = AGX_GALLIUM_G17P_API_SAMPLERS,
       };
       progress |= nir_shader_instructions_pass(

@@ -1183,6 +1183,7 @@ void agx_lower_uniform_sources(agx_context *ctx);
 void agx_opt_cse(agx_context *ctx);
 bool agx_opt_collect_split(agx_context *ctx);
 void agx_opt_cse_pressure(agx_context *ctx);
+void agx_opt_cse_bounded(agx_context *ctx);
 bool agx_can_rematerialize_uniform(const agx_context *ctx, const agx_instr *I);
 bool agx_has_uniform_store(const agx_context *ctx);
 void agx_opt_compact_constants(agx_context *ctx);
@@ -1332,6 +1333,7 @@ bool agx_nir_lower_ubo(nir_shader *shader);
 bool agx_nir_lower_shared_bitsize(nir_shader *shader, bool element_indices);
 bool agx_nir_lower_frag_sidefx(nir_shader *s, bool g17p);
 void agx_lower_agx3_fma_sources(agx_context *ctx);
+void agx_materialize_agx3_alu_constants(agx_context *ctx);
 void agx_lower_agx3_mixed_width_unary(agx_context *ctx);
 
 struct agx_cycle_estimate {

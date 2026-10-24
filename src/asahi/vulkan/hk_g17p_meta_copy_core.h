@@ -213,3 +213,38 @@ bool hk_g17p_image_blit_slice(enum agx_chip chip, VkImageType src_type,
  * coordinate with weight zero, keeping every table entry in one word. */
 bool hk_g17p_build_mip_axis(uint32_t src_extent, uint32_t dst_extent,
                             uint32_t *entries);
+
+/* Compressed G17P mip levels of at least this many texels are generated in
+ * a render pass, which stores compressed tiles; smaller ones in compute,
+ * which writes them raw. Measured per level on G17P
+ * (g17p-vulkan-compressed-mip-blit --grid), a render pass in a chain costs
+ * about 0.04 ms at any size up to 640x360, and compute about 0.26-0.33 ns
+ * per texel: they cross between 480x270 (129,600 texels, compute faster
+ * for smooth content) and 640x360 (230,400, the render pass faster for any
+ * content), near 2^17.
+ */
+#define HK_G17P_MIP_PBE_MIN_TEXELS (1u << 17)
+
+static inline bool
+hk_g17p_mip_level_through_pbe(uint32_t width, uint32_t height)
+{
+   return (uint64_t)width * height >= HK_G17P_MIP_PBE_MIN_TEXELS;
+}
+
+/* The 16x16 metadata tiles of one compressed level, as libagx_fast_clear
+ * indexes them: the low bits of both tile coordinates interleave (X in the
+ * even bits) up to the smaller grid dimension rounded to a power of two, and
+ * the remaining bits of the longer axis follow linearly. */
+struct hk_g17p_metadata_grid {
+   uint32_t width_tl;
+   uint32_t height_tl;
+   uint32_t interleave_bits;
+   bool major_is_x;
+};
+
+bool hk_g17p_metadata_grid_init(uint32_t width_tl, uint32_t height_tl,
+                                struct hk_g17p_metadata_grid *grid);
+
+/* The 64-bit metadata word index of tile (x_tl, y_tl). */
+uint32_t hk_g17p_metadata_tile_index(const struct hk_g17p_metadata_grid *grid,
+                                     uint32_t x_tl, uint32_t y_tl);

@@ -186,7 +186,7 @@ check_custom_border(void)
             AGX_DESCRIPTOR_GENERATION_9);
    NIR_PASS(_, shader, agx_nir_rebind_g17p_texture_crawls);
    agx_preprocess_nir(shader);
-   NIR_PASS(_, shader, agx_nir_lower_custom_border_g17p);
+   NIR_PASS(_, shader, agx_nir_lower_custom_border_g17p, true);
    nir_validate_shader(shader, "after custom border variant lowering");
 
    unsigned samples = 0;

@@ -167,7 +167,7 @@ initialize(uint id)
                args.node_bound - args.leaf_bound)) ||
           DEREF(args.header).active_leaf_count > args.leaf_bound ||
           args.root_offset != args.leaf_bound * leaf_size() ||
-          args.output_bvh == 0 || (args.output_bvh & 1023ul) != 0 ||
+          args.output_bvh == 0 || (args.output_bvh & 63ul) != 0 ||
           args.output_bvh >= (1ul << 48) ||
           uint64_t(args.slot_bound) * 64ul + 184ul > (1ul << 48) - args.output_bvh ||
           args.slot_bound < 5)

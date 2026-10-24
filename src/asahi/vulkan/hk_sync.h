@@ -69,9 +69,19 @@ enum hk_sync_kind {
     * HK_SYNC_GFX ones. Every other graphics destination, and every stream
     * kind, counts as HK_SYNC_GFX. */
    HK_SYNC_GFX_FRAG = 1 << 3,
+
+   /* Destination scopes only: pre-rasterization shaders that read images.
+    * An image barrier can only order the image's own accesses, and a
+    * pre-rasterization stage accesses an image only through a shader that
+    * reads one. On G17P, image barriers therefore name this class (and the
+    * fragment class) where other dependencies name HK_SYNC_GFX: a render's
+    * fragment half always waits on it, its vertex half only once it draws
+    * with a pre-rasterization shader that reads images
+    * (hk_sync_vertex_images). Other chips never record it. */
+   HK_SYNC_GFX_IMG = 1 << 4,
 };
 
-#define HK_SYNC_NUM_KINDS 4
+#define HK_SYNC_NUM_KINDS 5
 
 /* Subqueue index: 0 render (VDM), 1 compute (CDM). */
 enum hk_sync_sq {
@@ -159,6 +169,42 @@ struct hk_sync_recent {
    enum hk_sync_sq sq;
 };
 
+/*
+ * G17P transfer writes that nothing orders before graphics work yet.
+ *
+ * Vulkan does not order a transfer before a later render pass without a
+ * dependency, and G17P overlaps the two when there is none. Some
+ * applications (and the CTS ray_query null_as cases) clear a resource, name
+ * only a non-graphics stage in the following barrier, then use the resource
+ * in a draw. Be stricter there, but only where the pass can actually access
+ * what the transfer wrote: each transfer recorded outside a pass notes its
+ * destination VA range and compute stream, a dependency from the transfer
+ * stage into graphics drops the notes, and a render pass begin (attachments)
+ * or draw (descriptors, vertex, index and indirect buffers) that may access a
+ * noted range orders that stream's prefix before its graphics work. Work that
+ * does not touch a noted range keeps the full overlap.
+ *
+ * Shaders can reach a buffer through its device address, and a transfer
+ * whose destination is unknown may write anything: such notes, and writes
+ * that no longer fit in the set, match every pass (xfer_any). Only one
+ * command buffer is tracked, and aliasing between different resources is
+ * covered only where their VA ranges overlap.
+ */
+#define HK_SYNC_XFER_WRITES 8
+
+struct hk_sync_xfer_write {
+   /* GPU VA range [lo, hi) the stream writes. */
+   uint64_t lo, hi;
+   struct hk_cs *cs;
+};
+
+/* The destination of the transfer command being recorded. */
+struct hk_sync_xfer_dst {
+   uint64_t lo, hi;
+   bool valid;
+   bool device_address;
+};
+
 /* Per-stream state, embedded in hk_cs. */
 struct hk_sync_stream {
    /* Recording order. Equal to list order for every pair the tracking
@@ -188,6 +234,12 @@ struct hk_sync_stream {
    uint16_t barrier_ta[HK_SYNC_NUM_SQ];
    uint64_t prior_ta[HK_SYNC_NUM_SQ];
    bool ta_split;
+
+   /* For a render: it draws with a pre-rasterization shader that reads
+    * images, so its vertex half also waits on HK_SYNC_GFX_IMG, as of the
+    * dependency epoch vtx_images_epoch. */
+   bool vtx_images;
+   uint32_t vtx_images_epoch;
 };
 
 /* Per-command-buffer state. */
@@ -226,6 +278,11 @@ struct hk_sync_state {
     * requirements before it receives more work. */
    bool cs_check_pending;
 
+   /* Incremented by every operation that changes recorded dependencies or
+    * stream bookkeeping. A reader that cached a decision about the tracked
+    * state compares it to know whether anything happened since. */
+   uint32_t epoch;
+
    /* A meta helper selected an exact stream; do not replace it. */
    bool pin_cs;
 
@@ -234,6 +291,25 @@ struct hk_sync_state {
 
    /* Depth of transfer entry points on the stack. */
    uint16_t xfer_depth;
+
+   /* G17P transfer writes not yet ordered before graphics (see
+    * hk_sync_xfer_write): the destination of the transfer being recorded,
+    * the noted writes, and the latest stream with a write any graphics work
+    * may access. xfer_version changes whenever the notes do. */
+   struct hk_sync_xfer_dst xfer_dst;
+   struct hk_sync_xfer_write xfer_writes[HK_SYNC_XFER_WRITES];
+   uint8_t xfer_write_count;
+   struct hk_cs *xfer_any;
+   uint32_t xfer_version;
+
+   /* The draw state the last draw-time check found no noted write in: valid
+    * while xfer_version, the descriptor and vertex buffer generations and the
+    * index buffer are unchanged (hk_cmd_draw.c). */
+   struct {
+      bool valid;
+      uint32_t version;
+      uint64_t descriptors, vertex_buffers, index;
+   } xfer_clean;
 
    /* A top-of-pipe timestamp waiting for the next stream to carry it as its
     * start timestamp. */
@@ -254,6 +330,8 @@ struct hk_sync_state {
 struct hk_sync_queue {
    uint8_t ever[HK_SYNC_NUM_SQ];
    bool exact_prior;
+   /* G13/G14 retain upstream's order after both preceding engine prefixes. */
+   bool serialize;
    uint64_t submitted[HK_SYNC_NUM_SQ];
    uint64_t last_absolute[HK_SYNC_NUM_KINDS][HK_SYNC_NUM_SQ];
    uint64_t tail[HK_SYNC_NUM_KINDS][HK_SYNC_NUM_SQ];
@@ -271,10 +349,14 @@ void hk_sync_reset(struct hk_cmd_buffer *cmd);
 
 /* Stage masks to stream kinds, for a first synchronization scope. */
 uint8_t hk_sync_kinds_src(VkPipelineStageFlags2 stages);
+/* And for a second synchronization scope. */
+uint8_t hk_sync_kinds_dst(VkPipelineStageFlags2 stages);
 
-/* Union of the scopes of every barrier in a dependency. */
-void hk_sync_dependency_kinds(const VkDependencyInfo *info, uint8_t *src,
-                              uint8_t *dst);
+/* Union of the scopes of every barrier in a dependency. With image_class,
+ * an image barrier whose second scope names graphics work names
+ * HK_SYNC_GFX_FRAG | HK_SYNC_GFX_IMG instead of HK_SYNC_GFX. */
+void hk_sync_dependency_kinds(const VkDependencyInfo *info, bool image_class,
+                              uint8_t *src, uint8_t *dst);
 
 /* Record an execution dependency: all earlier streams of the source kinds
  * complete before any later stream of the destination kinds starts. */
@@ -288,6 +370,10 @@ void hk_sync_pass_barrier(struct hk_cmd_buffer *cmd, uint8_t src_kinds,
  * then every stream before self), or for a stream still to be created. */
 void hk_sync_src_dep(struct hk_cmd_buffer *cmd, uint8_t src_kinds,
                      struct hk_cs *self, struct hk_sync_dep dep[HK_SYNC_NUM_SQ]);
+
+/* The render stream draws with a pre-rasterization shader that reads images:
+ * its vertex half joins the image-barrier requirements (HK_SYNC_GFX_IMG). */
+void hk_sync_vertex_images(struct hk_cmd_buffer *cmd, struct hk_cs *cs);
 
 /* Every later stream of the given kinds waits on cs. */
 void hk_sync_after_stream(struct hk_cmd_buffer *cmd, struct hk_cs *cs,
@@ -323,10 +409,42 @@ void hk_sync_write_timestamp(struct hk_cmd_buffer *cmd,
                              struct agx_timestamp_req req);
 void hk_sync_flush_pending_timestamp(struct hk_cmd_buffer *cmd);
 
+/* G17P transfer writes (see hk_sync_xfer_write). Note that the transfer
+ * being recorded writes into cs. */
+void hk_sync_note_xfer_write(struct hk_cmd_buffer *cmd, struct hk_cs *cs);
+
+static inline bool
+hk_sync_xfer_pending(const struct hk_sync_state *st)
+{
+   return st->xfer_write_count || st->xfer_any;
+}
+
+/* The latest stream of best and the noted streams that write [lo, hi). */
+struct hk_cs *hk_sync_xfer_match(const struct hk_cmd_buffer *cmd,
+                                 uint64_t lo, uint64_t hi, struct hk_cs *best);
+
+/* The latest stream of best and every noted stream: graphics work that may
+ * access memory this command buffer cannot see. */
+struct hk_cs *hk_sync_xfer_match_all(const struct hk_cmd_buffer *cmd,
+                                     struct hk_cs *best);
+
+/* Order the prefix of the compute subqueue up to cs before every graphics
+ * stream from now on, including the open render and its pre-graphics stream.
+ * The caller has made the prefix's writes visible and closed cs to further
+ * work. Drops the notes the prefix covers. */
+void hk_sync_order_xfer(struct hk_cmd_buffer *cmd, struct hk_cs *cs);
+
 /* Render pass instance boundaries. */
 void hk_sync_begin_rendering(struct hk_cmd_buffer *cmd, bool resuming);
 void hk_sync_first_render_stream(struct hk_cmd_buffer *cmd, struct hk_cs *cs);
 void hk_sync_end_rendering(struct hk_cmd_buffer *cmd);
+
+/* A new render pass instance continues in cs, the render stream of the
+ * instance that just ended, instead of a stream of its own: the stream takes
+ * on the requirements a render stream created now would, and the pass
+ * bookkeeping starts as if cs had just been created for the instance. The
+ * caller guarantees cs is the latest stream of the command buffer. */
+void hk_sync_merge_rendering(struct hk_cmd_buffer *cmd, struct hk_cs *cs);
 void hk_sync_heap_used(struct hk_cmd_buffer *cmd);
 
 /* Tile hazards: a written attachment of the pass instance being begun, then

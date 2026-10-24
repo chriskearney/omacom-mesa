@@ -2436,6 +2436,8 @@ zink_set_sampler_views(struct pipe_context *pctx,
    const uint32_t mask = BITFIELD_RANGE(start_slot, num_views);
    uint32_t shadow_mask = ctx->di.zs_swizzle[shader_type].mask;
    ctx->di.cubes[shader_type] &= ~mask;
+   if (shader_type != MESA_SHADER_COMPUTE)
+      ctx->lazy_feedback_dirty |= ctx->lazy_feedback;
 
    bool update = false;
    bool shadow_update = false;
@@ -2576,8 +2578,19 @@ zink_create_texture_handle(struct pipe_context *pctx, struct pipe_sampler_view *
       bd->ds.db.offset = view->u.buf.offset;
       bd->ds.db.size = view->u.buf.size;
    } else {
-      if (!sv->image_view)
+      /* A handle keeps the image view it was created with: rebinding the
+       * resource refreshes bound views and attachments, not handles. Under
+       * lazy feedback-loop usage any draw may sample a resident handle of
+       * one of its attachments, so give a render-target image its
+       * feedback-loop usage now, before the handle takes its view.
+       */
+      if (unlikely(ctx->lazy_feedback) &&
+          (res->base.b.bind & PIPE_BIND_RENDER_TARGET))
+         zink_resource_object_init_feedback_loop(ctx, res);
+      if (!sv->image_view || sv->rebind_count != res->rebind_count) {
+         sv->rebind_count = res->rebind_count;
          init_sampler_view(ctx, sv);
+      }
       bd->ds.surface = sv->image_view;
       bd->first_layer = view->u.tex.first_layer;
       bd->last_layer = view->u.tex.last_layer;
@@ -2671,6 +2684,7 @@ zink_make_texture_handle_resident(struct pipe_context *pctx, uint64_t handle, bo
       update_res_bind_count(ctx, res, false, false);
       update_res_bind_count(ctx, res, true, false);
       res->bindless[0]++;
+      ctx->lazy_feedback_dirty |= ctx->lazy_feedback;
       if (is_buffer) {
          if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB) {
             ctx->di.bindless[0].db.buffer_infos[handle].address = res->obj->bda + ds->db.offset;
@@ -2730,6 +2744,12 @@ zink_create_image_handle(struct pipe_context *pctx, const struct pipe_image_view
       debug_printf("couldn't create storage image!");
       return 0;
    }
+   /* As for texture handles: give a render-target image its feedback-loop
+    * usage before the handle takes its view (zink_create_texture_handle()).
+    */
+   if (unlikely(ctx->lazy_feedback) && res->base.b.target != PIPE_BUFFER &&
+       (res->base.b.bind & PIPE_BIND_RENDER_TARGET))
+      zink_resource_object_init_feedback_loop(ctx, res);
    bd = calloc(1, sizeof(struct zink_bindless_descriptor));
    if (!bd)
       return 0;
@@ -4255,6 +4275,7 @@ zink_set_framebuffer_state(struct pipe_context *pctx,
    struct zink_context *ctx = zink_context(pctx);
    struct zink_screen *screen = zink_screen(pctx->screen);
    unsigned samples = state->nr_cbufs || state->zsbuf.texture ? 0 : state->samples;
+   ctx->lazy_feedback_dirty |= ctx->lazy_feedback;
    unsigned w = ctx->fb_state.width;
    unsigned h = ctx->fb_state.height;
    unsigned layers = MAX2(framebuffer_get_num_layers(state), 1);
@@ -5394,6 +5415,11 @@ zink_resource_copy_region(struct pipe_context *pctx,
    struct zink_resource *dst = zink_resource(pdst);
    struct zink_resource *src = zink_resource(psrc);
    struct zink_context *ctx = zink_context(pctx);
+   /* a copy within one level reads texels of the image it writes */
+   if (unlikely(zink_screen(pctx->screen)->driver_workarounds.lazy_feedback_loop_usage) &&
+       !ctx->blitting && psrc == pdst && pdst->target != PIPE_BUFFER &&
+       src_level == dst_level)
+      zink_resource_object_init_feedback_loop(ctx, dst);
    if (src->unflushed_transient)
       src = src->transient;
    if (dst->unflushed_transient && src != dst->transient)
@@ -6053,6 +6079,7 @@ zink_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
    ctx->gfx_pipeline_state.rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
    ctx->gfx_pipeline_state.rendering_info.pColorAttachmentFormats = ctx->gfx_pipeline_state.rendering_formats;
    ctx->gfx_pipeline_state.feedback_loop = screen->driver_workarounds.always_feedback_loop;
+   ctx->lazy_feedback = screen->driver_workarounds.lazy_feedback_loop_usage;
    ctx->gfx_pipeline_state.feedback_loop_zs = screen->driver_workarounds.always_feedback_loop_zs;
 
    const uint32_t data[] = {0};
@@ -6349,6 +6376,67 @@ add_implicit_feedback_loop(struct zink_context *ctx, struct zink_resource *res)
    }
    update_feedback_loop_dynamic_state(ctx);
    return true;
+}
+
+/* Whether a bound graphics shader samples a level and layer of @res that
+ * overlap the colour attachment @psurf, as add_implicit_feedback_loop()
+ * determines it.
+ */
+static bool
+attachment_is_sampled(struct zink_context *ctx, struct zink_resource *res,
+                      const struct pipe_surface *psurf)
+{
+   for (unsigned stage = 0; stage < MESA_SHADER_MESH_STAGES; stage++) {
+      if (stage == MESA_SHADER_COMPUTE || !ctx->gfx_stages[stage])
+         continue;
+
+      uint32_t texuse = res->sampler_binds[stage] &
+                        ctx->gfx_stages[stage]->info.textures_used[0];
+      u_foreach_bit(slot, texuse) {
+         const struct pipe_sampler_view *sv = ctx->sampler_views[stage][slot];
+         if (!sv || sv->texture != &res->base.b)
+            continue;
+         if (sv->u.tex.first_level > psurf->level || sv->u.tex.last_level < psurf->level)
+            continue;
+         if (sv->u.tex.first_layer > psurf->last_layer || sv->u.tex.last_layer < psurf->first_layer)
+            continue;
+         return true;
+      }
+   }
+   return false;
+}
+
+/* driver_workarounds.lazy_feedback_loop_usage: before a draw samples one of
+ * its colour attachments, give that attachment's image
+ * ATTACHMENT_FEEDBACK_LOOP usage. Render-target images get it when a texture
+ * handle is created for them (zink_create_texture_handle()), so a bindless
+ * handle never keeps a view of a replaced image. general_layout never
+ * detects feedback loops itself (add_implicit_feedback_loop() is not
+ * reached), so this is the only place the driver learns about one. Draws
+ * call it only after framebuffer, sampler-view, shader or bindless state
+ * changed (ctx->lazy_feedback_dirty).
+ */
+void
+zink_update_lazy_feedback_loops(struct zink_context *ctx)
+{
+   bool replaced = false;
+   ctx->lazy_feedback_dirty = false;
+   for (unsigned i = 0; i < ctx->fb_state.nr_cbufs; i++) {
+      const struct pipe_surface *psurf = &ctx->fb_state.cbufs[i];
+      struct zink_resource *res = zink_resource(psurf->texture);
+      if (!res || (res->base.b.flags & ZINK_RESOURCE_FLAG_FEEDBACK_LOOP) ||
+          (res->obj->vkusage & VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT))
+         continue;
+      if (!res->sampler_bind_count[0] || !attachment_is_sampled(ctx, res, psurf))
+         continue;
+      replaced |= zink_resource_object_init_feedback_loop(ctx, res);
+   }
+
+   /* rebind_image() leaves bound attachments to the next render pass */
+   if (replaced) {
+      zink_batch_no_rp(ctx);
+      ctx->rp_changed = true;
+   }
 }
 
 void

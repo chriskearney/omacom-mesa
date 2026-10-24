@@ -190,3 +190,35 @@ TEST(MixedUniformALU, FullCompilerKeepsHalfUniformInFloatArithmetic)
    free(part.binary);
    ralloc_free(b.shader);
 }
+
+TEST(MixedUniformALU, AGX2ControlFlowComparesKeepUniforms)
+{
+   /* AGX2 control-flow compares read a uniform in either operand, so a loop
+    * bound or branch condition held in the uniform file is used in place.
+    * AGX3 keeps one in place only beside a 32-bit register first operand or
+    * an 8-bit immediate, and copies it otherwise. */
+   for (auto encoding : {AGX_ISA_ENCODING_AGX2, AGX_ISA_ENCODING_AGX3B}) {
+      void *mem = ralloc_context(NULL);
+      agx_builder *b = agx_test_builder(mem);
+      agx_shader_key key = {};
+      key.dev.encoding = encoding;
+      b->shader->key = &key;
+      agx_block *target = agx_test_block(b->shader);
+      agx_instr *loop = agx_while_icmp(b, agx_temp(b->shader, AGX_SIZE_32),
+                                       agx_uniform(14, AGX_SIZE_32), 1,
+                                       AGX_ICOND_ULT, false, target);
+      agx_instr *imm = agx_if_icmp(b, agx_immediate(300),
+                                   agx_uniform(20, AGX_SIZE_32), 1,
+                                   AGX_ICOND_UEQ, true, target);
+      agx_instr *half = agx_break_if_icmp(b, agx_temp(b->shader, AGX_SIZE_16),
+                                          agx_uniform(31, AGX_SIZE_16), 1,
+                                          true, AGX_ICOND_UEQ, target);
+      agx_lower_uniform_sources(b->shader);
+
+      const bool agx2 = encoding == AGX_ISA_ENCODING_AGX2;
+      EXPECT_EQ(loop->src[1].type, AGX_INDEX_UNIFORM);
+      EXPECT_EQ(imm->src[1].type == AGX_INDEX_UNIFORM, agx2);
+      EXPECT_EQ(half->src[1].type == AGX_INDEX_UNIFORM, agx2);
+      ralloc_free(mem);
+   }
+}

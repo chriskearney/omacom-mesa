@@ -198,20 +198,37 @@ sync_query_writers(struct agx_context *ctx, struct agx_query *query,
                    const char *reason)
 {
    for (unsigned i = 0; i < AGX_MAX_BATCHES; ++i) {
-      if (query->writer_generation[i] == ctx->batches.generation[i])
+      if (query->writer_generation[i] == ctx->batches.generation[i] &&
+          !agx_poll_batch(ctx, &ctx->batches.slots[i])) {
+         if (unlikely(agx_device(ctx->base.screen)->debug & AGX_DBG_PERF))
+            ctx->perf.query_waits++;
          agx_sync_batch_for_reason(ctx, &ctx->batches.slots[i], reason);
+      }
    }
 }
 
 static bool
-is_query_busy(struct agx_context *ctx, struct agx_query *query)
+is_query_busy(struct agx_context *ctx, struct agx_query *query, bool submit)
 {
+   bool busy = false;
    for (unsigned i = 0; i < AGX_MAX_BATCHES; ++i) {
-      if (query->writer_generation[i] == ctx->batches.generation[i])
-         return true;
+      if (query->writer_generation[i] == ctx->batches.generation[i] &&
+          !agx_poll_batch(ctx, &ctx->batches.slots[i])) {
+         if (!submit)
+            return true;
+
+         /* GL availability polling must eventually finish without an app
+          * flush. Submit only still-active writers, once; never wait for
+          * them here. Already submitted writers need only the zero-timeout
+          * poll above. Return not-ready even if submission retires inline. */
+         busy = true;
+         if (agx_batch_is_active(&ctx->batches.slots[i]))
+            agx_flush_batch_for_reason(ctx, &ctx->batches.slots[i],
+                                       "Query result availability");
+      }
    }
 
-   return false;
+   return busy;
 }
 
 static void
@@ -382,15 +399,18 @@ classify_query_type(enum pipe_query_type type)
 }
 
 static bool
-agx_get_query_result(struct pipe_context *pctx, struct pipe_query *pquery,
-                     bool wait, union pipe_query_result *vresult)
+agx_get_query_result_inner(struct pipe_context *pctx, struct pipe_query *pquery,
+                           bool wait, bool submit,
+                           union pipe_query_result *vresult)
 {
    struct agx_query *query = (struct agx_query *)pquery;
    struct agx_context *ctx = agx_context(pctx);
    struct agx_device *dev = agx_device(pctx->screen);
 
-   /* TODO: Honour `wait` */
-   sync_query_writers(ctx, query, "Reading query results");
+   if (wait)
+      sync_query_writers(ctx, query, "Reading query results");
+   else if (is_query_busy(ctx, query, submit))
+      return false;
 
    uint64_t *ptr = query->ptr.cpu;
    uint64_t value = *ptr;
@@ -422,6 +442,13 @@ agx_get_query_result(struct pipe_context *pctx, struct pipe_query *pquery,
    }
 }
 
+static bool
+agx_get_query_result(struct pipe_context *pctx, struct pipe_query *pquery,
+                     bool wait, union pipe_query_result *vresult)
+{
+   return agx_get_query_result_inner(pctx, pquery, wait, true, vresult);
+}
+
 static unsigned
 result_type_size(enum pipe_query_value_type result_type)
 {
@@ -439,12 +466,11 @@ agx_get_query_result_resource_cpu(struct agx_context *ctx,
    union pipe_query_result result;
    if (index < 0) {
       /* availability */
-      result.u64 = !is_query_busy(ctx, query);
+      result.u64 = !is_query_busy(ctx, query, true);
    } else {
-      bool ready =
-         agx_get_query_result(&ctx->base, (void *)query, true, &result);
-
-      assert(ready);
+      if (!agx_get_query_result(&ctx->base, (void *)query,
+                                flags & PIPE_QUERY_WAIT, &result))
+         return;
    }
 
    /* Clamp to type, arb_query_buffer_object-qbo tests */
@@ -616,9 +642,11 @@ agx_render_condition_check_inner(struct agx_context *ctx)
    bool wait = ctx->cond_mode != PIPE_RENDER_COND_NO_WAIT &&
                ctx->cond_mode != PIPE_RENDER_COND_BY_REGION_NO_WAIT;
 
+   /* A NO_WAIT draw can render conservatively without splitting its batch.
+    * Unlike an explicit availability request, it need not force progress. */
    struct pipe_query *pq = (struct pipe_query *)ctx->cond_query;
 
-   if (agx_get_query_result(&ctx->base, pq, wait, &res))
+   if (agx_get_query_result_inner(&ctx->base, pq, wait, false, &res))
       return res.u64 != ctx->cond_cond;
 
    return true;

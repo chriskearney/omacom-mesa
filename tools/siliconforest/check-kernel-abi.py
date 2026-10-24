@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""Compare native Mesa wire layouts with the experimental SiliconForest header."""
+"""Compare native Mesa wire layouts with a pinned Aurora or SiliconForest header."""
+import argparse
 import json
 import os
 from pathlib import Path
@@ -10,7 +11,14 @@ import sys
 import tempfile
 
 root = Path(__file__).resolve().parents[2]
-kernel = Path(sys.argv[1]).resolve()
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('kernel', type=Path)
+parser.add_argument('--header', choices=['asahi_drm.h', 'asahi_m3_drm.h'],
+                    help='select a contract explicitly when both headers exist')
+args = parser.parse_args()
+kernel = args.kernel.resolve()
+header = args.header or ('asahi_drm.h' if
+    (kernel / 'include/uapi/drm/asahi_drm.h').is_file() else 'asahi_m3_drm.h')
 common = {
     'params_size': 'sizeof(struct drm_asahi_params_global)',
     'params_hal_offset': 'offsetof(struct drm_asahi_params_global, gpu_hal_generation)',
@@ -51,7 +59,7 @@ def compile_and_run(directory, name, header, includes, fields):
 
 with tempfile.TemporaryDirectory(prefix='siliconforest-abi-') as directory:
     a = compile_and_run(directory, 'mesa', 'drm-uapi/asahi_drm.h', [root / 'include'], mesa)
-    b = compile_and_run(directory, 'kernel', 'asahi_m3_drm.h', [kernel / 'include/uapi/drm'], native)
+    b = compile_and_run(directory, 'kernel', header, [kernel / 'include/uapi/drm'], native)
     differences = {key: {'mesa': a[key], 'kernel': b[key]} for key in a if a[key] != b[key]}
-    print(json.dumps({'matched': not differences, 'values': a, 'differences': differences}, indent=2))
+    print(json.dumps({'matched': not differences, 'kernel_header': header, 'values': a, 'differences': differences}, indent=2))
     raise SystemExit(bool(differences))

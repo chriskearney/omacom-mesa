@@ -30,6 +30,7 @@
 #include "asahi/lib/agx_va_runtime_hole.h"
 
 #include "hk_private.h"
+#include "hk_barrier.h"
 #include "hk_conditional_render_core.h"
 #include "hk_shader.h"
 #include "hk_sync.h"
@@ -50,6 +51,7 @@
 
 #include <stdio.h>
 
+struct set;
 struct hk_buffer;
 struct hk_cmd_bo;
 struct hk_cmd_pool;
@@ -256,10 +258,31 @@ static_assert(sizeof(((struct hk_root_descriptor_table *)0)->cs) <=
 #define hk_root_descriptor_offset(member)                                      \
    offsetof(struct hk_root_descriptor_table, member)
 
+/* Counts only these CPU upload paths, enabled by ASAHI_MESA_DEBUG=perf. */
+struct hk_upload_stats {
+   uint64_t draws, descriptor_binds, descriptor_noops;
+   uint64_t root_uploads, root_bytes, root_reuses;
+   uint64_t draw_param_uploads, draw_param_bytes, draw_param_reuses;
+   uint64_t draw_id_uploads, draw_id_bytes, draw_id_reuses;
+   uint64_t constant_uploads, constant_bytes, constant_reuses;
+};
+
+#define hk_upload_stat(cmd, field, value)                                      \
+   do {                                                                       \
+      if (unlikely(hk_cmd_buffer_device(cmd)->dev.debug & AGX_DBG_PERF))         \
+         (cmd)->state.upload_stats.field += (value);                            \
+   } while (0)
+
 struct hk_descriptor_state {
    bool root_dirty;
    uint64_t generation;
    struct hk_root_descriptor_table root;
+   /* Immutable command-buffer storage; reset with descriptor state. Only the
+    * uploaded head and tail are compared, excluding unused dynamic slots. */
+   struct agx_ptr uploaded_root;
+   uint32_t uploaded_root_size;
+   uint64_t uploaded_root_generation;
+   uint8_t uploaded_dynamic_buffer_end;
 
    /* One past the highest root.dynamic_buffers entry any bind wrote. Later
     * entries are unread by every bound layout and stay out of uploads. */
@@ -279,6 +302,12 @@ struct hk_attachment {
 
    VkFormat vk_format;
    struct hk_image_view *iview;
+
+   /* The API load and store operations and the layout the pass was begun
+    * with. */
+   VkAttachmentLoadOp load_op;
+   VkAttachmentStoreOp store_op;
+   VkImageLayout layout;
 
    VkResolveModeFlagBits resolve_mode;
    struct hk_image_view *resolve_iview;
@@ -351,6 +380,10 @@ struct hk_render_registers {
 struct hk_rendering_state {
    VkRenderingFlagBits flags;
 
+   /* May have written storage memory/XFB anywhere in this API pass, including
+    * before a physical render split. Used only for conservative barriers. */
+   bool barrier_shader_writes;
+
    VkRect2D area;
    uint32_t layer_count;
    uint32_t view_mask;
@@ -379,13 +412,40 @@ struct hk_rendering_state {
    struct agx_zls_control_packed zls_control_only, zls_control_last;
    const void *zls_first_cs;
 
-   /* Preserve untouched NONE/NONE attachments, and (HK_G17P_ZLS_ELIDE_
-    * UNTOUCHED, default on) LOAD/STORE ones. The pass may drop its
-    * depth/stencil attachment from every control stream when no draw or
-    * clear in it tests, writes, bounds-tests or clears depth/stencil (see
-    * hk_g17p_zls_elide()). */
-   bool g17p_zls_elide_ok;
-   bool g17p_depth_touched;
+   /* Track depth and stencil independently: an untouched aspect can be
+    * removed from every stream even when the other aspect is cleared or
+    * used. NONE/NONE aspects must retain their memory contents; eliding
+    * untouched LOAD/STORE aspects also avoids redundant traffic.
+    */
+   VkImageAspectFlags g17p_zls_elide_mask;
+   VkImageAspectFlags g17p_zls_touched;
+
+   /* Of the touched aspects, those a draw or clear may have changed. A pass
+    * that only tests an elidable aspect leaves its memory contents as they
+    * were, so it keeps the load and drops the store
+    * (hk_g17p_zls_elide_store()).
+    */
+   VkImageAspectFlags g17p_zls_written;
+
+   /* AGX3 dead depth store: the "only" ZLS word with the depth store
+    * dropped, and whether the pass processes empty tiles without that store,
+    * for a later pass that makes the store dead (hk_take_pending_z_store()).
+    * Valid when no_z_store_ok. */
+   bool no_z_store_ok;
+   bool process_empty_tiles_without_z;
+   struct agx_zls_control_packed zls_control_only_no_z_store;
+
+   /* G17P: colour attachments a draw or clear of the pass may write, and
+    * whether a fragment shader reads the tilebuffer. See
+    * hk_g17p_elide_untouched_color(). */
+   uint8_t color_written;
+   bool color_read;
+
+   /* G17P: the pass's first draw was seen, and the colour attachments it
+    * overwrote at every sample before anything could read them. See
+    * hk_g17p_note_first_draw(). */
+   bool first_draw_seen;
+   uint8_t color_covered;
 };
 
 struct hk_index_buffer_state {
@@ -494,6 +554,9 @@ struct hk_g17p_vdm_update_key {
 };
 
 struct hk_graphics_state {
+   /* A bound graphics program writes external memory. */
+   bool shaders_write_memory;
+
    struct hk_rendering_state render;
    struct hk_descriptor_state descriptors;
 
@@ -630,6 +693,10 @@ struct hk_graphics_state {
       struct hk_shader *shader;
       struct hk_fast_link_key_fs key;
       bool valid;
+      /* Colour attachments the linked fragment program writes, and whether
+       * it reads the tilebuffer. */
+      uint8_t color_written;
+      bool reads_tib;
    } fast_link_fs;
 
    /* Exact last VS/FS loader identities. These are recording-only selectors;
@@ -667,6 +734,9 @@ struct hk_graphics_state {
    struct {
       uint64_t out_draws;
       uint64_t grids;
+      /* Direct thread count bounding the TES-before-GS kernel of this draw,
+       * or 0 to use the indirect grid (hk_tes_direct_query_threads()). */
+      uint32_t tes_direct_threads;
       struct hk_tess_info info;
       enum mesa_prim prim;
    } tess;
@@ -791,6 +861,30 @@ struct hk_cs {
    bool gen1_native_fragment_rq;
    bool gen1_native_vertex_rq;
 
+   /* At least one AS-build dispatch or compute transfer is in this stream. */
+   bool as_build;
+
+   /* M5: a later render pass instance continues in this stream
+    * (hk_m5_pass_merge_begin()); its draws may not share the stream's
+    * committed sample locations (hk_flush_gfx_state()). */
+   bool m5_continued_pass;
+
+   /* A graphics program recorded in this stream writes external memory. */
+   bool m5_shader_writes_memory;
+
+   /* M5: the continued instance was ordered after this stream's earlier work
+    * by a dependency that is not framebuffer-local (hk_m5_pass_merge_begin()).
+    * While this is the open render stream, every draw recorded into it must
+    * leave the merge memory-equivalent to the two separate instances, or the
+    * stream ends first (hk_m5_ordered_draw_hazard()). */
+   bool m5_ordered;
+
+   /* M5: every attachment of the continued instances is in an
+    * attachment-only layout, so no descriptor can access one of them and
+    * descriptor sets bound for graphics need not end an ordered continuation
+    * (hk_m5_attachments_exclude_descriptors()). */
+   bool m5_layout_proof;
+
    /* Scratch requirements */
    struct {
       union {
@@ -826,9 +920,17 @@ struct hk_cs {
     * pass, not a part split off or continued. */
    bool g17p_pass_begins, g17p_pass_ends;
 
+   /* Consecutive GPU query resets share one strong flush, at the first
+    * consumer or the end of the stream. G13 never sets this. */
+   bool query_reset_pending;
+
    /* Statistics */
    struct {
       uint32_t calls, cmds, flushes, merged;
+      uint64_t query_copy_dispatches, query_copy_queries, query_copy_counters;
+      uint64_t query_reset_dispatches, query_reset_queries, query_reset_flushes;
+      uint32_t robust_index_draws, robust_index_dispatches,
+         robust_index_batches;
    } stats;
 
    /* Timestamp writes: the start of the command (compute start, render
@@ -882,12 +984,14 @@ struct hk_cs {
     * attachment command must travel with the control stream it describes. */
    struct hk_drm_attachment_set fragment_attachments;
 
-   /* Active restart index if one is set. Zero if there is no restart index set
-    * yet, since Vulkan does not allow zero restart indices (unlike OpenGL).
+   /* The restart index last emitted to this stream, valid once
+    * restart_index_set. VK_EXT_primitive_restart_index makes every value,
+    * zero included, a legal custom index, so no value can mean "unset".
     * This is used in place of dirty tracking, because dirty tracking
     * restart indices is complicated and just checking the saved value is cheap.
     */
    uint32_t restart_index;
+   bool restart_index_set;
 };
 
 static inline unsigned
@@ -984,6 +1088,7 @@ hk_cs_merge_cdm(struct hk_cs *a, const struct hk_cs *b)
 
    a->uses_sampler_heap |= b->uses_sampler_heap;
    a->gen1_native_rq |= b->gen1_native_rq;
+   a->as_build |= b->as_build;
    a->scratch.cs.main |= b->scratch.cs.main;
    a->scratch.cs.preamble |= b->scratch.cs.preamble;
 
@@ -1009,7 +1114,17 @@ hk_cs_merge_cdm(struct hk_cs *a, const struct hk_cs *b)
    a->stats.calls += b->stats.calls;
    a->stats.cmds += b->stats.cmds;
    a->stats.flushes += b->stats.flushes;
+   a->stats.robust_index_draws += b->stats.robust_index_draws;
+   a->stats.robust_index_dispatches += b->stats.robust_index_dispatches;
+   a->stats.robust_index_batches += b->stats.robust_index_batches;
    a->stats.merged++;
+   a->stats.query_copy_dispatches += b->stats.query_copy_dispatches;
+   a->stats.query_copy_queries += b->stats.query_copy_queries;
+   a->stats.query_copy_counters += b->stats.query_copy_counters;
+   a->stats.query_reset_dispatches += b->stats.query_reset_dispatches;
+   a->stats.query_reset_queries += b->stats.query_reset_queries;
+   a->stats.query_reset_flushes += b->stats.query_reset_flushes;
+   assert(!a->query_reset_pending && !b->query_reset_pending);
 }
 
 static inline uint64_t
@@ -1060,6 +1175,8 @@ struct hk_gen1_as_table_chunk {
    uint32_t next, count;
 };
 
+#define HK_MAX_DEFERRED_CLEARS 8
+
 struct hk_cmd_buffer {
    struct vk_command_buffer vk;
 
@@ -1075,10 +1192,80 @@ struct hk_cmd_buffer {
    bool g17p_pristine;
 
    struct {
+      struct hk_upload_stats upload_stats;
+      struct {
+         uint64_t id, addr;
+      } constant_data[MESA_SHADER_STAGES];
       struct hk_graphics_state gfx;
       struct hk_compute_state cs;
       struct hk_ray_tracing_state rt;
       struct hk_conditional_render_state conditional;
+
+      /* Whole-image clears not yet recorded, see
+       * hk_flush_deferred_clears(). */
+      struct hk_deferred_clear {
+         struct hk_image *image;
+         VkImageAspectFlags aspects;
+         VkClearValue value;
+      } deferred_clear[HK_MAX_DEFERRED_CLEARS];
+      uint8_t deferred_clear_count;
+      bool deferred_clear_flushing;
+      /* Recording a buffer-only command that does not touch their memory. */
+      bool deferred_clear_hold;
+
+      /* Suppress consumption of pending resets while recording another reset. */
+      bool query_reset_recording;
+
+      /* Scoped around direct/indirect AS builds, including their meta blits. */
+      bool as_build_recording;
+
+      /* AGX3: the last render pass instance stored a whole depth-only image
+       * that nothing recorded since may have read. A later instance that
+       * clears the whole image, or does not care about its contents, makes
+       * that store dead (hk_take_pending_z_store()). Kept across exactly the
+       * commands deferred clears survive (deferred_clear_hold). */
+      struct hk_pending_z_store {
+         struct hk_cs *cs;
+         const struct hk_image *image;
+         struct agx_zls_control_packed zls_control;
+         bool process_empty_tiles;
+      } pending_z_store;
+      /* M5: the render pass instance that ended last, while the next one may
+       * continue in its render stream instead of storing and reloading the
+       * attachments (hk_m5_pass_merge_begin()). */
+      struct hk_pass_merge_candidate {
+         bool valid;
+         /* The instance's single render stream, where its draws ended and
+          * where its terminator left the stream and chunk. */
+         struct hk_cs *cs;
+         void *resume_current;
+         void *after_current;
+         void *end;
+         /* The tracked state when the instance ended; the next instance may
+          * continue only if none of it moved. */
+         uint32_t next_seq;
+         uint32_t sync_epoch;
+         struct hk_cs *open_cs;
+         void *open_cs_current;
+         /* A recorded dependency orders the next instance after this one
+          * beyond attachment operations; continuing then needs the stronger
+          * conditions of hk_m5_ordered_refusal(). */
+         bool ordered;
+         /* The render state the instance ended with. */
+         struct hk_rendering_state render;
+      } pass_merge;
+
+      /* M5: the open render stream is an ordered continuation (hk_cs::
+       * m5_ordered) and a command recorded since may read the instance's
+       * attachments through memory; the next draw ends the stream first. */
+      bool m5_ordered_split;
+
+      /* Per recording; reported at submission so reused command buffers are
+       * counted each time. Reasons overlap, total counts physical splits. */
+      struct {
+         uint64_t kept, splits;
+         uint64_t reason[HK_BARRIER_SPLIT_COUNT];
+      } barrier_stats;
    } state;
 
    struct {
@@ -1121,6 +1308,9 @@ struct hk_cmd_buffer {
     * instance footprint, in recording order. Cleared by hk_sync_reset. */
    struct util_dynarray sync_pass_records;
 
+   /* struct hk_oq_end for every occlusion query this command buffer ends. */
+   struct util_dynarray oq_ends;
+
    /* Are we currently inside a vk_meta operation? This alters sample location
     * behaviour.
     */
@@ -1155,6 +1345,12 @@ struct hk_cmd_buffer {
    uint32_t retained_set_capacity;
    uint32_t retained_set_count;
 
+   /* M5: every attachment-capable image (hk_image) a graphics push descriptor
+    * has referenced since recording began. Push descriptors stay valid until
+    * overwritten, so an image recorded here may still be readable by the
+    * bound shaders (hk_m5_ordered_refusal()). Created on first use. */
+   struct set *m5_pushed_images;
+
    /* Executable USC-window arena the G17P Ioto programs recorded by this
     * command buffer are bump-allocated from. Its chunks are owned by
     * large_bos, so it dies with the recording like every other program
@@ -1169,14 +1365,41 @@ struct hk_cmd_buffer {
 static inline void
 hk_sync_xfer_begin(struct hk_cmd_buffer *cmd)
 {
-   cmd->sync.xfer_depth++;
+   /* An outermost transfer without a known destination may write anything
+    * (hk_sync_note_xfer_write()). */
+   if (cmd->sync.xfer_depth++ == 0)
+      cmd->sync.xfer_dst = (struct hk_sync_xfer_dst){0};
+}
+
+/* As hk_sync_xfer_begin(), for a transfer whose writes stay inside the GPU
+ * VA range [lo, hi). device_address says shaders may also reach the range
+ * through a buffer device address. A nested transfer widens the range of the
+ * outermost one. */
+static inline void
+hk_sync_xfer_begin_dst(struct hk_cmd_buffer *cmd, uint64_t lo, uint64_t hi,
+                       bool device_address)
+{
+   struct hk_sync_xfer_dst *dst = &cmd->sync.xfer_dst;
+   if (cmd->sync.xfer_depth++ == 0) {
+      *dst = (struct hk_sync_xfer_dst){
+         .lo = lo,
+         .hi = hi,
+         .valid = lo < hi,
+         .device_address = device_address,
+      };
+   } else if (dst->valid) {
+      dst->lo = MIN2(dst->lo, lo);
+      dst->hi = MAX2(dst->hi, hi);
+      dst->device_address |= device_address;
+   }
 }
 
 static inline void
 hk_sync_xfer_end(struct hk_cmd_buffer *cmd)
 {
    assert(cmd->sync.xfer_depth > 0);
-   cmd->sync.xfer_depth--;
+   if (--cmd->sync.xfer_depth == 0)
+      cmd->sync.xfer_dst = (struct hk_sync_xfer_dst){0};
 }
 
 /*
@@ -1486,14 +1709,50 @@ hk_pool_vdm_alloc(struct hk_cmd_buffer *cmd, uint32_t size, uint32_t alignment)
 
 bool hk_cs_init_graphics(struct hk_cmd_buffer *cmd, struct hk_cs *cs);
 /* A depth/stencil clear touched the pass's attachment (ZLS elision). */
-void hk_g17p_note_depth_clear(struct hk_cmd_buffer *cmd);
+void hk_g17p_note_depth_clear(struct hk_cmd_buffer *cmd,
+                              VkImageAspectFlags aspects);
 
 uint32_t hk_default_sample_positions(unsigned nr_samples);
+
+void hk_flush_deferred_clears(struct hk_cmd_buffer *cmd);
+
+/* The depth image of the pending store is overwritten as a whole before
+ * anything read it: the store is dead (see hk_take_pending_z_store()). */
+static inline void
+hk_kill_pending_z_store(struct hk_cmd_buffer *cmd)
+{
+   struct hk_pending_z_store *p = &cmd->state.pending_z_store;
+   p->cs->cr.zls_control = p->zls_control;
+   p->cs->cr.process_empty_tiles = p->process_empty_tiles;
+   p->cs = NULL;
+}
+void hk_deferred_clears_hold_buffer(struct hk_cmd_buffer *cmd, uint64_t addr,
+                                    uint64_t size);
+bool hk_defer_clear(struct hk_cmd_buffer *cmd, struct hk_image *image,
+                    VkImageAspectFlags aspects, const VkClearValue *value,
+                    uint32_t range_count, const VkImageSubresourceRange *ranges);
+const VkRenderingInfo *
+hk_take_deferred_clears(struct hk_cmd_buffer *cmd, const VkRenderingInfo *info,
+                        VkRenderingInfo *copy,
+                        VkRenderingAttachmentInfo *color,
+                        VkRenderingAttachmentInfo *depth,
+                        VkRenderingAttachmentInfo *stencil);
+
+void hk_flush_query_resets(struct hk_cmd_buffer *cmd, struct hk_cs *cs);
 
 static inline struct hk_cs *
 hk_cmd_buffer_get_cs_general(struct hk_cmd_buffer *cmd, struct hk_cs **ptr,
                              bool compute)
 {
+   /* Any recorded work may read an image with a deferred clear, or the
+    * depth image of a pending store. */
+   if (unlikely(cmd->state.deferred_clear_count) &&
+       !cmd->state.deferred_clear_flushing && !cmd->state.deferred_clear_hold)
+      hk_flush_deferred_clears(cmd);
+   if (unlikely(cmd->state.pending_z_store.cs) &&
+       !cmd->state.deferred_clear_hold)
+      cmd->state.pending_z_store.cs = NULL;
+
    if (vk_command_buffer_has_error(&cmd->vk))
       return NULL;
 
@@ -1562,6 +1821,16 @@ hk_cmd_buffer_get_cs_general(struct hk_cmd_buffer *cmd, struct hk_cs **ptr,
    }
 
    assert(*ptr != NULL);
+   if (compute && unlikely((*ptr)->query_reset_pending) &&
+       !cmd->state.query_reset_recording)
+      hk_flush_query_resets(cmd, *ptr);
+   if (compute && cmd->state.as_build_recording)
+      (*ptr)->as_build = true;
+   /* Transfer entry points also reuse an open CDM stream, so note each use,
+    * not just stream creation (hk_sync_note_xfer_write()). */
+   if (compute && unlikely(cmd->sync.xfer_depth) && !cmd->sync.in_pass &&
+       hk_cmd_buffer_device(cmd)->dev.chip == AGX_CHIP_G17P)
+      hk_sync_note_xfer_write(cmd, *ptr);
    return *ptr;
 }
 
@@ -1625,6 +1894,8 @@ hk_cmd_buffer_end_compute_internal(struct hk_cmd_buffer *cmd,
 {
    if (*ptr) {
       struct hk_cs *cs = *ptr;
+      if (unlikely(cs->query_reset_pending))
+         hk_flush_query_resets(cmd, cs);
 
       /* This control stream may write immediates as it ends. Queue the writes
        * now that we're done emitting everything else.
@@ -1658,7 +1929,8 @@ hk_cmd_buffer_end_compute(struct hk_cmd_buffer *cmd)
  * graphics finalization (for example, a native background clear). */
 bool hk_optimize_empty_vdm(struct hk_cmd_buffer *cmd);
 
-static void
+/* Return whether a physical render was finalized (empty renders can vanish). */
+static bool
 hk_cmd_buffer_end_graphics(struct hk_cmd_buffer *cmd)
 {
    struct hk_cs *cs = cmd->current_cs.gfx;
@@ -1703,6 +1975,7 @@ hk_cmd_buffer_end_graphics(struct hk_cmd_buffer *cmd)
     * to queue a free for it again.
     */
    cmd->uses_heap = false;
+   return cs != NULL;
 }
 
 static inline uint64_t
@@ -1733,6 +2006,30 @@ hk_stat_enabled(uint64_t addr)
 {
    return addr != AGX_SCRATCH_PAGE_ADDRESS;
 }
+
+/* M5 render pass continuation (hk_cmd_draw.c): a pipeline barrier recorded
+ * while an ended instance is still continuable decides whether the next one
+ * may continue in its stream. */
+void hk_m5_pass_merge_barrier(struct hk_cmd_buffer *cmd,
+                              const VkDependencyInfo *info);
+
+/* An ordered continuation (hk_cs::m5_ordered) ends at a command that may
+ * break its memory equivalence (reason names the command). */
+void hk_m5_pass_merge_end_ordered(struct hk_cmd_buffer *cmd,
+                                  const char *reason);
+
+/* Graphics descriptor updates while an ordered continuation is open, and
+ * bookkeeping of the images graphics push descriptors reference. */
+void hk_m5_pass_merge_note_push(struct hk_cmd_buffer *cmd,
+                                struct hk_image_view *iview);
+void hk_m5_pass_merge_note_set_bind(struct hk_cmd_buffer *cmd);
+
+/* The vertex stage program of record draw_id > 0 of a multi-draw
+ * (hk_cmd_buffer.c): only the draw parameters and draw index may differ from
+ * the program the previous record of the same multi-draw published. */
+uint64_t hk_m5_multi_draw_vertex_program(struct hk_cmd_buffer *cmd,
+                                         struct hk_shader *s,
+                                         struct hk_linked_shader *linked);
 
 void hk_cmd_buffer_begin_graphics(struct hk_cmd_buffer *cmd,
                                   const VkCommandBufferBeginInfo *pBeginInfo);
@@ -1778,6 +2075,14 @@ void hk_cmd_buffer_flush_push_descriptors(struct hk_cmd_buffer *cmd,
 void hk_meta_resolve_rendering(struct hk_cmd_buffer *cmd,
                                const VkRenderingInfo *pRenderingInfo);
 
+void hk_cmd_upload_draw_params(struct hk_cmd_buffer *cmd, uint32_t first,
+                               uint32_t first_instance);
+void hk_cmd_upload_draw_id(struct hk_cmd_buffer *cmd, uint32_t draw_id);
+uint64_t hk_cmd_upload_constants(struct hk_cmd_buffer *cmd,
+                                 const struct hk_shader *shader,
+                                 mesa_shader_stage stage);
+void hk_cmd_print_upload_stats(struct hk_cmd_buffer *cmd);
+
 uint64_t hk_cmd_buffer_upload_root(struct hk_cmd_buffer *cmd,
                                    VkPipelineBindPoint bind_point);
 
@@ -1799,6 +2104,14 @@ hk_reserve_scratch(struct hk_cmd_buffer *cmd, struct hk_cs *cs,
       return;
 
    hk_reserve_scratch_slow(cmd, cs, s);
+}
+
+/* Whether image barriers of the command buffer order only the vertex work
+ * that reads images (hk_sync.h, HK_SYNC_GFX_IMG). */
+static inline bool
+hk_sync_image_class(const struct hk_cmd_buffer *cmd)
+{
+   return hk_cmd_buffer_device(cmd)->dev.chip == AGX_CHIP_G17P;
 }
 
 /* AGX2 returns its shader-base-relative USC offset.  G17P returns the absolute
@@ -1948,9 +2261,6 @@ void hk_g17p_meta_fill_addr(struct hk_cmd_buffer *cmd, struct hk_cs **target,
  * stream until it reaches value. */
 void hk_g17p_meta_wait_addr(struct hk_cmd_buffer *cmd, uint64_t address,
                             uint32_t value);
-void hk_native_meta_copy_query(struct hk_cmd_buffer *cmd, uint64_t destination,
-                               uint64_t source, uint64_t availability,
-                               VkQueryResultFlags flags);
 
 void agx_fill_velem_keys(const struct vk_vertex_input_state *vi,
                          uint64_t attribs_read, struct agx_velem_key *keys);

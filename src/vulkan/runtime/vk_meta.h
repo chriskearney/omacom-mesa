@@ -93,6 +93,14 @@ struct vk_meta_copy_image_properties {
     * driver uses the aspect to select separate backing planes. */
    bool depth_stencil_aspect_views;
 
+   /* When this image is the source of a graphics-path image copy, view only
+    * the copied array layers (3D slices as a 2D array), so the copy shader
+    * addresses them from layer zero, rather than every layer of the image.
+    * For drivers whose views of the image cannot address all of its layers,
+    * such as uncompressed views of block-compressed images.
+    */
+   bool copied_layers_src_view;
+
    /* Size of the image tile. Used to select the optimal workgroup size. */
    VkExtent3D tile_size;
 };

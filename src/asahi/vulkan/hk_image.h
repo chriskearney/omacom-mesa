@@ -94,6 +94,22 @@ hk_image_base_address(const struct hk_image *image, uint8_t plane)
    return hk_image_plane_base_address(&image->planes[plane]);
 }
 
+/* The GPU VA range [*lo, *hi) covering every bound plane of the image. Empty
+ * (*lo >= *hi) while no plane is bound. */
+static inline void
+hk_image_va_range(const struct hk_image *image, uint64_t *lo, uint64_t *hi)
+{
+   *lo = UINT64_MAX;
+   *hi = 0;
+   for (unsigned p = 0; p < image->plane_count; ++p) {
+      const struct hk_image_plane *plane = &image->planes[p];
+      if (!plane->addr)
+         continue;
+      *lo = MIN2(*lo, plane->addr);
+      *hi = MAX2(*hi, plane->addr + plane->layout.size_B);
+   }
+}
+
 /* Packed 4:2:2 contains two luma samples and one pair of chroma samples
  * per four-component word. The shader reconstructs the full-resolution texels. */
 static inline unsigned
@@ -205,6 +221,19 @@ hk_split_depth_stencil(VkFormat format)
           format == VK_FORMAT_D16_UNORM_S8_UINT;
 }
 
+/* Neither packed float representation round-trips all storage bits through
+ * float channels (NaN payloads in R11G11B10, shared exponents in RGB9E5).
+ * AGX2 transfers use an R32_UINT view instead. Such a view requires an
+ * uncompressed image: lossless compression is channel-class dependent.
+ */
+static inline bool
+hk_agx2_packed_float_copy(enum agx_chip chip, VkFormat format)
+{
+   return agx_chip_isa_encoding(chip) == AGX_ISA_ENCODING_AGX2 &&
+          (format == VK_FORMAT_B10G11R11_UFLOAT_PACK32 ||
+           format == VK_FORMAT_E5B9G9R9_UFLOAT_PACK32);
+}
+
 static inline VkFormat
 hk_depth_stencil_plane_format(VkFormat format, unsigned plane)
 {
@@ -244,7 +273,7 @@ hk_image_aspects_to_plane(const struct hk_image *image,
 struct agx_device;
 bool hk_can_compress_format(const struct agx_device *dev, VkFormat format);
 
-/* DRM_FORMAT_MOD_APPLE_INTERCHANGE_COMPRESSED: G17P-only, single-level,
+/* DRM_FORMAT_MOD_APPLE_INTERCHANGE: G17P-only, single-level,
  * single-layer, single-sample 2D colour images of the 32-bit RGBA formats
  * the display coprocessor scans out.  pNext may be NULL (format queries). */
 bool hk_interchange_format(const struct agx_device *dev, VkFormat format);

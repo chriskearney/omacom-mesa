@@ -51,10 +51,15 @@ extern "C" {
 /*
  * maxRayRecursionDepth.  Recursion is unrolled into the megakernel at compile
  * time, so every extra level multiplies the compiled code; this is a code-size
- * decision, not a hardware limit.  A pipeline asking for more is refused
- * rather than silently given a shader that traces one level and stops.
+ * decision, not a hardware limit. Keep the legacy limit unchanged.
  */
 #define HK_MAX_RAY_RECURSION_DEPTH 3
+/* KHR requires at least one level (the NV extension required 31).
+ * G17P inlines traversal at every depth; three is the supported bound
+ * until the compiler can share trace continuations. */
+#define HK_G17P_MAX_RAY_RECURSION_DEPTH 3
+/* Defensive ceiling for invalid requests from older stage-library clients. */
+#define HK_G17P_MAX_REQUESTED_RAY_RECURSION_DEPTH 31
 
 #define HK_RT_WORKGROUP_SIZE_X      32
 #define HK_RT_WORKGROUP_SIZE_X_LOG2 5

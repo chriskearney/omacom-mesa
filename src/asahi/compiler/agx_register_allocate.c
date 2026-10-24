@@ -413,9 +413,23 @@ dest_minimum(const struct ra_ctx *rctx, const agx_instr *I, unsigned d)
 static bool
 ssa_has_bank_constraint(const struct ra_ctx *rctx, unsigned ssa)
 {
-   return BITSET_TEST(rctx->low_gpr, ssa) ||
-          BITSET_TEST(rctx->texture_gpr, ssa) ||
-          BITSET_TEST(rctx->log2_gpr, ssa) ||
+   if (rctx->shader->key->dev.chip != AGX_CHIP_G17P ||
+       rctx->shader->key->dev.encoding != AGX_ISA_ENCODING_AGX3B)
+      return BITSET_TEST(rctx->low_gpr, ssa) ||
+             BITSET_TEST(rctx->texture_gpr, ssa) ||
+             BITSET_TEST(rctx->log2_gpr, ssa) ||
+             BITSET_TEST(rctx->high_gpr, ssa);
+
+   /* A bank restriction cannot prevent relocation when the complete register
+    * file fits inside that bank. In particular, pinning a texture coordinate
+    * in a 112-half allocation can strand the only partly free eight-half
+    * region, even though every possible new home satisfies its 128-half
+    * encoding limit. Keep the restriction for genuinely narrower banks.
+    */
+   const unsigned bound = rctx->bound[RA_GPR];
+   return (BITSET_TEST(rctx->low_gpr, ssa) && bound > rctx->tile_gpr_limit) ||
+          (BITSET_TEST(rctx->texture_gpr, ssa) && bound > 128) ||
+          (BITSET_TEST(rctx->log2_gpr, ssa) && bound > 192) ||
           BITSET_TEST(rctx->high_gpr, ssa);
 }
 
@@ -856,9 +870,9 @@ sort_by_size(const void *a_, const void *b_, void *sizes_)
  * the same registers again from whatever the predecessor held there -- a
  * duplicate parallel-copy destination, or without assertions a clobbered
  * value. Phis not yet given a register (the one being allocated and those
- * after it) cannot hold a moved value. agx_as_register() of one is an
- * assertion failure, and without assertions a comparison against a stale
- * register field that can silently drop a copy.
+ * after it that were not assigned up front) cannot hold a moved value.
+ * agx_as_register() of one is an assertion failure, and without assertions a
+ * comparison against a stale register field that can silently drop a copy.
  */
 static void
 agx_emit_moves_before_phi(struct ra_ctx *rctx, agx_block *block,
@@ -947,6 +961,38 @@ static bool
 pick_transient_texture_region(struct ra_ctx *rctx, agx_instr *I, unsigned d,
                               unsigned count, unsigned standard, unsigned *out);
 
+/*
+ * G17P texture and image results, texture coordinates and moves from the
+ * uniform file name seven-bit half-register fields, so they live in halves
+ * 0..127. Lowest first, every other value lands there too, and in a shader at
+ * the limit of the register file each constrained definition then evicts an
+ * unconstrained value from the low bank. The moved values sit in different
+ * registers on the two sides of the next merge, which costs a copy per value
+ * at the join.
+ *
+ * Once a shader spills, every register up to the bound is in use somewhere,
+ * so where a value goes no longer changes the register count. Put values
+ * without a bank constraint above the low bank there, within the registers
+ * already used, unless they feed a low-bank collect.
+ */
+#define G17P_LOW_BANK_HALVES 128
+
+static bool
+prefer_high_bank(const struct ra_ctx *rctx, const agx_instr *I, unsigned d,
+                 enum ra_class cls, unsigned minimum, unsigned limit)
+{
+   if (rctx->shader->key->dev.chip != AGX_CHIP_G17P ||
+       !rctx->shader->has_spill_pcopy_reserved || cls != RA_GPR ||
+       minimum != 0 || limit != rctx->bound[cls] ||
+       limit <= G17P_LOW_BANK_HALVES ||
+       ssa_has_bank_constraint(rctx, I->dest[d].value))
+      return false;
+
+   const agx_instr *use = rctx->src_to_collect_phi[I->dest[d].value];
+   return !use || use->op != AGX_OPCODE_COLLECT ||
+          dest_limit(rctx, use, 0) > G17P_LOW_BANK_HALVES;
+}
+
 static unsigned
 find_regs(struct ra_ctx *rctx, agx_instr *I, unsigned dest_idx, unsigned count,
           unsigned align)
@@ -958,7 +1004,12 @@ find_regs(struct ra_ctx *rctx, agx_instr *I, unsigned dest_idx, unsigned count,
    unsigned minimum = dest_minimum(rctx, I, dest_idx);
    unsigned limit = dest_limit(rctx, I, dest_idx);
 
-   bool simple = find_regs_simple(rctx, cls, count, align, minimum, limit, &reg);
+   bool simple = prefer_high_bank(rctx, I, dest_idx, cls, minimum, limit) &&
+                 find_regs_simple(rctx, cls, count, align,
+                                  G17P_LOW_BANK_HALVES,
+                                  MIN2(*rctx->count[cls], limit), &reg);
+   if (!simple)
+      simple = find_regs_simple(rctx, cls, count, align, minimum, limit, &reg);
    unsigned transient;
    if (pick_transient_texture_region(rctx, I, dest_idx, count,
                                     simple ? reg : ~0u, &transient)) {
@@ -1347,6 +1398,90 @@ pick_phi_edge_affinity(struct ra_ctx *rctx, agx_instr *I, unsigned d,
    return true;
 }
 
+/*
+ * A phi whose incoming values all arrive in the same register needs no copy on
+ * any edge when it is allocated there as well. The phi web only remembers the
+ * register of its first allocated member, which need not be where the incoming
+ * values ended up, so this takes precedence over the web. Loop headers do not
+ * know their back edge yet and keep following the web.
+ */
+static bool
+pick_phi_source_agreement(struct ra_ctx *rctx, agx_instr *I, unsigned *out)
+{
+   if (I->op != AGX_OPCODE_PHI ||
+       rctx->shader->key->dev.chip != AGX_CHIP_G17P)
+      return false;
+
+   enum ra_class cls = ra_class_for_index(I->dest[0]);
+   unsigned count = rctx->ncomps[I->dest[0].value];
+   unsigned reg = ~0u;
+
+   agx_foreach_ssa_src(I, s) {
+      if (!I->src[s].has_reg || ra_class_for_index(I->src[s]) != cls ||
+          (reg != ~0u && I->src[s].reg != reg))
+         return false;
+
+      reg = I->src[s].reg;
+   }
+
+   if (reg == ~0u || (reg % count) || reg < dest_minimum(rctx, I, 0) ||
+       reg + count > dest_limit(rctx, I, 0) ||
+       BITSET_TEST_COUNT(rctx->used_regs[cls], reg, count))
+      return false;
+
+   *out = reg;
+   return true;
+}
+
+/*
+ * The incoming values of a block's phis die on the edge, so their registers
+ * are free while the phis are assigned. In a block with many phis, the lowest
+ * free register is then usually where the incoming value of a phi assigned
+ * later sits, and taking it forces that phi off its own input. When a phi has
+ * no affinity left to follow, prefer a register no unassigned phi of the block
+ * is receiving.
+ */
+static bool
+pick_phi_unclaimed(struct ra_ctx *rctx, agx_instr *I, unsigned d,
+                   unsigned count, unsigned align, unsigned *out)
+{
+   if (I->op != AGX_OPCODE_PHI ||
+       rctx->shader->key->dev.chip != AGX_CHIP_G17P)
+      return false;
+
+   enum ra_class cls = ra_class_for_index(I->dest[d]);
+   BITSET_DECLARE(claimed, AGX_NUM_MODELED_REGS) = {0};
+   bool any = false;
+
+   agx_foreach_phi_in_block(rctx->block, other) {
+      if (other == I || other->dest[0].type != AGX_INDEX_NORMAL ||
+          other->dest[0].has_reg)
+         continue;
+
+      agx_foreach_ssa_src(other, s) {
+         agx_index src = other->src[s];
+         if (src.has_reg && ra_class_for_index(src) == cls) {
+            BITSET_SET_COUNT(claimed, src.reg, rctx->ncomps[src.value]);
+            any = true;
+         }
+      }
+   }
+
+   if (!any)
+      return false;
+
+   for (unsigned reg = ALIGN_POT(dest_minimum(rctx, I, d), align);
+        reg + count <= dest_limit(rctx, I, d); reg += align) {
+      if (!BITSET_TEST_COUNT(rctx->used_regs[cls], reg, count) &&
+          !BITSET_TEST_COUNT(claimed, reg, count)) {
+         *out = reg;
+         return true;
+      }
+   }
+
+   return false;
+}
+
 static unsigned
 pick_regs(struct ra_ctx *rctx, agx_instr *I, unsigned d)
 {
@@ -1379,7 +1514,8 @@ pick_regs(struct ra_ctx *rctx, agx_instr *I, unsigned d)
        dest_limit(rctx, I, d) < rctx->bound[cls]) {
       unsigned out;
       if (pick_bank_affinity(rctx, I, d, count, align, &out) ||
-          pick_phi_edge_affinity(rctx, I, d, count, align, &out))
+          pick_phi_edge_affinity(rctx, I, d, count, align, &out) ||
+          pick_phi_unclaimed(rctx, I, d, count, align, &out))
          return out;
       return find_regs(rctx, I, d, count, align);
    }
@@ -1492,6 +1628,10 @@ pick_regs(struct ra_ctx *rctx, agx_instr *I, unsigned d)
             return base;
       }
    }
+
+   unsigned unclaimed;
+   if (pick_phi_unclaimed(rctx, I, d, count, align, &unclaimed))
+      return unclaimed;
 
    /* Default to any contiguous sequence of registers */
    return find_regs(rctx, I, d, count, align);
@@ -1944,6 +2084,19 @@ agx_ra_assign_local(struct ra_ctx *rctx)
    /* Reserve bottom registers as temporaries for parallel copy lowering */
    if (rctx->shader->has_spill_pcopy_reserved) {
       BITSET_SET_COUNT(used_regs_gpr, 0, 8);
+   }
+
+   /* Assign phis whose incoming values all arrive in one free register first,
+    * so that no phi before them in the block can take that register. The loop
+    * below skips them.
+    */
+   agx_foreach_phi_in_block(block, phi) {
+      unsigned reg;
+      if (phi->dest[0].type == AGX_INDEX_NORMAL && !phi->dest[0].has_reg &&
+          pick_phi_source_agreement(rctx, phi, &reg)) {
+         assign_regs(rctx, phi->dest[0], reg);
+         agx_set_dests(rctx, phi);
+      }
    }
 
    agx_foreach_instr_in_block(block, I) {

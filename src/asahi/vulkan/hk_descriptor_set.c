@@ -93,12 +93,6 @@ write_accel_struct_desc(struct hk_descriptor_set *set,
    VK_FROM_HANDLE(vk_acceleration_structure, accel_struct, _accel_struct);
    uint64_t addr =
       accel_struct ? vk_acceleration_structure_get_va(accel_struct) : 0;
-   if (accel_struct) {
-      struct hk_device *dev = container_of(accel_struct->base.device,
-                                             struct hk_device, vk);
-      if (dev->g17p_native_as)
-         addr = ALIGN_POT(addr, UINT64_C(16384));
-   }
 
    write_desc(set, binding, elem, &addr, sizeof(addr));
 }
@@ -794,6 +788,7 @@ hk_push_descriptor_set_update(struct hk_push_descriptor_set *push_set,
    memcpy(push_set->layout_hash, layout->vk.blake3,
           sizeof(push_set->layout_hash));
    push_set->layout_flags = layout->vk.flags;
+   push_set->size = layout->non_variable_descriptor_buffer_size;
    assert(layout->non_variable_descriptor_buffer_size < sizeof(push_set->data));
    struct hk_descriptor_set set = {
       .layout = layout,
@@ -1324,6 +1319,7 @@ hk_push_descriptor_set_update_template(
    memcpy(push_set->layout_hash, layout->vk.blake3,
           sizeof(push_set->layout_hash));
    push_set->layout_flags = layout->vk.flags;
+   push_set->size = layout->non_variable_descriptor_buffer_size;
    struct hk_descriptor_set tmp_set = {
       .layout = layout,
       .size = sizeof(push_set->data),

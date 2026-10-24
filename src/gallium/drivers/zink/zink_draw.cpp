@@ -544,6 +544,9 @@ zink_draw(struct pipe_context *pctx,
       zink_rebind_all_images(ctx);
    }
 
+   if (unlikely(ctx->lazy_feedback_dirty) && !ctx->blitting)
+      zink_update_lazy_feedback_loops(ctx);
+
    unsigned index_offset = 0;
    unsigned index_size = dinfo->index_size;
    struct pipe_resource *index_buffer = NULL;
@@ -1020,6 +1023,9 @@ zink_draw_mesh_tasks(struct pipe_context *pctx, const struct pipe_grid_info *inf
       ctx->image_rebind_counter = screen->image_rebind_counter;
       zink_rebind_all_images(ctx);
    }
+
+   if (unlikely(ctx->lazy_feedback_dirty) && !ctx->blitting)
+      zink_update_lazy_feedback_loops(ctx);
 
    if (info->indirect) {
       check_buffer_barrier(ctx, info->indirect,

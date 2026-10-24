@@ -163,6 +163,7 @@ agx_batch_init(struct agx_context *ctx,
    batch->g17p_resolve_preserve = key->resolve != NULL;
    batch->seqnum = ++ctx->batches.seqnum;
    batch->g17p_fragment_program = 0;
+   batch->vs_root_valid = false;
    batch->g17p_emrt_heap = 0;
    batch->g17p_fragment_shader = NULL;
    batch->g17p_fragment_linked = NULL;
@@ -172,14 +173,13 @@ agx_batch_init(struct agx_context *ctx,
    agx_pool_init(&batch->pipeline_pool, dev, "Batch executable low VA pool",
                  AGX_BO_LOW_VA | AGX_BO_EXEC, true);
 
-   /* These allocations can happen only once and will just be zeroed (not freed)
-    * during batch clean up. The memory is owned by the context.
-    */
+   /* Reuse storage across batches; both allocations are context-owned. */
    if (!batch->bo_list.set) {
-      batch->bo_list.set = rzalloc_array(ctx, BITSET_WORD, 128);
-      batch->bo_list.bit_count = 128 * sizeof(BITSET_WORD) * 8;
+      batch->bo_list.set = _mesa_pointer_set_create(ctx);
+      util_dynarray_init(&batch->bo_list.list, ctx);
    } else {
-      memset(batch->bo_list.set, 0, batch->bo_list.bit_count / 8);
+      _mesa_set_clear(batch->bo_list.set, NULL);
+      util_dynarray_clear(&batch->bo_list.list);
    }
 
    if (agx_batch_is_compute(batch)) {
@@ -282,6 +282,7 @@ agx_batch_cleanup(struct agx_context *ctx, struct agx_batch *batch, bool reset)
    struct agx_screen *screen = agx_screen(ctx->base.screen);
 
    assert(batch->ctx == ctx);
+   assert(!batch->submit_quarantined);
    assert(agx_batch_is_submitted(batch));
 
    assert(ctx->batch != batch);
@@ -336,17 +337,18 @@ agx_batch_cleanup(struct agx_context *ctx, struct agx_batch *batch, bool reset)
    }
 
    if (reset) {
-      int handle;
-      AGX_BATCH_FOREACH_BO_HANDLE(batch, handle) {
+      AGX_BATCH_FOREACH_BO(batch, entry) {
+         struct agx_bo *bo = *entry;
+         unsigned handle = bo->handle;
          /* We should write no buffers if this is an empty batch */
          assert(agx_writer_get(ctx, handle) != batch);
 
-         agx_bo_unreference(dev, agx_lookup_bo(dev, handle));
+         agx_bo_unreference(dev, bo);
       }
    } else {
-      int handle;
-      AGX_BATCH_FOREACH_BO_HANDLE(batch, handle) {
-         struct agx_bo *bo = agx_lookup_bo(dev, handle);
+      AGX_BATCH_FOREACH_BO(batch, entry) {
+         struct agx_bo *bo = *entry;
+         unsigned handle = bo->handle;
 
          /* There is no more writer on this context for anything we wrote */
          struct agx_batch *writer = agx_writer_get(ctx, handle);
@@ -357,7 +359,7 @@ agx_batch_cleanup(struct agx_context *ctx, struct agx_batch *batch, bool reset)
          p_atomic_cmpxchg(&bo->writer,
                           agx_bo_writer(ctx->queue_id, batch->syncobj), 0);
 
-         agx_bo_unreference(dev, agx_lookup_bo(dev, handle));
+         agx_bo_unreference(dev, bo);
       }
    }
 
@@ -367,6 +369,7 @@ agx_batch_cleanup(struct agx_context *ctx, struct agx_batch *batch, bool reset)
    agx_pool_cleanup(&batch->pool);
    agx_pool_cleanup(&batch->pipeline_pool);
 
+   util_dynarray_clear(&batch->bo_list.list);
    util_dynarray_fini(&batch->scissor);
    util_dynarray_fini(&batch->depth_bias);
    util_dynarray_fini(&batch->timestamps);
@@ -392,6 +395,9 @@ agx_cleanup_batches(struct agx_context *ctx)
    uint32_t first = 0;
 
    foreach_submitted(ctx, i) {
+      if (ctx->batches.slots[i].submit_quarantined)
+         continue;
+
       batches[count] = &ctx->batches.slots[i];
       syncobjs[count++] = ctx->batches.slots[i].syncobj;
    }
@@ -451,6 +457,8 @@ agx_get_batch_for_framebuffer(struct agx_context *ctx,
    for (i = 0; i < AGX_MAX_BATCHES; ++i) {
       struct agx_batch *candidate = &ctx->batches.slots[i];
       bool cand_submitted = BITSET_TEST(ctx->batches.submitted, i);
+      if (candidate->submit_quarantined)
+         continue;
 
       /* Prefer submitted batches first */
       if (!cand_submitted && submitted)
@@ -716,7 +724,7 @@ agx_get_in_sync(struct agx_context *ctx, uint32_t *syncobj)
       /* A native-fence import can fail under transient kernel allocation
        * pressure. Waiting on the original sync file preserves the acquire
        * ordering without losing the submission or poisoning the context. */
-      if (ret && sync_wait(ctx->in_sync_fd, -1)) {
+      if (ret && agx_fallback_wait(ctx->in_sync_fd, "acquire import failed")) {
          agx_msg("native acquire fence import and fallback wait failed\n");
          close(ctx->in_sync_fd);
          ctx->in_sync_fd = -1;
@@ -771,12 +779,46 @@ agx_wait_shared_bo(struct agx_bo *bo)
    return drmIoctl(bo->prime_fd, DMA_BUF_IOCTL_SYNC, &sync) == 0;
 }
 
+/* A fresh private output distinguishes publication by this ioctl from a fence
+ * left in the reusable batch syncobj by an earlier generation. The supported
+ * kernel publishes an aggregate before enqueue, or a completed error fence if
+ * no work was accepted. Earlier failures can leave the output without a fence.
+ */
+static bool
+agx_wait_failed_submit(struct agx_device *dev, uint32_t syncobj, bool accepted)
+{
+   if (!syncobj)
+      return true;
+
+   if (!accepted) {
+      /* With a valid private handle, count=1, flags=0 and timeout=0,
+       * SYNCOBJ_WAIT returns EINVAL only for a missing fence. In particular,
+       * do not use sync-file export: it can also return EINVAL on allocation
+       * failure even when a fence exists.
+       */
+      int ret = drmSyncobjWait(dev->fd, &syncobj, 1, 0, 0, NULL);
+      if (ret == 0 || ret == -EINVAL)
+         return true;
+      if (ret != -ETIME)
+         return false;
+   }
+
+   int ret;
+   do {
+      ret = drmSyncobjWait(dev->fd, &syncobj, 1, INT64_MAX,
+                           DRM_SYNCOBJ_WAIT_FLAGS_WAIT_ALL, NULL);
+   } while (ret == -EINTR);
+
+   return ret == 0;
+}
+
 static void
 agx_retire_failed_submit(struct agx_context *ctx, struct agx_batch *batch,
                          struct drm_asahi_sync *syncs,
                          struct agx_shared_bo_sync *shared_bos,
                          unsigned shared_bo_count, void *extres,
-                         struct util_dynarray *cmdbuf, int error)
+                         struct util_dynarray *cmdbuf, int error,
+                         uint32_t accepted_syncobj, uint32_t error_syncobj)
 {
    struct agx_device *dev = agx_device(ctx->base.screen);
 
@@ -790,13 +832,35 @@ agx_retire_failed_submit(struct agx_context *ctx, struct agx_batch *batch,
    free(extres);
    util_dynarray_fini(cmdbuf);
 
-   /* No GPU work owns this batch. Retire its resources immediately and
-    * expose a context reset instead of leaving an unsignalled batch fence
-    * that can deadlock EGL, GBM, or a compositor during teardown. */
+   /* An ioctl error does not cancel accepted commands. Wait for both the
+    * failed ioctl's aggregate (if published) and any earlier split compute.
+    * Keep both handles alive until completion is established.
+    */
+   bool complete = agx_wait_failed_submit(dev, error_syncobj, false);
+   complete &= agx_wait_failed_submit(dev, accepted_syncobj, true);
+
+   /* Never put resources in the BO cache on an inconclusive wait. Keep the
+    * entire batch, its fences, context and screen until process exit. This
+    * deliberately trades memory on a lost context for avoiding GPU use after
+    * reuse, including on context/screen destruction. No command is replayed.
+    */
    if (ctx->batch == batch)
       ctx->batch = NULL;
    agx_batch_mark_submitted(batch);
-   agx_batch_cleanup(ctx, batch, false);
+   if (complete) {
+      if (accepted_syncobj)
+         drmSyncobjDestroy(dev->fd, accepted_syncobj);
+      if (error_syncobj)
+         drmSyncobjDestroy(dev->fd, error_syncobj);
+      agx_batch_cleanup(ctx, batch, false);
+   } else {
+      batch->submit_quarantined = true;
+      batch->failed_syncobjs[0] = accepted_syncobj;
+      batch->failed_syncobjs[1] = error_syncobj;
+      ctx->submit_quarantined = true;
+      p_atomic_set(&agx_screen(ctx->base.screen)->submit_quarantined, true);
+      agx_msg("submit completion unknown; quarantining context resources\n");
+   }
 
    const bool first_fault = !ctx->any_faults;
    ctx->any_faults = true;
@@ -887,21 +951,24 @@ agx_batch_submit(struct agx_context *ctx, struct agx_batch *batch,
 
    /* At most every BO contributes an input wait, followed by the explicit and
     * inter-context input fences. The submission then appends two output
-    * fences, which also need full records in the same allocation.
+    * fences and a private publication fence, all needing full records.
     */
-   unsigned max_syncs = batch->bo_list.bit_count + 2;
-   unsigned sync_capacity = max_syncs + 3;
+   const bool split_compute = dev->chip == AGX_CHIP_G17P && compute && render &&
+                             dev->params.max_commands_per_submission < 2;
+   unsigned bo_count = util_dynarray_num_elements(&batch->bo_list.list,
+                                                  struct agx_bo *);
+   unsigned sync_capacity = bo_count + 5 + split_compute;
    unsigned in_sync_count = 0;
    unsigned shared_bo_count = 0;
    struct drm_asahi_sync *syncs =
       malloc(sync_capacity * sizeof(*syncs));
    struct agx_shared_bo_sync *shared_bos =
-      malloc(max_syncs * sizeof(*shared_bos));
+      malloc(MAX2(bo_count, 1) * sizeof(*shared_bos));
    struct util_dynarray cmdbuf = UTIL_DYNARRAY_INIT;
 
-   if (!syncs || !shared_bos) {
+   if (!syncs || !shared_bos || ctx->any_faults) {
       agx_retire_failed_submit(ctx, batch, syncs, shared_bos, 0, NULL,
-                               &cmdbuf, ENOMEM);
+                               &cmdbuf, ctx->any_faults ? EIO : ENOMEM, 0, 0);
       return;
    }
 
@@ -946,9 +1013,8 @@ agx_batch_submit(struct agx_context *ctx, struct agx_batch *batch,
     */
    u_rwlock_rdlock(&screen->destroy_lock);
 
-   int handle;
-   AGX_BATCH_FOREACH_BO_HANDLE(batch, handle) {
-      struct agx_bo *bo = agx_lookup_bo(dev, handle);
+   AGX_BATCH_FOREACH_BO(batch, entry) {
+      struct agx_bo *bo = *entry;
 
       if (bo->flags & AGX_BO_SHARED) {
          batch_debug(batch, "Waits on shared BO @ 0x%" PRIx64, bo->va->addr);
@@ -973,14 +1039,14 @@ agx_batch_submit(struct agx_context *ctx, struct agx_batch *batch,
           * if we already have the sync file, waiting it avoids cache-domain
           * transitions. */
          if (in_sync_fd < 0 ? !agx_wait_shared_bo(bo)
-                            : (ret && sync_wait(in_sync_fd, -1))) {
+                            : (ret && agx_fallback_wait(in_sync_fd, "shared BO import failed"))) {
             const int sync_errno = errno ? errno : EIO;
             if (in_sync_fd >= 0)
                close(in_sync_fd);
             u_rwlock_rdunlock(&screen->destroy_lock);
             agx_retire_failed_submit(ctx, batch, syncs, shared_bos,
                                      shared_bo_count, virt.extres, &cmdbuf,
-                                     sync_errno);
+                                     sync_errno, 0, 0);
             return;
          }
 
@@ -1020,7 +1086,7 @@ agx_batch_submit(struct agx_context *ctx, struct agx_batch *batch,
       if (!virt.extres) {
          u_rwlock_rdunlock(&screen->destroy_lock);
          agx_retire_failed_submit(ctx, batch, syncs, shared_bos,
-                                  shared_bo_count, NULL, &cmdbuf, ENOMEM);
+                                  shared_bo_count, NULL, &cmdbuf, ENOMEM, 0, 0);
          return;
       }
 
@@ -1046,7 +1112,7 @@ agx_batch_submit(struct agx_context *ctx, struct agx_batch *batch,
       u_rwlock_rdunlock(&screen->destroy_lock);
       agx_retire_failed_submit(ctx, batch, syncs, shared_bos,
                                shared_bo_count, virt.extres, &cmdbuf,
-                               sync_errno);
+                               sync_errno, 0, 0);
       return;
    }
    agx_add_sync(syncs, &in_sync_count, explicit_syncobj);
@@ -1081,15 +1147,24 @@ agx_batch_submit(struct agx_context *ctx, struct agx_batch *batch,
     * Everything still works (but over-synchronizes because this effectively
     * serializes all submissions once any context flushes once).
     */
-   /* The G17P kernel path accepts one hardware command per submission, so a
-    * batch that carries geometry/transform feedback compute work ahead of
-    * its render submits the compute command on its own and makes the render
-    * submission wait on its fence. Other chips keep the combined submission
-    * with its intra-submit barrier.
+   /* Current G17P kernels accept mixed command arrays. Keep the old path
+    * only for kernels advertising a single hardware command per ioctl.
     */
    uint32_t compute_syncobj = 0;
-   const bool split_compute =
-      dev->chip == AGX_CHIP_G17P && compute && render;
+   uint32_t submit_syncobj = 0;
+   int create_ret = drmSyncobjCreate(dev->fd, 0, &submit_syncobj);
+   if (create_ret) {
+      const int error = create_ret < -1 ? -create_ret : (errno ? errno : EIO);
+      u_rwlock_rdunlock(&screen->destroy_lock);
+      agx_retire_failed_submit(ctx, batch, syncs, shared_bos,
+                               shared_bo_count, virt.extres, &cmdbuf,
+                               error, 0, 0);
+      return;
+   }
+   if (unlikely(dev->debug & AGX_DBG_PERF)) {
+      ctx->submit_perf.batches++;
+      ctx->submit_perf.mixed_batches += compute && render;
+   }
    if (split_compute) {
       struct util_dynarray compute_cmdbuf = UTIL_DYNARRAY_INIT;
       struct drm_asahi_sync *compute_syncs =
@@ -1118,7 +1193,11 @@ agx_batch_submit(struct agx_context *ctx, struct agx_batch *batch,
             .cmdbuf_size = compute_cmdbuf.size,
          };
 
+         if (unlikely(dev->debug & AGX_DBG_PERF))
+            ctx->submit_perf.submits++;
          ret = dev->ops.submit(dev, &compute_submit, &virt);
+         if (unlikely((dev->debug & AGX_DBG_PERF) && ret))
+            ctx->submit_perf.failures++;
       }
 
       const int compute_errno =
@@ -1134,12 +1213,11 @@ agx_batch_submit(struct agx_context *ctx, struct agx_batch *batch,
       if (ret) {
          fprintf(stderr, "DRM_IOCTL_ASAHI_SUBMIT compute failed: %s\n",
                  strerror(compute_errno));
-         if (compute_syncobj)
-            drmSyncobjDestroy(dev->fd, compute_syncobj);
+         drmSyncobjDestroy(dev->fd, submit_syncobj);
          u_rwlock_rdunlock(&screen->destroy_lock);
          agx_retire_failed_submit(ctx, batch, syncs, shared_bos,
                                   shared_bo_count, virt.extres, &cmdbuf,
-                                  compute_errno);
+                                  compute_errno, 0, compute_syncobj);
          return;
       }
 
@@ -1148,7 +1226,7 @@ agx_batch_submit(struct agx_context *ctx, struct agx_batch *batch,
    }
 
    struct drm_asahi_sync *out_syncs = syncs + in_sync_count;
-   assert(in_sync_count + 2 <= sync_capacity);
+   assert(in_sync_count + 3 <= sync_capacity);
 
    out_syncs[0] = (struct drm_asahi_sync){
       .sync_type = DRM_ASAHI_SYNC_SYNCOBJ,
@@ -1159,6 +1237,11 @@ agx_batch_submit(struct agx_context *ctx, struct agx_batch *batch,
       .sync_type = DRM_ASAHI_SYNC_TIMELINE_SYNCOBJ,
       .handle = screen->flush_syncobj,
       .timeline_value = seqid,
+   };
+
+   out_syncs[2] = (struct drm_asahi_sync){
+      .sync_type = DRM_ASAHI_SYNC_SYNCOBJ,
+      .handle = submit_syncobj,
    };
 
    /* Submit! */
@@ -1203,8 +1286,11 @@ agx_batch_submit(struct agx_context *ctx, struct agx_batch *batch,
                                     att.list, att.count);
       }
 
-      /* Barrier on previous submission, or on the compute command that
-       * shares this submission. A split compute is a previous submission.
+      /* Compute starts with barriers on both prior subqueues. Waiting on
+       * its prefix 1 therefore orders render after both the compute results
+       * and all prior work, including ioctl input syncs on older kernels that
+       * attach them only to the first hardware command (hk's first_sq rule).
+       * Software attachment commands do not advance the hardware prefixes.
        */
       const bool compute_here = compute && !split_compute;
       struct drm_asahi_cmd_header header = agx_cmd_header(
@@ -1220,21 +1306,21 @@ agx_batch_submit(struct agx_context *ctx, struct agx_batch *batch,
       .flags = 0,
       .queue_id = ctx->queue_id,
       .in_sync_count = in_sync_count,
-      .out_sync_count = 2,
+      .out_sync_count = 3,
       .syncs = (uint64_t)(uintptr_t)(syncs),
       .cmdbuf = (uint64_t)(uintptr_t)(cmdbuf.data),
       .cmdbuf_size = cmdbuf.size,
    };
 
+   if (unlikely(dev->debug & AGX_DBG_PERF))
+      ctx->submit_perf.submits++;
    int ret = dev->ops.submit(dev, &submit, &virt);
+   if (unlikely((dev->debug & AGX_DBG_PERF) && ret))
+      ctx->submit_perf.failures++;
    const int submit_errno =
       ret < -1 ? -ret : (ret ? (errno ? errno : EIO) : 0);
 
    u_rwlock_rdunlock(&screen->destroy_lock);
-
-   /* The render job holds its own reference to the compute fence. */
-   if (compute_syncobj)
-      drmSyncobjDestroy(dev->fd, compute_syncobj);
 
    if (!ret && (dev->debug & AGX_DBG_ASYNCTRACE))
       agx_cmdtrace_dump_cmdbuf(dev, batch, &cmdbuf, "accepted-current",
@@ -1263,9 +1349,14 @@ agx_batch_submit(struct agx_context *ctx, struct agx_batch *batch,
 
       agx_retire_failed_submit(ctx, batch, syncs, shared_bos,
                                shared_bo_count, virt.extres, &cmdbuf,
-                               submit_errno);
+                               submit_errno, compute_syncobj, submit_syncobj);
       return;
    }
+
+   /* Successful enqueue retains the fences in the kernel. */
+   if (compute_syncobj)
+      drmSyncobjDestroy(dev->fd, compute_syncobj);
+   drmSyncobjDestroy(dev->fd, submit_syncobj);
 
    /* Now stash our batch fence into any shared BOs. */
    if (shared_bo_count) {
@@ -1316,9 +1407,9 @@ agx_batch_submit(struct agx_context *ctx, struct agx_batch *batch,
    /* Record the syncobj on each BO we write, so it can be added post-facto as a
     * fence if the BO is exported later...
     */
-   AGX_BATCH_FOREACH_BO_HANDLE(batch, handle) {
-      struct agx_bo *bo = agx_lookup_bo(dev, handle);
-      struct agx_batch *writer = agx_writer_get(ctx, handle);
+   AGX_BATCH_FOREACH_BO(batch, entry) {
+      struct agx_bo *bo = *entry;
+      struct agx_batch *writer = agx_writer_get(ctx, bo->handle);
 
       if (!writer)
          continue;
@@ -1383,6 +1474,27 @@ agx_batch_submit(struct agx_context *ctx, struct agx_batch *batch,
       agx_cleanup_batches(ctx);
 }
 
+bool
+agx_poll_batch(struct agx_context *ctx, struct agx_batch *batch)
+{
+   /* Polling must never submit an active batch. A query may have writers in
+    * several slots, so retire only the completed submitted writer here. */
+   if (agx_batch_is_active(batch) || batch->submit_quarantined)
+      return false;
+
+   if (!agx_batch_is_submitted(batch))
+      return true;
+
+   struct agx_device *dev = agx_device(ctx->base.screen);
+   int ret = drmSyncobjWait(dev->fd, &batch->syncobj, 1, 0, 0, NULL);
+   assert(!ret || ret == -ETIME);
+   if (ret)
+      return false;
+
+   agx_batch_cleanup(ctx, batch, false);
+   return true;
+}
+
 void
 agx_sync_batch(struct agx_context *ctx, struct agx_batch *batch)
 {
@@ -1393,6 +1505,9 @@ agx_sync_batch(struct agx_context *ctx, struct agx_batch *batch)
 
    /* Empty batch case, already cleaned up */
    if (!agx_batch_is_submitted(batch))
+      return;
+
+   if (batch->submit_quarantined)
       return;
 
    assert(batch->syncobj);

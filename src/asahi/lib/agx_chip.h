@@ -173,7 +173,7 @@ static inline bool
 agx_chip_native_agx3(enum agx_chip chip)
 {
    return chip == AGX_CHIP_G15S || chip == AGX_CHIP_G15C ||
-          chip == AGX_CHIP_G17P;
+          chip == AGX_CHIP_G16G || chip == AGX_CHIP_G17P;
 }
 
 /* The chip whose record encodings GPU-generated (libagx) command-stream
@@ -341,7 +341,7 @@ static inline bool
 agx_chip_native_indirect_compute(enum agx_chip chip)
 {
    return chip == AGX_CHIP_G17P || chip == AGX_CHIP_G15S ||
-          chip == AGX_CHIP_G15C;
+          chip == AGX_CHIP_G15C || chip == AGX_CHIP_G16G;
 }
 
 /* Whether the CDM's fetch of an indirect geometry block needs a cache flush
@@ -378,13 +378,19 @@ agx_chip_elide_app_dispatch_barrier(enum agx_chip chip)
    return agx_chip_native_g15(chip);
 }
 
-/* Number of helper-table slots in the USC code-container lead block.  G17P
- * has six; G15 and G16 parts have ten, and with six their fragment programs
- * of 256x256 and larger walk past the lead into the guard page. */
+/* Number of helper-table slots in the USC code-container lead block.  G15
+ * and G16 parts have ten; with six their fragment programs of 256x256 and
+ * larger walk past the lead into the guard page.  On G17P the state loader's
+ * profile prefix calls the slot at 0x100 + 16 * core id (id = 16 * cluster +
+ * core), so each table needs a slot per core of its cluster: six on the A18
+ * Pro, ten on the M4 Pro, whose cluster 1 cores 8 and 9 otherwise run past
+ * the table and never draw their tiles. */
 static inline unsigned
-agx_chip_usc_helper_table_slots(enum agx_chip chip)
+agx_chip_usc_helper_table_slots(enum agx_chip chip, unsigned cores_per_cluster)
 {
-   return chip == AGX_CHIP_G17P ? 6 : 10;
+   if (chip != AGX_CHIP_G17P)
+      return 10;
+   return cores_per_cluster > 6 ? cores_per_cluster : 6;
 }
 
 /* Whether the USC window base page needs a return in every slot past its
@@ -418,7 +424,7 @@ static inline bool
 agx_chip_native_imageblock(enum agx_chip chip)
 {
    return chip == AGX_CHIP_G17P || chip == AGX_CHIP_G15S ||
-          chip == AGX_CHIP_G15C;
+          chip == AGX_CHIP_G15C || chip == AGX_CHIP_G16G;
 }
 
 /*
@@ -431,7 +437,8 @@ agx_chip_native_imageblock(enum agx_chip chip)
 static inline bool
 agx_chip_uncovered_tile_ms_defect(enum agx_chip chip)
 {
-   return chip == AGX_CHIP_G17P || agx_chip_native_g15(chip);
+   return chip == AGX_CHIP_G17P || chip == AGX_CHIP_G16G ||
+          agx_chip_native_g15(chip);
 }
 
 /* Whether a native fragment program may merge triangles across the
@@ -453,13 +460,13 @@ agx_chip_image_load_misses_own_store(enum agx_chip chip)
    return chip == AGX_CHIP_G17P;
 }
 
-/* Whether a 32-bit FFMA keeps a product below the normal range exactly, as
- * the fused multiply-add of VK_KHR_shader_fma requires. G15's flushes such a
- * product to zero before the add. */
+/* Whether native FP32 FFMA meets the exact rounding contract required by
+ * VK_KHR_shader_fma. G15 and G16G remain unqualified for that contract;
+ * G16G probes also fail near the minimum normal result. */
 static inline bool
 agx_chip_exact_fma32(enum agx_chip chip)
 {
-   return !agx_chip_native_g15(chip);
+   return chip != AGX_CHIP_G16G && !agx_chip_native_g15(chip);
 }
 
 /* Whether the sampler state word carries the LOD bias.  The HAL200 sampler
@@ -524,6 +531,10 @@ bool agx_params_driver_supported(
    const struct drm_asahi_params_global *params);
 
 /* Reject the known incompatible legacy feature/payload contract on AGX3. */
+bool agx_params_native_kernel_abi_supported(
+   const struct drm_asahi_params_global *params);
+
+/* Reject the known incompatible pre-unification native kernel contract. */
 bool agx_params_native_kernel_abi_supported(
    const struct drm_asahi_params_global *params);
 
