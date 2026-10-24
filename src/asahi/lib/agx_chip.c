@@ -328,9 +328,10 @@ agx_params_driver_supported(const struct drm_asahi_params_global *params)
    }
 }
 
-/* Native submissions use the unified Aurora feature bits and timestamp-copy
- * packet layout. Refuse the older low-bit contract before creating a VM.
- * This is a check for that known collision, not general ABI negotiation.
+/* G15G uses the separately admitted T8122 runtime: its baseline advertises
+ * VM_STATUS and SCHEDULED_QUEUES, not exact-prior barriers. Other native
+ * profiles use the unified high-bit prior-command contract. Refuse a known
+ * mismatch before VM creation; these checks are not general ABI negotiation.
  */
 bool
 agx_params_native_kernel_abi_supported(
@@ -342,6 +343,12 @@ agx_params_native_kernel_abi_supported(
    const enum agx_chip chip = agx_chip_from_params(params);
    if (!agx_chip_native_agx3(chip))
       return true;
+
+   if (chip == AGX_CHIP_G15G) {
+      const uint64_t required = DRM_ASAHI_FEATURE_VM_STATUS |
+                                DRM_ASAHI_FEATURE_SCHEDULED_QUEUES;
+      return (params->features & required) == required;
+   }
 
    const uint64_t required = DRM_ASAHI_FEATURE_PER_COMMAND_INPUT_SYNCS |
                              DRM_ASAHI_FEATURE_EXACT_PRIOR_BARRIERS;
