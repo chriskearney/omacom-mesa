@@ -28,13 +28,18 @@ int main(int argc, char **argv)
    VkInstance instance;
    OK(vkCreateInstance(&ici, NULL, &instance));
    uint32_t n = 0;
-   OK(vkEnumeratePhysicalDevices(instance, &n, NULL));
+   const VkResult enumeration = vkEnumeratePhysicalDevices(instance, &n, NULL);
+   if (enumeration != VK_SUCCESS)
+      fprintf(stderr, "physical-device enumeration: %d\n", enumeration);
    if (argc == 2 && strcmp(argv[1], "--expect-no-device") == 0) {
       REQUIRE(n == 0);
+      REQUIRE(enumeration == VK_SUCCESS ||
+              enumeration == VK_ERROR_INITIALIZATION_FAILED);
       vkDestroyInstance(instance, NULL);
       puts("device admission refused as expected");
       return 0;
    }
+   OK(enumeration);
    REQUIRE(n == 1);
    VkPhysicalDevice physical;
    OK(vkEnumeratePhysicalDevices(instance, &n, &physical));

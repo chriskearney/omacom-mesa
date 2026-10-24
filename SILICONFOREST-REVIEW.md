@@ -1,4 +1,48 @@
-# Mesa source integration review — 2026-10-18
+# Mesa source integration review
+
+## October 24 integration candidate
+
+The update merges Aurora `aurora-wip` at
+`4911479bf988ce88ec0889ed0378352a0bb0fae2` and Scott Jones's draft
+[PR71](https://github.com/aurora-silicon/mesa/pull/71) at
+`0163e7fa96f4c54f2fb72e6053b2aaa22446a44d`. Both remain original ancestry,
+with original author identities. There were 214 upstream-only commits and 33
+downstream-only commits before integration; these counts include merges and
+maintenance, not 214 missing M3 driver fixes.
+
+- Retain downstream placed-mapping ownership, fixed-address drm-shim behavior,
+  the checked configurable geometry heap, and Zink ordering fixes. Equivalent
+  upstream RT fixture sequencing and NULL XFB counter handling replace the old
+  implementations without dropping their regression coverage.
+- Update the known-collision ABI gate for Aurora's unified high feature bits
+  and timestamp-copy payloads. The checked 18 wire facts match kernel
+  `7b969982306e1498a8cbe6e5da9bde743acd8fc5`. The prior low-bit native
+  header is incompatible, so this is not an automatic system upgrade.
+- T8122's separate runtime reports VM_STATUS and SCHEDULED_QUEUES, without
+  exact-prior barriers (`m3/m3_drm.rs:217` in the pinned kernel). Give G15G its
+  own baseline check instead of requiring the Pro/Max/Neo feature pair. Host
+  drm-shim probes cover its actual feature baseline and reject user binds into
+  all four T8122 reservations; no GPU submission is performed.
+- Keep M4 admission disabled even though the upstream snapshot contains M4
+  code. Preserve T6030/T6031/Neo identity checks. T8122 additionally requires
+  the literal `ASAHI_M3_EXPERIMENTAL=1`; empty, `0`, `true`, and unset refuse.
+- Keep all four T8122 runtime reservations and the below-2^39 heap/alias cap.
+  The updated layout has host tests, but Scott's earlier hardware results used
+  a different layout. J613 texture/MSAA/compute and desktop checks remain due;
+  J615 and HAL200 are not qualified by those earlier results.
+- GCC 16 at `-O2` exposed a nested pNext compression rejection regression.
+  Copying each header's type and next pointer through untyped storage, plus
+  copying the external-memory payload, preserves all 3,359 policy checks;
+  neither the policy nor the failing assertion is relaxed.
+- Preserve this fork's assistant policy; do not import Aurora's workflow that
+  rewrites it. Historical compatibility branches and private-source exclusions
+  are unchanged.
+
+The later Aurora code includes native render-pass/depth-store improvements,
+query-progress and upload-reuse work, compiler fixes, and the unified kernel
+UAPI. No FPS gain is claimed without a matched hardware benchmark. Full CTS,
+M1/M2/M3 hardware regression tests and installing a system package remain
+separate from host compilation and drm-shim validation.
 
 ## Main integration
 

@@ -14,9 +14,10 @@ The upstream Mesa README is [README.rst](README.rst).
 | Hardware / contract | Branch | Status in this integration |
 | --- | --- | --- |
 | M1/M2 and AGX2 | `siliconforest/next` | Existing Asahi/Honeykrisp paths retained; no physical-device qualification here |
-| M3 Pro, T6030 / G15S, legacy firmware interface with native AGX3 shaders | `siliconforest/next` | Eryk's latest native GL/Vulkan stack plus all nine follow-ups missing from Naeem's branch |
+| M3 Pro, T6030 / G15S, legacy firmware interface with native AGX3 shaders | `siliconforest/next` | Pinned Aurora WIP native GL/Vulkan stack; this update needs hardware requalification |
 | M3 Max, T6031 / G15C, single die / four clusters | `siliconforest/next` | Naeem's identity, native admission and USC helper-table fixes merged with Eryk's follow-ups |
 | Neo / A18 Pro, T8140 / G17P, USC3 / HAL200 | `siliconforest/next` | DJ's current AGX3b stack retained, including its feature restrictions |
+| M3 Air, T8122 / G15G, legacy 14.x firmware | `siliconforest/next` | Scott Jones PR71 integrated with `ASAHI_M3_EXPERIMENTAL=1`; revised address layout is not hardware-qualified |
 | M3 Air, T8122, HAL200 / macOS 26.6.2 boot stack | `compat/m3-air-hal200` | Older OpenGL-only compatibility source; not part of the native main build |
 | Older M3 boot/firmware stacks | `compat/m3-legacy`, `compat/m3-pro-legacy` | Previous personal source profiles preserved with exact parent pins |
 | M4 | `experimental/m4` | Eryk's separate development/evidence branch; unqualified here |
@@ -24,28 +25,28 @@ The upstream Mesa README is [README.rst](README.rst).
 | Earlier M3 Max experiments | `experimental/m3-max-legacy` | Historical source profile; use the combined native branch for new development |
 
 A chip name or shader encoder alone does not establish support. Main deliberately
-refuses M3 Air/Ultra, M4 and M5 identities that lack its complete native path.
+refuses M3 Ultra, M4 and M5 admission. Native M3 Air is experimental and
+requires its exact identity, a compatible kernel and the explicit opt-in above.
 Compatibility and experimental profiles are separate source trees, not additional
 drivers silently enabled in one binary. They have **not** undergone the main
 branch's build/test run.
 
 ## Kernel and firmware pairing
 
-Native M3 Pro/Max and Neo require the ABI represented by
-`include/drm-uapi/asahi_drm.h`. In
-[SiliconForest Linux](https://github.com/iconidentify/siliconforest-linux), the
-matched header is `include/uapi/drm/asahi_m3_drm.h` in the experimental
-`CONFIG_SILICONFOREST_M3` stack, imported at
-`6a421d4e76ff282b414138182fd28597ebf20a18`.
-That kernel option remains off by default. Matching firmware and m1n1 handoffs
-must also be qualified on the target board; the current personal m1n1 pin alone
-is not proof of those handoffs.
+Native M3 Pro/Max, experimental M3 Air and Neo use the unified Aurora ABI
+represented by `include/drm-uapi/asahi_drm.h`. The checked kernel source is
+[omacom/linux-aurora at 7b969982](https://github.com/omacom/linux-aurora/tree/7b969982306e1498a8cbe6e5da9bde743acd8fc5),
+`include/uapi/drm/asahi_drm.h`. The update uses the high feature-bit assignments
+and timestamp-copy command fields from that contract. It rejects the older
+low-bit native contract before VM creation; this is a check for the known
+collision, not universal ABI negotiation. The older SiliconForest experimental
+header checked on October 18 is no longer the matching contract.
 
-The maintained legacy kernel has different feature bit assignments and command
-payload layouts despite using the same ioctl family. Main now rejects its known
-incompatible native contract before VM creation. Do not substitute headers or
-force a chip identity to bypass that check. This is a check for the **known**
-legacy/native collision, not a universal ABI negotiation protocol.
+Do not substitute headers, force a chip identity or use an old kernel simply
+because its version string resembles the checked one. Kernel configuration,
+firmware and m1n1 handoffs still need qualification on the actual board.
+M3 Air retains `ASAHI_M3_EXPERIMENTAL=1`; its kernel startup configuration is
+separate. This source update does not change any installed boot stack.
 
 ## Build and check
 
@@ -73,8 +74,9 @@ python3 -m venv ../mesa-venv
 MESON="$PWD/../mesa-venv/bin/meson" JOBS=8 tools/siliconforest/build.sh ../mesa-build
 ```
 
-The current source passes all **36 Asahi host suites** and Vulkan regression
-probes for four drm-shim identities, with Khronos validation enabled. To rerun
+The October 18 baseline passed **36 Asahi host suites** and Vulkan regression
+probes for four drm-shim identities, with Khronos validation enabled. Results
+for the October 24 integration are recorded separately in the validation files. To rerun
 those probes after the build:
 
 ```sh
@@ -92,8 +94,9 @@ system-install commands for this integration yet.
 
 [The review ledger](SILICONFOREST-REVIEW.md) explains merged changes, duplicate
 fixes, ABI findings, held regressions and experimental branches.
-[SILICONFOREST-SOURCES.json](SILICONFOREST-SOURCES.json) pins 209 public branch,
-PR and MR snapshots under `sources/2026-10-18/*`, with 37 GitHub PR records and
+[SILICONFOREST-SOURCES.json](SILICONFOREST-SOURCES.json) retains the 209 original public branch,
+PR and MR snapshots under `sources/2026-10-18/*`, adds two pinned October 24
+inputs, and retains the dated inventory of 37 GitHub PR records and
 25 open upstream Asahi MR records. A snapshot is evidence, not approval to ship
 its contents. This is a dated public-source investigation; it cannot establish
 that no private, deleted, unindexed or newer work exists.

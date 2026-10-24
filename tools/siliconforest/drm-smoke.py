@@ -30,9 +30,10 @@ with tempfile.TemporaryDirectory(prefix='siliconforest-vulkan-smoke-') as direct
         for key in ['VK_ICD_FILENAMES', 'VK_LOADER_DRIVERS_SELECT', 'VK_LOADER_DRIVERS_DISABLE']:
             env.pop(key, None)
         print('drm-shim profile:', chip, flush=True)
-        result = subprocess.run([binary], env=env, check=True, timeout=90,
+        result = subprocess.run([binary], env=env, check=False, timeout=90,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         print(result.stdout, end='', flush=True)
+        result.check_returncode()
         if 'Validation Error:' in result.stdout:
             raise RuntimeError('Vulkan validation reported an invalid regression probe')
     for chip, gate in [('g15g', None), ('g15g', '0'), ('g16g', '1')]:
@@ -46,8 +47,9 @@ with tempfile.TemporaryDirectory(prefix='siliconforest-vulkan-smoke-') as direct
             env['ASAHI_M3_EXPERIMENTAL'] = gate
         print('drm-shim refusal:', chip, 'opt-in:', gate, flush=True)
         result = subprocess.run([binary, '--expect-no-device'], env=env,
-                                check=True, timeout=90, stdout=subprocess.PIPE,
+                                check=False, timeout=90, stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, text=True)
         print(result.stdout, end='', flush=True)
+        result.check_returncode()
         if 'Validation Error:' in result.stdout:
             raise RuntimeError('Vulkan validation reported an invalid refusal probe')

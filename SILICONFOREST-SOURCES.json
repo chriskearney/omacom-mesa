@@ -2093,6 +2093,26 @@
       "tag": "sources/2026-10-18/previous/review/m3pro-compression-series-20261012",
       "url": "https://github.com/iconidentify/mesa-omacom/tree/1aad5104bdf4f67d97828230e4cbaf71d5a7811d",
       "disposition": "snapshot-only; consult integration decisions"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-native",
+      "source_kind": "branch",
+      "source_name": "aurora-wip",
+      "commit": "4911479bf988ce88ec0889ed0378352a0bb0fae2",
+      "tag": "sources/2026-10-24/aurora-native/aurora-wip",
+      "url": "https://github.com/aurora-silicon/mesa/tree/4911479bf988ce88ec0889ed0378352a0bb0fae2",
+      "disposition": "integrated as original ancestry; M4 admission remains disabled downstream; hardware qualification pending"
+    },
+    {
+      "repository": "https://github.com/aurora-silicon/mesa",
+      "source_key": "aurora-pr",
+      "source_kind": "pull-request",
+      "source_name": "71",
+      "commit": "0163e7fa96f4c54f2fb72e6053b2aaa22446a44d",
+      "tag": "sources/2026-10-24/aurora-pr/71",
+      "url": "https://github.com/aurora-silicon/mesa/pull/71",
+      "disposition": "integrated as original ancestry; G15G needs ASAHI_M3_EXPERIMENTAL=1; revised layout hardware qualification pending"
     }
   ],
   "pull_requests": [
@@ -2835,5 +2855,16 @@
       "hardware_qualified": false,
       "review_hardening_commit": "db96168675f5464d5293caf48ed718792b2bed74"
     }
-  ]
+  ],
+  "last_integration_update": "2026-10-24",
+  "integration_followups_20261024": {
+    "base": "7515336b3dfbe8943b555ffec9817b9ed64379a8",
+    "aurora_merge": "100c8bdf98d9c65f01b51130a6fc2d8e5d9e9404",
+    "scott_merge": "dcb62e9adc2d288ab135e005fbb32e086d47f8ca",
+    "kernel_repository": "https://github.com/omacom/linux-aurora",
+    "kernel_commit": "7b969982306e1498a8cbe6e5da9bde743acd8fc5",
+    "kernel_header": "include/uapi/drm/asahi_drm.h",
+    "hardware_qualified": false,
+    "system_install_performed": false
+  }
 }
