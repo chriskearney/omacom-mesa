@@ -4,9 +4,10 @@
  */
 
 #include "agx_chip.h"
-#include "util/u_debug.h"
 
 #include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
 
 enum agx_chip
 agx_chip_from_params(const struct drm_asahi_params_global *params)
@@ -447,6 +448,9 @@ agx_command_stream_generation_name(
 bool
 agx_chip_experimental_admitted(enum agx_chip chip)
 {
-   return chip != AGX_CHIP_G15G ||
-          debug_get_bool_option("ASAHI_M3_EXPERIMENTAL", false);
+   if (chip != AGX_CHIP_G15G)
+      return true;
+
+   const char *option = getenv("ASAHI_M3_EXPERIMENTAL");
+   return option && strcmp(option, "1") == 0;
 }

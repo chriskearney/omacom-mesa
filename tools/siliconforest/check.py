@@ -43,6 +43,8 @@ def main():
             assert set(paths) <= {'AGENTS.md', 'README.md', '.github/workflows/macos.yml'}, paths
     cases = [
         ('chip-admission', ['src/asahi/lib/agx_chip.c',
+                            'src/asahi/lib/agx_va_runtime_hole.c',
+                            'src/util/vma.c',
                             'src/asahi/lib/tests/test-chip-admission.c']),
         ('compression', ['src/asahi/vulkan/tests/test-hk-g17p-compression.c']),
         ('image-plane-layout', ['src/asahi/vulkan/hk_image_layout_core.c',
@@ -54,7 +56,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix='siliconforest-mesa-check-') as directory:
         for name, sources in cases:
             binary = str(Path(directory) / name)
-            subprocess.run(cc + ['-std=c11', '-O2', '-Wall', '-Wextra', '-Werror',
+            subprocess.run(cc + ['-std=c11', '-D_POSIX_C_SOURCE=200809L', '-D_DEFAULT_SOURCE',
+                                  '-DHAVE_ENDIAN_H', '-O2', '-Wall', '-Wextra', '-Werror',
                                   '-Wno-unused-function', '-Iinclude', '-Isrc',
                                   '-Isrc/asahi/lib', '-Isrc/asahi/vulkan'] +
                            sources + ['-o', binary], cwd=ROOT, check=True)

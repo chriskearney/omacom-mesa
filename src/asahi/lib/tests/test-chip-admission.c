@@ -226,6 +226,10 @@ main(void)
    assert(agx_chip_experimental_admitted(AGX_CHIP_G17P));
    setenv("ASAHI_M3_EXPERIMENTAL", "0", 1);
    assert(!agx_chip_experimental_admitted(AGX_CHIP_G15G));
+   setenv("ASAHI_M3_EXPERIMENTAL", "", 1);
+   assert(!agx_chip_experimental_admitted(AGX_CHIP_G15G));
+   setenv("ASAHI_M3_EXPERIMENTAL", "true", 1);
+   assert(!agx_chip_experimental_admitted(AGX_CHIP_G15G));
    setenv("ASAHI_M3_EXPERIMENTAL", "1", 1);
    assert(agx_chip_experimental_admitted(AGX_CHIP_G15G));
    unsetenv("ASAHI_M3_EXPERIMENTAL");
