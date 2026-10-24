@@ -172,8 +172,9 @@ enum agx_submission_model {
 static inline bool
 agx_chip_native_agx3(enum agx_chip chip)
 {
-   return chip == AGX_CHIP_G15S || chip == AGX_CHIP_G15C ||
-          chip == AGX_CHIP_G16G || chip == AGX_CHIP_G17P;
+   return chip == AGX_CHIP_G15G || chip == AGX_CHIP_G15S ||
+          chip == AGX_CHIP_G15C || chip == AGX_CHIP_G16G ||
+          chip == AGX_CHIP_G17P;
 }
 
 /* The chip whose record encodings GPU-generated (libagx) command-stream
@@ -340,7 +341,8 @@ agx_chip_has_native_render_context(enum agx_chip chip)
 static inline bool
 agx_chip_native_indirect_compute(enum agx_chip chip)
 {
-   return chip == AGX_CHIP_G17P || chip == AGX_CHIP_G15S ||
+   return chip == AGX_CHIP_G17P || chip == AGX_CHIP_G15G ||
+          chip == AGX_CHIP_G15S ||
           chip == AGX_CHIP_G15C || chip == AGX_CHIP_G16G;
 }
 
@@ -423,7 +425,8 @@ agx_chip_explicit_robust_image_bounds(enum agx_chip chip)
 static inline bool
 agx_chip_native_imageblock(enum agx_chip chip)
 {
-   return chip == AGX_CHIP_G17P || chip == AGX_CHIP_G15S ||
+   return chip == AGX_CHIP_G17P || chip == AGX_CHIP_G15G ||
+          chip == AGX_CHIP_G15S ||
           chip == AGX_CHIP_G15C || chip == AGX_CHIP_G16G;
 }
 
@@ -530,13 +533,13 @@ bool agx_chip_driver_supported(enum agx_chip chip);
 bool agx_params_driver_supported(
    const struct drm_asahi_params_global *params);
 
-/* Reject the known incompatible legacy feature/payload contract on AGX3. */
-bool agx_params_native_kernel_abi_supported(
-   const struct drm_asahi_params_global *params);
-
 /* Reject the known incompatible pre-unification native kernel contract. */
 bool agx_params_native_kernel_abi_supported(
    const struct drm_asahi_params_global *params);
+
+/* Whether a device of this chip may open: G15G (T8122) runs on the native path
+ * only with ASAHI_M3_EXPERIMENTAL=1, every other supported chip always. */
+bool agx_chip_experimental_admitted(enum agx_chip chip);
 
 /* Exact product name when the chip identity maps to one unambiguous SoC.
  * Variant letters are not marketing tiers: notably, G17P is A18 Pro rather
