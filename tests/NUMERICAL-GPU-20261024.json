@@ -1,0 +1,236 @@
+{
+  "source": "5e45716701b64a4b627e7e60df5b781c65c87f42",
+  "harness_fix": "e2c3b0f729a",
+  "harness_provenance": {
+    "precise_math.comp": {
+      "source": "https://github.com/joshuaswarren/mesa-1/blob/f144c7949b7d960f26677b671341d5a123057ddf/tests/precise_math.comp",
+      "git_blob": "827941d2468890243996dc8d9ab7f74005dab062",
+      "sha256": "756e2584fc09c276f5b343f2427fa5972fff351bfa21c9de3af34fa9d9f9d8b0"
+    },
+    "compute_runner.cpp": {
+      "source": "https://github.com/joshuaswarren/mesa-1/blob/f144c7949b7d960f26677b671341d5a123057ddf/tests/compute_runner.cpp",
+      "git_blob": "e16d45d9d61252d72b2389da8c5073c781e696ca",
+      "sha256": "b98616ec2dab349aac09f69d85ec396f77165fdd7241d7e0610314fc87f7843d"
+    }
+  },
+  "vulkan_package_sha256": "8670e843119aeea01562767a6a7a901d93144126e386219df3b9caca38ef5186",
+  "native_build": "b1024-221520-7835",
+  "native_meson_tests_passed": 104,
+  "native_meson_tests_failed": 0,
+  "oracle_CPU_controls_passed": 7,
+  "scope": "bounded default-path float32 division and reciprocal, real Vulkan compute submissions; 262144 seeded/special pairs plus 66048 normal-boundary pairs per operation",
+  "limitations": [
+    "not full CTS",
+    "not exhaustive numerical coverage",
+    "not precise/float-control mode qualification",
+    "no sin/cos/log numerical comparison in this run",
+    "no M3 Air, M3 Max or Neo hardware coverage",
+    "no desktop or sustained performance qualification of this candidate"
+  ],
+  "results": [
+    {
+      "machine": "J293 M1",
+      "kernel": "7.2.11-lab182-205f5e8b20fc-normal",
+      "pairs_per_operation": 328192,
+      "installed_source": "97a65d845f39418aecc693dcaf9dcb14a05849f6",
+      "installed_library_sha256": "71420cc636d9fb7ab4437fad5c970c684ca5b40d7538ac4beb6bcce52d5a98fd",
+      "installed": {
+        "div": {
+          "examples": [
+            [
+              "0x800001",
+              "0x3f800001"
+            ],
+            [
+              "0x7f7fffff",
+              "0x7f7fffff"
+            ],
+            [
+              "0x7f7fffff",
+              "0xff7fffff"
+            ],
+            [
+              "0xff7fffff",
+              "0x7f7fffff"
+            ],
+            [
+              "0xff7fffff",
+              "0xff7fffff"
+            ]
+          ],
+          "max_ulp": 16770755.0,
+          "nonfinite_mismatch": 0,
+          "over_2p5": 915,
+          "special_mismatch": 29
+        },
+        "pairs": 328192,
+        "recip": {
+          "examples": [],
+          "max_ulp": 1.0,
+          "nonfinite_mismatch": 0,
+          "over_2p5": 0,
+          "special_mismatch": 0
+        }
+      },
+      "candidate": {
+        "div": {
+          "examples": [],
+          "max_ulp": 0.0,
+          "nonfinite_mismatch": 0,
+          "over_2p5": 0,
+          "special_mismatch": 0
+        },
+        "pairs": 328192,
+        "recip": {
+          "examples": [],
+          "max_ulp": 0.0,
+          "nonfinite_mismatch": 0,
+          "over_2p5": 0,
+          "special_mismatch": 0
+        }
+      },
+      "candidate_library_sha256": "2c7b66b189b64999246f3f9ed93860e0d0d5887d78ffb4f561fa33e051f7473e",
+      "candidate_exit_code": 0,
+      "kernel_log_lines_during_test": 0,
+      "packages_unchanged": true,
+      "rebooted": false,
+      "installed_driver_replaced": false
+    },
+    {
+      "machine": "J313 M1 Air",
+      "kernel": "7.2.11-lab182-205f5e8b20fc-normal",
+      "pairs_per_operation": 328192,
+      "installed_source": "97a65d845f39418aecc693dcaf9dcb14a05849f6",
+      "installed_library_sha256": "71420cc636d9fb7ab4437fad5c970c684ca5b40d7538ac4beb6bcce52d5a98fd",
+      "installed": {
+        "div": {
+          "examples": [
+            [
+              "0x800001",
+              "0x3f800001"
+            ],
+            [
+              "0x7f7fffff",
+              "0x7f7fffff"
+            ],
+            [
+              "0x7f7fffff",
+              "0xff7fffff"
+            ],
+            [
+              "0xff7fffff",
+              "0x7f7fffff"
+            ],
+            [
+              "0xff7fffff",
+              "0xff7fffff"
+            ]
+          ],
+          "max_ulp": 16770755.0,
+          "nonfinite_mismatch": 0,
+          "over_2p5": 915,
+          "special_mismatch": 29
+        },
+        "pairs": 328192,
+        "recip": {
+          "examples": [],
+          "max_ulp": 1.0,
+          "nonfinite_mismatch": 0,
+          "over_2p5": 0,
+          "special_mismatch": 0
+        }
+      },
+      "candidate": {
+        "div": {
+          "examples": [],
+          "max_ulp": 0.0,
+          "nonfinite_mismatch": 0,
+          "over_2p5": 0,
+          "special_mismatch": 0
+        },
+        "pairs": 328192,
+        "recip": {
+          "examples": [],
+          "max_ulp": 0.0,
+          "nonfinite_mismatch": 0,
+          "over_2p5": 0,
+          "special_mismatch": 0
+        }
+      },
+      "candidate_library_sha256": "2c7b66b189b64999246f3f9ed93860e0d0d5887d78ffb4f561fa33e051f7473e",
+      "candidate_exit_code": 0,
+      "kernel_log_lines_during_test": 0,
+      "packages_unchanged": true,
+      "rebooted": false,
+      "installed_driver_replaced": false
+    },
+    {
+      "machine": "J516S M3 Pro",
+      "kernel": "7.2.11-mixtape-77648eb77168-g15",
+      "pairs_per_operation": 328192,
+      "installed_source": "97a65d845f39418aecc693dcaf9dcb14a05849f6",
+      "installed_library_sha256": "71420cc636d9fb7ab4437fad5c970c684ca5b40d7538ac4beb6bcce52d5a98fd",
+      "installed": {
+        "div": {
+          "examples": [
+            [
+              "0x800001",
+              "0x3f800001"
+            ],
+            [
+              "0x7f7fffff",
+              "0x7f7fffff"
+            ],
+            [
+              "0x7f7fffff",
+              "0xff7fffff"
+            ],
+            [
+              "0xff7fffff",
+              "0x7f7fffff"
+            ],
+            [
+              "0xff7fffff",
+              "0xff7fffff"
+            ]
+          ],
+          "max_ulp": 16770755.0,
+          "nonfinite_mismatch": 0,
+          "over_2p5": 957,
+          "special_mismatch": 13
+        },
+        "pairs": 328192,
+        "recip": {
+          "examples": [],
+          "max_ulp": 1.0,
+          "nonfinite_mismatch": 0,
+          "over_2p5": 0,
+          "special_mismatch": 0
+        }
+      },
+      "candidate": {
+        "div": {
+          "examples": [],
+          "max_ulp": 0.0,
+          "nonfinite_mismatch": 0,
+          "over_2p5": 0,
+          "special_mismatch": 0
+        },
+        "pairs": 328192,
+        "recip": {
+          "examples": [],
+          "max_ulp": 0.0,
+          "nonfinite_mismatch": 0,
+          "over_2p5": 0,
+          "special_mismatch": 0
+        }
+      },
+      "candidate_library_sha256": "2c7b66b189b64999246f3f9ed93860e0d0d5887d78ffb4f561fa33e051f7473e",
+      "candidate_exit_code": 0,
+      "kernel_log_lines_during_test": 0,
+      "packages_unchanged": true,
+      "rebooted": false,
+      "installed_driver_replaced": false
+    }
+  ]
+}
