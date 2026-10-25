@@ -30,7 +30,8 @@ Kernel validation still checks all unsupported fields and GPU references.
 The caller's command buffer is unchanged. Temporary packet storage lives until
 the synchronous submit ioctl returns. Unknown signatures, mixed feature words,
 truncated/unrecognized packets, output exhaustion and nonzero copy slots are
-rejected. No kernel flag, GPU identity gate, VA reservation or firmware check
+rejected by the retained-wire selector/converter. The existing canonical
+feature gate is unchanged. No kernel flag, GPU identity gate, VA reservation or firmware check
 is bypassed. No feature bits are changed in the kernel. This is compatibility
 with these known experimental contracts, not general ABI negotiation.
 
@@ -40,8 +41,13 @@ retained tail/barrier bytes, a mixed attachment/render/compute stream, all input
 truncations, output bounds and every removed byte's nonzero refusal. The
 existing canonical ABI/admission controls remain in place.
 
-At preparation time the updated x86_64 build passed all 92 Asahi tests.
-Native ARM64 packaging, the three-Mac reboot/readback/benchmark repeat, and
-J613 revised-layout hardware qualification remain pending. The initial M1
-boots passed on the preceding integration; they do not qualify this follow-up.
-No full CTS pass or sustained-performance qualification is claimed.
+Both x86_64 and native ARM64 builds passed all 92 Asahi tests. The follow-up
+passed reboot, compositor/display and independent GL ES/Vulkan pixel checks
+on J516S, J313 and J293. On J516S it worked on both the newer pinned kernel
+and the previously working default kernel; the native GET_PARAMS word remained
+`0x3e`, with no kernel feature changes. Matched Quake medians were 185.8 and
+184.7 FPS respectively. The complete normal lab job remains TESTS_FAILED due
+to the recorded OMT checks, despite the specific Mesa subtests passing.
+See [the selected hardware evidence](SILICONFOREST-HARDWARE-20261024.json).
+J613/J615 revised-layout hardware qualification, full CTS and sustained behavior
+remain unqualified. No M3 Air hardware result is inferred from the M1 Air.

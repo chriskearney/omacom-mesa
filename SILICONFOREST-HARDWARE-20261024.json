@@ -1,0 +1,321 @@
+{
+  "schema": 1,
+  "recorded_controller_utc": "2026-10-25T01:18:59.679489+00:00",
+  "tested_source": "97a65d845f39418aecc693dcaf9dcb14a05849f6",
+  "host_CI": "https://github.com/chriskearney/siliconforest-mesa/actions/runs/40149043594",
+  "host_Asahi_suites": {
+    "x86_64_pass": 92,
+    "ARM64_pass": 92,
+    "failed": 0,
+    "note": "Existing optional FMA oracle subtest remains skipped."
+  },
+  "native_ARM64_build": {
+    "id": "b1024-180226-304c",
+    "package_sha256": "627abbd3c7a580cb9071415d688557dd666a22101809d69fd297abf8f03ee396",
+    "seconds": 399,
+    "scope": "Single all-GPU ARM64 build; M1 variants change only package/profile/runtime-owner metadata. All seven ELF payloads and symlink targets are byte-identical."
+  },
+  "installed_library_sha256": {
+    "/usr/lib/libgallium-26.3.0-devel.so": "89b7818b03f34a2450eaa4ea0d1d5adbefe5c51b8aba63f0c9a6892c79fd80a3",
+    "/usr/lib/libvulkan_asahi.so": "383b593d0d804d56e6f1cbe6c31c3ecc1132b9b69d482956d2b136e925cb0716"
+  },
+  "metadata_derivations": [
+    {
+      "parent_sha256": "627abbd3c7a580cb9071415d688557dd666a22101809d69fd297abf8f03ee396",
+      "package_sha256": "2982f802f036c03712eb83062cba1c2cf129c735597d476e3d37485482a8073b",
+      "source_commit": "97a65d845f39418aecc693dcaf9dcb14a05849f6",
+      "native_parent_build": "b1024-180226-304c",
+      "aarch64_elf_files_byte_identical": 7,
+      "payload_changes": [
+        "usr/share/siliconforest/mesa-runtime.tsv",
+        "usr/share/siliconforest/mesa.json"
+      ],
+      "runtime_llvm_owner": "llvm-libs",
+      "recompiled": false
+    },
+    {
+      "parent_sha256": "627abbd3c7a580cb9071415d688557dd666a22101809d69fd297abf8f03ee396",
+      "package_sha256": "9d8f1b81eb22da079ac252cfd1efccd8252ac4802ce270ec30e9fe31984403fc",
+      "source_commit": "97a65d845f39418aecc693dcaf9dcb14a05849f6",
+      "native_parent_build": "b1024-180226-304c",
+      "aarch64_elf_files_byte_identical": 7,
+      "payload_changes": [
+        "usr/share/siliconforest/mesa.json"
+      ],
+      "runtime_llvm_owner": "llvm22-libs",
+      "recompiled": false
+    }
+  ],
+  "hardware": [
+    {
+      "machine": "m3pro",
+      "board": "apple,j516s",
+      "boot_id": "f7ade3b9-56fc-4cbb-9496-397779d5d6fc",
+      "kernel": "7.2.11-mixtape-77648eb77168-g15",
+      "source": "97a65d845f39418aecc693dcaf9dcb14a05849f6",
+      "boot_desktop_and_pixel_readbacks": "pass",
+      "OpenGL_ES_correct_render_loops": 5701,
+      "Vulkan_correct_render_loops": 4846,
+      "wrong_pixel_loops": 0,
+      "selected_kernel_faults": 0,
+      "compositor_libraries": {
+        "/usr/lib/libgallium-26.3.0-devel.so": "89b7818b03f34a2450eaa4ea0d1d5adbefe5c51b8aba63f0c9a6892c79fd80a3"
+      },
+      "displays": [
+        {
+          "name": "eDP-1",
+          "width": 3456,
+          "height": 2234,
+          "refreshRate": 120.0
+        },
+        {
+          "name": "DP-1",
+          "width": 3840,
+          "height": 2160,
+          "refreshRate": 59.997
+        }
+      ],
+      "quake": {
+        "device": "m3pro",
+        "source": "97a65d845f39418aecc693dcaf9dcb14a05849f6",
+        "kernel": "7.2.11-mixtape-77648eb77168-g15",
+        "fps": [
+          184.1,
+          184.7,
+          186.2
+        ],
+        "median_fps": 184.7,
+        "framebuffer": [
+          1920,
+          1080
+        ],
+        "host_fault_count": 0
+      },
+      "protected_boot_files_unchanged": true,
+      "runtime_package_unchanged": true,
+      "installed_after_test": true
+    },
+    {
+      "machine": "m1air",
+      "board": "apple,j313",
+      "boot_id": "61ef895b-67bc-48ec-a5ae-a09add2f60fe",
+      "kernel": "7.2.11-lab182-205f5e8b20fc-normal",
+      "source": "97a65d845f39418aecc693dcaf9dcb14a05849f6",
+      "boot_desktop_and_pixel_readbacks": "pass",
+      "OpenGL_ES_correct_render_loops": 7464,
+      "Vulkan_correct_render_loops": 6643,
+      "wrong_pixel_loops": 0,
+      "selected_kernel_faults": 0,
+      "compositor_libraries": {
+        "/usr/lib/libgallium-26.3.0-devel.so": "89b7818b03f34a2450eaa4ea0d1d5adbefe5c51b8aba63f0c9a6892c79fd80a3"
+      },
+      "displays": [
+        {
+          "name": "eDP-1",
+          "width": 2560,
+          "height": 1600,
+          "refreshRate": 60.0
+        },
+        {
+          "name": "DP-2",
+          "width": 1920,
+          "height": 1080,
+          "refreshRate": 59.94
+        }
+      ],
+      "quake": {
+        "device": "m1air",
+        "source": "97a65d845f39418aecc693dcaf9dcb14a05849f6",
+        "kernel": "7.2.11-lab182-205f5e8b20fc-normal",
+        "fps": [
+          512.8,
+          510.2,
+          515.2
+        ],
+        "median_fps": 512.8,
+        "framebuffer": [
+          1920,
+          1080
+        ],
+        "host_fault_count": 0
+      },
+      "protected_boot_files_unchanged": true,
+      "runtime_package_unchanged": true,
+      "installed_after_test": true
+    },
+    {
+      "machine": "m1",
+      "board": "apple,j293",
+      "boot_id": "f4b76b7c-270f-47f2-8d6f-99d0882d5cfe",
+      "kernel": "7.2.11-lab182-205f5e8b20fc-normal",
+      "source": "97a65d845f39418aecc693dcaf9dcb14a05849f6",
+      "boot_desktop_and_pixel_readbacks": "pass",
+      "OpenGL_ES_correct_render_loops": 7422,
+      "Vulkan_correct_render_loops": 6642,
+      "wrong_pixel_loops": 0,
+      "selected_kernel_faults": 0,
+      "compositor_libraries": {
+        "/usr/lib/libgallium-26.3.0-devel.so": "89b7818b03f34a2450eaa4ea0d1d5adbefe5c51b8aba63f0c9a6892c79fd80a3"
+      },
+      "displays": [
+        {
+          "name": "eDP-1",
+          "width": 2560,
+          "height": 1600,
+          "refreshRate": 60.0
+        },
+        {
+          "name": "DP-2",
+          "width": 3840,
+          "height": 2160,
+          "refreshRate": 120.0
+        }
+      ],
+      "quake": {
+        "device": "m1",
+        "source": "97a65d845f39418aecc693dcaf9dcb14a05849f6",
+        "kernel": "7.2.11-lab182-205f5e8b20fc-normal",
+        "fps": [
+          490.0,
+          490.5,
+          486.8
+        ],
+        "median_fps": 490.0,
+        "framebuffer": [
+          1920,
+          1080
+        ],
+        "host_fault_count": 0
+      },
+      "protected_boot_files_unchanged": true,
+      "runtime_package_unchanged": true,
+      "installed_after_test": true
+    }
+  ],
+  "M3_additional_one_shot": {
+    "kernel": "7.2.11-lab7b969982-2e59",
+    "kernel_source": "7b969982306e1498a8cbe6e5da9bde743acd8fc5",
+    "job": "j1024-181011-01ff",
+    "whole_job_outcome": "tests_failed",
+    "passed_tests": [
+      "boot-health",
+      "mesa-readback",
+      "mesa-benchmark",
+      "mesa-restore"
+    ],
+    "quake": {
+      "device": "m3pro",
+      "source": "97a65d845f39418aecc693dcaf9dcb14a05849f6",
+      "kernel": "7.2.11-lab7b969982-2e59",
+      "fps": [
+        185.8,
+        185.7,
+        186.7
+      ],
+      "median_fps": 185.8,
+      "framebuffer": [
+        1920,
+        1080
+      ],
+      "host_fault_count": 0
+    },
+    "OMT": {
+      "tool": "0.1.13",
+      "pass": 33,
+      "fail": 14,
+      "skip": 26,
+      "new_vs_historical_baseline": [
+        "gpu.driver",
+        "packages.hardware"
+      ],
+      "driver_binding_observed": "/sys/bus/platform/drivers/asahi-g15",
+      "driver_check_source": "hardware.py:24,145-157 only checks /sys/bus/platform/drivers/asahi",
+      "package_check_source": "hardware.py:129-136 and system.py:44 use literal mesa/vulkan-asahi package names",
+      "note": "This is not a whole-lab or full-release PASS. Other OMT failures include GPU-reporting discrepancies despite the independent native GL ES/Vulkan checks and passing GPU benchmarks; those are not declared fixed."
+    },
+    "original_default_kernel_and_Mesa_restored_before_normal_kernel_repeat": true
+  },
+  "benchmark_method": {
+    "program": "vkQuake 1.36.0",
+    "executable_sha256": "3661f258b23a4ae66749af5062eab70ea1066ed936b9b7a114cc2c5cba379483",
+    "demo": "demo1",
+    "frames": 969,
+    "runs": 3,
+    "render_extent": [
+      1920,
+      1080
+    ],
+    "each_run_extent_confirmed_from_PNG_header": true,
+    "vsync": 0,
+    "MSAA": 0,
+    "render_scale": 1,
+    "max_frame_latency": 2,
+    "warmup_waits": 1000,
+    "gamma": 0.9,
+    "contrast": 1.4,
+    "scope": "Short average-throughput measurements, not frame-time, sustained-power or stutter qualification."
+  },
+  "references": {
+    "M3_fresh_before": {
+      "device": "m3pro",
+      "fps": [
+        151.5,
+        152.0,
+        152.1
+      ],
+      "median_fps": 152.0,
+      "framebuffer": [
+        1920,
+        1080
+      ]
+    },
+    "M1_Air_fresh_before": {
+      "device": "m1air",
+      "fps": [
+        505.6,
+        515.5,
+        502.5
+      ],
+      "median_fps": 505.6,
+      "framebuffer": [
+        1920,
+        1080
+      ]
+    },
+    "M1_post_first_reboot": {
+      "device": "m1",
+      "fps": [
+        507.0,
+        507.1,
+        504.4
+      ],
+      "median_fps": 507.0,
+      "framebuffer": [
+        1920,
+        1080
+      ]
+    },
+    "M1_initial_session": {
+      "device": "m1",
+      "fps": [
+        56.1,
+        57.3,
+        57.4
+      ],
+      "median_fps": 57.3,
+      "framebuffer": [
+        1920,
+        1080
+      ]
+    },
+    "note": "The initial J293 stock-Mesa session was about57 FPS; a per-process new Vulkan driver stayed about57. Rebooted sessions reached507 then490, so this is not attributed to a ninefold Mesa speedup. Its target clock began in1976 before synchronization; controller time and boot IDs identify the actual tests."
+  },
+  "limitations": [
+    "No J613 or J615 is available; Scott\u2019s revised Air VA layout still needs physical texture/MSAA/compute and desktop qualification.",
+    "No full CTS run or sustained stability/performance qualification.",
+    "M4 and T8122 HAL200 remain unqualified.",
+    "Kernel/package/installer default enablement and the Omacom target integration branch remain separate work.",
+    "The M3 remains substantially slower than the M1s in this workload; no memory-readiness root-cause or clock-policy fix is claimed.",
+    "Automatic rollback helpers were compiled and enabled, then disabled after successful checks; automatic recovery was not exercised."
+  ]
+}

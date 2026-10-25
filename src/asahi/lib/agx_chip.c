@@ -302,8 +302,8 @@ agx_params_driver_supported(const struct drm_asahi_params_global *params)
    }
    case AGX_CHIP_G15G:
       /* T8122/M3: one die, one cluster, AGX3 shaders on the legacy firmware
-       * interface (14.8.3), through the kernel's T8122 runtime. agx_open_device
-       * admits it only with ASAHI_M3_EXPERIMENTAL=1. */
+       * interface (14.8.3), through the kernel's T8122 runtime. The exact
+       * identity/runtime checks apply without a Mesa environment opt-in. */
       return params->chip_id == 0x8122 && params->num_dies == 1 &&
              params->num_clusters_total == 1 &&
              params->usc_generation == AGX_ISA_AGX3 &&

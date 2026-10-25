@@ -15,12 +15,43 @@ actual layout. Nonzero timestamp-copy slots and unknown signatures/packets fail
 closed. Air, G17, M1/M2 and virtio retain their existing packet paths. See
 [the contract and qualification notes](SILICONFOREST-G15-WIRE.md).
 
-The updated x86_64 build passes **92 registered Asahi tests**, including exact
+The updated x86_64 and native ARM64 builds pass **92 registered Asahi tests**, including exact
 feature-signature, packet/prior/barrier, truncation and timestamp-copy refusal
-controls. The physical qualification of this follow-up is pending; the original
+controls. All three available Macs passed installed-Mesa reboot, compositor,
+display and independent OpenGL ES/Vulkan pixel checks at source
+`97a65d845f39418aecc693dcaf9dcb14a05849f6`.
+
+| Machine | Kernel retained after qualification | 1080p Quake median, three runs |
+| --- | --- | --- |
+| J516S M3 Pro | `7.2.11-mixtape-77648eb77168-g15` | **184.7 FPS** |
+| J313 M1 Air | `7.2.11-lab182-205f5e8b20fc-normal` | **512.8 FPS** |
+| J293 13-inch M1 | `7.2.11-lab182-205f5e8b20fc-normal` | **490.0 FPS** |
+
+The exact same seven ARM64 ELF payloads are installed on all three. M1 package
+variants change only profile/runtime-owner metadata. All selected pixel loops
+were correct and no GPU/DART fault was observed during these checks. The M3
+also passed reboot/readbacks and measured 185.8 FPS on the one-shot kernel built
+from `7b969982306e`. That normal lab job remains **TESTS_FAILED**: OMT 0.1.13
+flagged two regressions against its historical 7.1.12 reference, checking only
+the `asahi` binding rather than the observed `asahi-g15` binding, and requiring
+literal package names replaced by the qualification package. Other OMT GPU
+reporting discrepancies are recorded, not declared fixed. No gate was bypassed.
+
+The M3's fresh pre-upgrade median was 152.0 FPS on its usual kernel; its normal
+kernel repeat is about 21.5% faster. These short samples do not isolate every
+session effect, qualify sustained behavior, establish a memory-readiness cause,
+or remove the substantial gap to M1. The J293's initial 57 FPS session stayed
+slow with an isolated new Vulkan library and recovered after reboot; do not
+claim a ninefold Mesa speedup.
+
+The updated Mesa remains installed on each Mac, their original default kernels
+and protected boot files are intact, and the qualification timers are removed.
+No full CTS or J613/J615 revised-layout qualification is claimed. Details,
+source/package hashes, complete samples and limitations are in
+[the hardware receipt](SILICONFOREST-HARDWARE-20261024.json). The original
 receipts below describe the earlier integration head, not this source change.
 
-## October 24 integration candidate
+## Earlier October 24 host-only checkpoint
 
 Tested source: **`aefe5c2dd1525e37e0d329fdf39595dc25abbbcd`**.
 Later validation-only documentation does not change the tested driver subtrees.
@@ -47,9 +78,10 @@ identity and firmware/kernel contract. Kernel and package switch-on is separate.
 The G15G drm-shim identity is synthetic. Its baseline features match the Air
 runtime's VM_STATUS/SCHEDULED_QUEUES contract; it refuses binds into the four
 reserved ranges. It exercises host allocation and pipeline setup without
-executing a shader. The revised Air layout, physical M1/M2/M3 regressions,
-AArch64 package, full CTS, desktop stability and any FPS change remain untested.
-No kernel, firmware, m1n1, system package or boot setting was changed.
+executing a shader. At that earlier checkpoint, the revised Air layout,
+physical M1/M2/M3 regressions, AArch64 package, full CTS, desktop stability and
+FPS changes remained untested. That host-only checkpoint changed no kernel,
+firmware, m1n1, system package or boot setting. Later hardware work is above.
 
 The host run exposed stale expectations for G15G wide barriers and held M4
 admission, plus a compiler fixture comparing unrelated chip schedules. The
