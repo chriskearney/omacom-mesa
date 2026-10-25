@@ -13,10 +13,10 @@ older PR runs. New events do not cancel running merge-group or post-merge builds
 
 Every PR runs production CPU fixtures, pinned kernel UAPI-layout checks, workflow lint and negative CI-control tests. The linter is a SHA-256-verified official release binary, avoiding a cold Go build on every PR. Planner and result jobs check out only their small controller scripts.
 Only a small documentation allowlist can skip native builds on PRs. Unknown paths,
-CI files, dependency metadata and every source change build both architectures.
-Merge-queue, manual and integration-branch push runs always build both.
+CI files, dependency metadata and every source change build native ARM64.
+Merge-queue, manual and integration-branch push runs always build ARM64.
 
-The parallel x86_64 and native aarch64 jobs use hosted Ubuntu 26.04, a matching
+The native aarch64 job uses hosted Ubuntu 26.04, a matching
 LLVM/Clang/translator 22 toolchain and hash-pinned Meson 1.10.2. Four build workers
 match the hosted CPUs while bounding peak memory. Compiler tools come from the same source; the final
 Asahi/Zink/Honeykrisp driver build disables LLVM and SPIRV-Tools linkage. It runs
@@ -34,7 +34,7 @@ personal-fork trial, not promised in advance.
 ## Delivery and release
 
 A successful push to `integration/aurora` retains a staged ARM driver candidate
-and manifest after both architecture jobs and the required gate pass, not an Arch package or automatic release. A separate trusted job verifies the archive digest and issues a GitHub provenance attestation. The tar archive preserves file modes and symlinks. The manifest identifies
+and manifest after the ARM64 build and required gate pass, not an Arch package or automatic release. A separate trusted job verifies the archive digest and issues a GitHub provenance attestation. The tar archive preserves file modes and symlinks. The manifest identifies
 the exact commit, runner architecture, run/attempt, per-file SHA-256, tested suites
 and installed toolchain packages. Failure artifacts retain Meson configure logs,
 test logs and JUnit evidence. Artifacts have 14-day retention.
@@ -54,7 +54,7 @@ no secrets, no retained checkout credentials and full-SHA action/tool pins. Ther
 
 1. Establish Omacom's intended `integration/aurora` base and land this workflow there.
 2. Require the exact `ci / result` check from the GitHub Actions app (ID 15368).
-   Do not require optional matrix job names or the old lightweight check.
+   Do not require the optional build job or the old lightweight check.
 3. Require PR review and approval of the latest push; disallow branch deletion and
    force-pushes. Merge queues can use this workflow's `merge_group` coverage.
 4. Confirm a failing PR is blocked, a docs-only PR succeeds without build-pending
