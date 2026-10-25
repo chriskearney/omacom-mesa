@@ -34,6 +34,13 @@ maintenance, not 214 missing M3 driver fixes.
   Copying each header's type and next pointer through untyped storage, plus
   copying the external-memory payload, preserves all 3,359 policy checks;
   neither the policy nor the failing assertion is relaxed.
+- Host fixtures now follow the integrated policies: G15G wide CDM barriers
+  are positive cases, while actual M4 device admission is refused without
+  removing offline compiler capability coverage. The inherited image-store
+  regression compared whole G17P/G16G binaries, including unrelated register
+  copies and scheduling. It now compares the single image-write instruction
+  and independently checks the float/integer data bit. No production compiler
+  change is needed; a deliberate float-as-integer mutation must fail the test.
 - Preserve this fork's assistant policy; do not import Aurora's workflow that
   rewrites it. Historical compatibility branches and private-source exclusions
   are unchanged.

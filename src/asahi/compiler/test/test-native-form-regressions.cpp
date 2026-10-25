@@ -1055,11 +1055,27 @@ TEST(NativeForms, ImageStoreUsesDataTypeAcrossChipsAndFormats)
          ASSERT_TRUE(agx_compile_shader_nir(b.shader, &key, &part));
          ASSERT_GT(part.info.binary_size, 0u);
          const uint8_t *code = static_cast<const uint8_t *>(part.binary);
-         std::vector<uint8_t> binary(code, code + part.info.binary_size);
+         /* Compare the image-write packet, not unrelated register copies
+          * and scheduling in the two chip profiles. imgwci.ep0 is 16 bytes;
+          * its fixed opcode bytes are pinned by agx3_tex_encode_image_write_2d.
+          * This small shader must contain exactly one such instruction. */
+         std::vector<uint8_t> write;
+         for (unsigned i = 0; i + AGX3_IMAGE_WRITE_LENGTH <= part.info.binary_size;
+              i += 2) {
+            if (code[i] == 0xd7 && code[i + 2] == 0x54) {
+               ASSERT_TRUE(write.empty());
+               write.assign(code + i, code + i + AGX3_IMAGE_WRITE_LENGTH);
+            }
+         }
+         ASSERT_EQ(write.size(), AGX3_IMAGE_WRITE_LENGTH);
+         /* f70 is the float-versus-integer data bit, encoded at byte 13 bit 5.
+          * Check the expected type independently of cross-chip equivalence. */
+         EXPECT_EQ((write[13] >> 5) & 1,
+                   nir_alu_type_get_base_type(c.type) == nir_type_float);
          if (reference.empty())
-            reference = binary;
+            reference = write;
          else
-            EXPECT_EQ(binary, reference);
+            EXPECT_EQ(write, reference);
          free(part.binary);
          ralloc_free(b.shader);
       }
