@@ -9,23 +9,23 @@ No CODEOWNERS, Omacom repository settings, package source pins, or driver code a
 cancellations, absent planner output or unexpected skips. The workflow has no
 path/branch filters on PRs, supports `merge_group`, and tests GitHub's checked-out
 merge commit rather than replacing it with the PR head. New PR commits cancel
-older PR runs; queued merges and post-merge builds do not cancel one another.
+older PR runs. New events do not cancel running merge-group or post-merge builds; GitHub keeps only the newest pending run in each concurrency group.
 
-Every PR runs production CPU fixtures, pinned kernel UAPI-layout checks, workflow lint and negative CI-control tests.
+Every PR runs production CPU fixtures, pinned kernel UAPI-layout checks, workflow lint and negative CI-control tests. The linter is a SHA-256-verified official release binary, avoiding a cold Go build on every PR. Planner and result jobs check out only their small controller scripts.
 Only a small documentation allowlist can skip native builds on PRs. Unknown paths,
 CI files, dependency metadata and every source change build both architectures.
 Merge-queue, manual and integration-branch push runs always build both.
 
 The parallel x86_64 and native aarch64 jobs use hosted Ubuntu 26.04, a matching
-LLVM/Clang/translator 22 toolchain and hash-pinned Meson 1.10.2. Two build workers
-limit peak memory. Compiler tools come from the same source; the final
+LLVM/Clang/translator 22 toolchain and hash-pinned Meson 1.10.2. Four build workers
+match the hosted CPUs while bounding peak memory. Compiler tools come from the same source; the final
 Asahi/Zink/Honeykrisp driver build disables LLVM and SPIRV-Tools linkage. It runs
-all configured Meson tests, then the existing no-submit drm-shim admission,
+all configured Meson tests (including explicitly built dependencies of Python-wrapped executables that Meson omits from its default build), then the existing no-submit drm-shim admission,
 pipeline and memory-map probes with Vulkan validation. Complete shader-compilation probes also cover float-to-int64 and perspective interpolateAtOffset on G13G, G15S, G15C, G17P and G15G. Installed ELF dependencies
 are checked before a manifest is created. CPU/shim success is not GPU or CTS proof.
 
-Ccache speeds up subsequent PR revisions. Keys include architecture and build
-configuration, and GitHub isolates PR cache writes to each PR ref. Post-merge
+Ccache speeds up subsequent PR revisions; successfully compiled objects are retained even when a later test fails. Keys include architecture and build
+configuration, and GitHub isolates PR cache writes to each PR ref. Merge-queue, manual and post-merge
 builds disable ccache and do not restore PR caches. No build directory, prebuilt
 shader tool or driver binary is shared between runs. Timeouts, bounded cache size
 and artifact retention limit cost. Exact cold/warm timings are measured in the
@@ -34,7 +34,7 @@ personal-fork trial, not promised in advance.
 ## Delivery and release
 
 A successful push to `integration/aurora` retains a staged ARM driver candidate
-and manifest, not an Arch package or automatic release. The manifest identifies
+and manifest after both architecture jobs and the required gate pass, not an Arch package or automatic release. A separate trusted job verifies the archive digest and issues a GitHub provenance attestation. The tar archive preserves file modes and symlinks. The manifest identifies
 the exact commit, runner architecture, run/attempt, per-file SHA-256, tested suites
 and installed toolchain packages. Failure artifacts retain Meson configure logs,
 test logs and JUnit evidence. Artifacts have 14-day retention.
@@ -47,9 +47,8 @@ hosted ARM CPU is an Apple GPU. A new compiler/kernel contract needs new hardwar
 results. Existing M3 Air and full CTS limitations remain.
 
 PR code runs only on disposable GitHub-hosted runners with a read-only token,
-no secrets, no retained checkout credentials and full-SHA action pins. There is no
-`pull_request_target`, privileged `workflow_run`, automatic lab access, OIDC or
-package-write permission. Action pin updates should be reviewed like source.
+no secrets, no retained checkout credentials and full-SHA action/tool pins. There is no
+`pull_request_target`, privileged `workflow_run`, automatic lab access or package-write permission. Only the post-merge attestation job receives OIDC/attestations permission; it does not check out or execute repository code. Action pin updates should be reviewed like source.
 
 ## Maintainer rollout after the trial
 
@@ -64,7 +63,7 @@ package-write permission. Action pin updates should be reviewed like source.
 CODEOWNERS and owner-review settings are deliberately outside this change, per
 Chris's hold. Workflow files and CI-control code are PR-editable, so the required
 status check alone is not tamper-proof: human review of workflow/gate changes or
-an organization-controlled required workflow is still necessary. Required status
+an organization-controlled required workflow is still necessary. Do not attach lab runners to untrusted PR workflows; any later hardware job needs a restricted runner group and an exact trusted source revision. Required status
 checks cannot enforce a numeric hardware/CTS result that this workflow never ran.
 
 Public design references:

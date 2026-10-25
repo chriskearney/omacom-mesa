@@ -5,13 +5,13 @@ export PATH="$PWD/.ci-venv/bin:/usr/lib/llvm-22/bin:$PATH"
 export CC='ccache gcc' CXX='ccache g++'
 export CCACHE_BASEDIR="$PWD" CCACHE_COMPILERCHECK=content
 export CCACHE_MAXSIZE=400M
-if [[ ${GITHUB_EVENT_NAME:-local} == push ]]; then
+if [[ ${GITHUB_EVENT_NAME:-local} != pull_request ]]; then
   export CCACHE_DISABLE=true
 else
   unset CCACHE_DISABLE
 fi
 # Keep hosted 16 GiB runners below OOM even on large compiler translation units.
-ci_jobs=${CI_JOBS:-2}
+ci_jobs=${CI_JOBS:-4}
 ci_meson=(--buildtype=debugoptimized -Db_ndebug=false --wrap-mode=nodownload
   --prefix=/usr --libdir=lib -Dplatforms=x11,wayland
   -Dgallium-drivers=asahi,zink,softpipe -Dvulkan-drivers=asahi
@@ -29,6 +29,7 @@ meson setup .ci-build "${ci_meson[@]}" --native-file .ci-tools.ini \
   -Dllvm=disabled -Dspirv-tools=disabled -Dmesa-clc=system \
   -Dprecomp-compiler=system -Dbuild-tests=true
 meson compile -C .ci-build -j "$ci_jobs"
+python3 .github/mesa-ci/build-tests.py .ci-build
 # Run ALL configured suites: NIR, SPIR-V and Vulkan support tests as well as Asahi.
 meson test -C .ci-build --no-rebuild --print-errorlogs --num-processes "$ci_jobs"
 VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation \
