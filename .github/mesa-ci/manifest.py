@@ -8,6 +8,8 @@ from pathlib import Path
 import platform
 import subprocess
 
+from policy import test_summary
+
 root = Path('.ci-stage')
 elfs = []
 files = []
@@ -31,8 +33,7 @@ if not elfs or not any(Path(p).name == 'libvulkan_asahi.so' for p in elfs):
     raise SystemExit('Missing staged driver ELF payload')
 logs = Path('.ci-build/meson-logs/testlog.json')
 results = [json.loads(line) for line in logs.read_text().splitlines()]
-if not results or any(r['result'] not in {'OK', 'SKIP', 'EXPECTEDFAIL'} for r in results):
-    raise SystemExit('Missing or failed Meson tests')
+summary = test_summary(results)
 provenance = {
     'source_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
     'architecture': platform.machine(),
@@ -42,7 +43,7 @@ provenance = {
     'run_attempt': os.environ.get('GITHUB_RUN_ATTEMPT'),
     'hardware_qualified': False,
     'claim': 'CPU build/tests and no-submit drm-shim only; not a release approval or Arch package',
-    'test_results': {key: sum(r['result'] == key for r in results) for key in sorted({r['result'] for r in results})},
+    'test_results': summary,
     'elfs': elfs, 'files': files,
     'packages': subprocess.check_output(['dpkg-query', '-W', '-f=${Package}=${Version}\n'], text=True).splitlines(),
 }
