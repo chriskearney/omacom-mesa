@@ -1,0 +1,13 @@
+// SPDX-License-Identifier: MIT
+#version 450
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+layout(local_size_x = 1) in;
+layout(set = 0, binding = 0, std430) buffer Data {
+    float input_value;
+    uint64_t output_value;
+    int64_t signed_output_value;
+} data;
+void main() {
+    data.output_value = uint64_t(data.input_value);
+    data.signed_output_value = int64_t(data.input_value);
+}
