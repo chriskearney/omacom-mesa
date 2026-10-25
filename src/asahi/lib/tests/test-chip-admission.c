@@ -191,8 +191,8 @@ main(void)
    assert(agx_chip_driver_supported(AGX_CHIP_G16G));
    assert(!agx_params_driver_supported(&m4));
 
-   /* T8122 (G15G) by its own identity only; the device additionally needs
-    * ASAHI_M3_EXPERIMENTAL=1 (agx_open_device). */
+   /* T8122 (G15G) is admitted by default for its exact identity and
+    * supported legacy firmware/kernel contract. */
    struct drm_asahi_params_global g15g = g15_params('G', 0x8122, 1);
    assert(agx_chip_from_params(&g15g) == AGX_CHIP_G15G);
    assert(agx_params_driver_supported(&g15g));
@@ -230,21 +230,6 @@ main(void)
    bad = g15g;
    bad.usc_generation = 2;
    assert(!agx_params_driver_supported(&bad));
-
-   /* G15G opens only with ASAHI_M3_EXPERIMENTAL=1; other chips always. */
-   unsetenv("ASAHI_M3_EXPERIMENTAL");
-   assert(!agx_chip_experimental_admitted(AGX_CHIP_G15G));
-   assert(agx_chip_experimental_admitted(AGX_CHIP_G15S));
-   assert(agx_chip_experimental_admitted(AGX_CHIP_G17P));
-   setenv("ASAHI_M3_EXPERIMENTAL", "0", 1);
-   assert(!agx_chip_experimental_admitted(AGX_CHIP_G15G));
-   setenv("ASAHI_M3_EXPERIMENTAL", "", 1);
-   assert(!agx_chip_experimental_admitted(AGX_CHIP_G15G));
-   setenv("ASAHI_M3_EXPERIMENTAL", "true", 1);
-   assert(!agx_chip_experimental_admitted(AGX_CHIP_G15G));
-   setenv("ASAHI_M3_EXPERIMENTAL", "1", 1);
-   assert(agx_chip_experimental_admitted(AGX_CHIP_G15G));
-   unsetenv("ASAHI_M3_EXPERIMENTAL");
 
    /* T8122 (G15G): the heap and its sparse alias stay below 2^39, the
     * absolute USC Texture/Sampler bound, and clear of every per-VM

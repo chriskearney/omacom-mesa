@@ -537,10 +537,6 @@ bool agx_params_driver_supported(
 bool agx_params_native_kernel_abi_supported(
    const struct drm_asahi_params_global *params);
 
-/* Whether a device of this chip may open: G15G (T8122) runs on the native path
- * only with ASAHI_M3_EXPERIMENTAL=1, every other supported chip always. */
-bool agx_chip_experimental_admitted(enum agx_chip chip);
-
 /* Exact product name when the chip identity maps to one unambiguous SoC.
  * Variant letters are not marketing tiers: notably, G17P is A18 Pro rather
  * than an M5 variant. Returns NULL when one chip identity spans products. */
