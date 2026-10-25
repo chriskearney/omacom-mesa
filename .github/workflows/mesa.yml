@@ -57,7 +57,15 @@ jobs:
   build:
     needs: [plan, source]
     if: needs.plan.outputs.build == 'true'
-    runs-on: ubuntu-26.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-26.04
+            architecture: x86_64
+          - runner: ubuntu-26.04-arm
+            architecture: aarch64
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 35
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
@@ -74,9 +82,9 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: .ccache
-          key: mesa-ci-v1-aarch64-${{ hashFiles('.github/mesa-ci/build.sh', '.github/mesa-ci/deps.sh', '.github/mesa-ci/requirements.txt') }}-${{ github.sha }}
+          key: mesa-ci-v1-${{ matrix.architecture }}-${{ hashFiles('.github/mesa-ci/build.sh', '.github/mesa-ci/deps.sh', '.github/mesa-ci/requirements.txt') }}-${{ github.sha }}
           restore-keys: |
-            mesa-ci-v1-aarch64-${{ hashFiles('.github/mesa-ci/build.sh', '.github/mesa-ci/deps.sh', '.github/mesa-ci/requirements.txt') }}-
+            mesa-ci-v1-${{ matrix.architecture }}-${{ hashFiles('.github/mesa-ci/build.sh', '.github/mesa-ci/deps.sh', '.github/mesa-ci/requirements.txt') }}-
       - name: Build and test the exact checked-out merge commit
         run: bash .github/mesa-ci/build.sh
       - name: Save compiler cache
@@ -85,12 +93,12 @@ jobs:
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: .ccache
-          key: mesa-ci-v1-aarch64-${{ hashFiles('.github/mesa-ci/build.sh', '.github/mesa-ci/deps.sh', '.github/mesa-ci/requirements.txt') }}-${{ github.sha }}
+          key: mesa-ci-v1-${{ matrix.architecture }}-${{ hashFiles('.github/mesa-ci/build.sh', '.github/mesa-ci/deps.sh', '.github/mesa-ci/requirements.txt') }}-${{ github.sha }}
       - name: Preserve test and configure evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: mesa-evidence-aarch64-${{ github.run_id }}-${{ github.run_attempt }}
+          name: mesa-evidence-${{ matrix.architecture }}-${{ github.run_id }}-${{ github.run_attempt }}
           include-hidden-files: true
           retention-days: 14
           path: |
@@ -99,12 +107,12 @@ jobs:
             .ci-tools/meson-logs/
             .ci-manifest.json
       - name: Archive clean ARM staging tree with file modes and symlinks
-        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/integration/aurora'
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/integration/aurora' && matrix.architecture == 'aarch64'
         run: |
           tar -czf mesa-arm-stage.tar.gz .ci-stage .ci-manifest.json
           sha256sum mesa-arm-stage.tar.gz > mesa-arm-stage.tar.gz.sha256
       - name: Retain unpromoted ARM staging input
-        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/integration/aurora'
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/integration/aurora' && matrix.architecture == 'aarch64'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: mesa-arm-staging-${{ github.sha }}
@@ -150,7 +158,7 @@ jobs:
       - name: Verify archive digest
         working-directory: candidate
         run: sha256sum --check mesa-arm-stage.tar.gz.sha256
-      - name: Attest the clean archive after the ARM64 build and gate pass
+      - name: Attest the clean archive after both architectures and the gate pass
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
         with:
           subject-path: candidate/mesa-arm-stage.tar.gz
