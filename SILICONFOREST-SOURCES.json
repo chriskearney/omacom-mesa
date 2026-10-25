@@ -2859,8 +2859,8 @@
   "last_integration_update": "2026-10-24",
   "integration_followups_20261024": {
     "base": "7515336b3dfbe8943b555ffec9817b9ed64379a8",
-    "aurora_merge": "100c8bdf98d9c65f01b51130a6fc2d8e5d9e9404",
-    "scott_merge": "dcb62e9adc2d288ab135e005fbb32e086d47f8ca",
+    "aurora_merge": "5323fb87815718ca294ebe3c4f92b56cc18c577e",
+    "scott_merge": "44fe9cab321168c782babaeb0f035088b574d823",
     "kernel_repository": "https://github.com/omacom/linux-aurora",
     "kernel_commit": "7b969982306e1498a8cbe6e5da9bde743acd8fc5",
     "kernel_header": "include/uapi/drm/asahi_drm.h",

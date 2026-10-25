@@ -2,7 +2,7 @@
 
 ## October 24 integration candidate
 
-Tested source: **`c66c1969387bada0f1ace561d4c424822b803251`**.
+Tested source: **`0558621f2e8cdfc243e23289d23ccef951defcd5`**.
 Later validation-only documentation does not change the tested driver subtrees.
 
 | Check | Result |

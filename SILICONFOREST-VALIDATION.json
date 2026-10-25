@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "checked_at_utc": "2026-10-25T00:01:31.605700+00:00",
-  "source_commit": "c66c1969387bada0f1ace561d4c424822b803251",
+  "source_commit": "0558621f2e8cdfc243e23289d23ccef951defcd5",
   "driver_subtrees": {
     "src/asahi": "9a90f930988ddee4f290c661bd6c48e8f3b928a5",
     "src/gallium/drivers/asahi": "4e52bf0719cef4c094294aad9174219ab0d4a86a",
