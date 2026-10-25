@@ -5,7 +5,7 @@ export PATH="$PWD/.ci-venv/bin:/usr/lib/llvm-22/bin:$PATH"
 export CC='ccache gcc' CXX='ccache g++'
 export CCACHE_BASEDIR="$PWD" CCACHE_COMPILERCHECK=content
 export CCACHE_MAXSIZE=400M
-if [[ ${GITHUB_EVENT_NAME:-local} == push ]]; then
+if [[ ${GITHUB_EVENT_NAME:-local} != pull_request ]]; then
   export CCACHE_DISABLE=true
 else
   unset CCACHE_DISABLE

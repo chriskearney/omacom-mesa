@@ -12,7 +12,12 @@ root = Path('.ci-stage')
 elfs = []
 files = []
 for path in sorted(root.rglob('*')):
-    if not path.is_file() or path.is_symlink():
+    if path.is_symlink():
+        if not path.resolve().is_relative_to(root.resolve()):
+            raise SystemExit(f'Staged symlink escapes install root: {path}')
+        files.append({'path': str(path.relative_to(root)), 'symlink': os.readlink(path)})
+        continue
+    if not path.is_file():
         continue
     data = path.read_bytes()
     files.append({'path': str(path.relative_to(root)), 'sha256': hashlib.sha256(data).hexdigest()})
@@ -31,7 +36,7 @@ if not results or any(r['result'] not in {'OK', 'SKIP', 'EXPECTEDFAIL'} for r in
 provenance = {
     'source_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
     'architecture': platform.machine(),
-    'kernel_contract': json.loads(Path('SILICONFOREST-SOURCES.json').read_text())['integration_followups_20261024'],
+    'kernel_contract': {k: v for k, v in json.loads(Path('SILICONFOREST-SOURCES.json').read_text())['integration_followups_20261024'].items() if k.startswith('kernel_')},
     'event': os.environ.get('GITHUB_EVENT_NAME', 'local'),
     'run_id': os.environ.get('GITHUB_RUN_ID'),
     'run_attempt': os.environ.get('GITHUB_RUN_ATTEMPT'),

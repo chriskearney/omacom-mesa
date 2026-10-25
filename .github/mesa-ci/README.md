@@ -25,7 +25,7 @@ pipeline and memory-map probes with Vulkan validation. Complete shader-compilati
 are checked before a manifest is created. CPU/shim success is not GPU or CTS proof.
 
 Ccache speeds up subsequent PR revisions. Keys include architecture and build
-configuration, and GitHub isolates PR cache writes to each PR ref. Post-merge
+configuration, and GitHub isolates PR cache writes to each PR ref. Merge-queue, manual and post-merge
 builds disable ccache and do not restore PR caches. No build directory, prebuilt
 shader tool or driver binary is shared between runs. Timeouts, bounded cache size
 and artifact retention limit cost. Exact cold/warm timings are measured in the
@@ -34,7 +34,7 @@ personal-fork trial, not promised in advance.
 ## Delivery and release
 
 A successful push to `integration/aurora` retains a staged ARM driver candidate
-and manifest, not an Arch package or automatic release. The manifest identifies
+and manifest after both architecture jobs and the required gate pass, not an Arch package or automatic release. A separate trusted job verifies the archive digest and issues a GitHub provenance attestation. The tar archive preserves file modes and symlinks. The manifest identifies
 the exact commit, runner architecture, run/attempt, per-file SHA-256, tested suites
 and installed toolchain packages. Failure artifacts retain Meson configure logs,
 test logs and JUnit evidence. Artifacts have 14-day retention.
@@ -47,9 +47,8 @@ hosted ARM CPU is an Apple GPU. A new compiler/kernel contract needs new hardwar
 results. Existing M3 Air and full CTS limitations remain.
 
 PR code runs only on disposable GitHub-hosted runners with a read-only token,
-no secrets, no retained checkout credentials and full-SHA action pins. There is no
-`pull_request_target`, privileged `workflow_run`, automatic lab access, OIDC or
-package-write permission. Action pin updates should be reviewed like source.
+no secrets, no retained checkout credentials and full-SHA action/tool pins. There is no
+`pull_request_target`, privileged `workflow_run`, automatic lab access or package-write permission. Only the post-merge attestation job receives OIDC/attestations permission; it does not check out or execute repository code. Action pin updates should be reviewed like source.
 
 ## Maintainer rollout after the trial
 

@@ -47,7 +47,7 @@ jobs:
           persist-credentials: false
       - name: CPU source fixtures and CI gate regression tests
         run: |
-          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/mesa.yml
+          go run github.com/rhysd/actionlint/cmd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca .github/workflows/mesa.yml
           python3 tools/siliconforest/check.py
           python3 tools/siliconforest/check-kernel-abi.py .ci-kernel
           python3 -m unittest discover -s .github/mesa-ci/tests -v
@@ -74,7 +74,9 @@ jobs:
       - name: Install matched toolchain
         run: bash .github/mesa-ci/deps.sh
       - name: Restore compiler cache
-        if: github.event_name != 'push'
+        id: cache
+        continue-on-error: true
+        if: github.event_name == 'pull_request'
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: .ccache
@@ -84,7 +86,8 @@ jobs:
       - name: Build and test the exact checked-out merge commit
         run: bash .github/mesa-ci/build.sh
       - name: Save compiler cache
-        if: success() && github.event_name != 'push'
+        continue-on-error: true
+        if: success() && github.event_name == 'pull_request' && steps.cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: .ccache
@@ -101,17 +104,22 @@ jobs:
             .ci-build/meson-info/
             .ci-tools/meson-logs/
             .ci-manifest.json
-      - name: Preserve post-merge ARM driver candidate
+      - name: Archive clean ARM staging tree with file modes and symlinks
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/integration/aurora' && matrix.architecture == 'aarch64'
+        run: |
+          tar -czf mesa-arm-stage.tar.gz .ci-stage .ci-manifest.json
+          sha256sum mesa-arm-stage.tar.gz > mesa-arm-stage.tar.gz.sha256
+      - name: Retain unpromoted ARM staging input
         if: success() && github.event_name == 'push' && github.ref == 'refs/heads/integration/aurora' && matrix.architecture == 'aarch64'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: mesa-arm-candidate-${{ github.sha }}
+          name: mesa-arm-staging-${{ github.sha }}
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 14
           path: |
-            .ci-stage/
-            .ci-manifest.json
+            mesa-arm-stage.tar.gz
+            mesa-arm-stage.tar.gz.sha256
   result:
     name: ci / result
     if: always()
@@ -126,3 +134,33 @@ jobs:
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: python3 .github/mesa-ci/gate.py
+
+  candidate:
+    name: Attested ARM candidate
+    needs: [result, build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/integration/aurora'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: mesa-arm-staging-${{ github.sha }}
+          path: candidate
+      - name: Verify archive digest
+        working-directory: candidate
+        run: sha256sum --check mesa-arm-stage.tar.gz.sha256
+      - name: Attest the clean archive after both architectures and the gate pass
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: candidate/mesa-arm-stage.tar.gz
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mesa-arm-candidate-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 14
+          path: candidate/
