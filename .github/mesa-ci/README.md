@@ -17,8 +17,8 @@ CI files, dependency metadata and every source change build both architectures.
 Merge-queue, manual and integration-branch push runs always build both.
 
 The parallel x86_64 and native aarch64 jobs use hosted Ubuntu 26.04, a matching
-LLVM/Clang/translator 22 toolchain and hash-pinned Meson 1.10.2. Two build workers
-limit peak memory. Compiler tools come from the same source; the final
+LLVM/Clang/translator 22 toolchain and hash-pinned Meson 1.10.2. Four build workers
+match the hosted CPUs while bounding peak memory. Compiler tools come from the same source; the final
 Asahi/Zink/Honeykrisp driver build disables LLVM and SPIRV-Tools linkage. It runs
 all configured Meson tests, then the existing no-submit drm-shim admission,
 pipeline and memory-map probes with Vulkan validation. Complete shader-compilation probes also cover float-to-int64 and perspective interpolateAtOffset on G13G, G15S, G15C, G17P and G15G. Installed ELF dependencies

@@ -11,7 +11,7 @@ else
   unset CCACHE_DISABLE
 fi
 # Keep hosted 16 GiB runners below OOM even on large compiler translation units.
-ci_jobs=${CI_JOBS:-2}
+ci_jobs=${CI_JOBS:-4}
 ci_meson=(--buildtype=debugoptimized -Db_ndebug=false --wrap-mode=nodownload
   --prefix=/usr --libdir=lib -Dplatforms=x11,wayland
   -Dgallium-drivers=asahi,zink,softpipe -Dvulkan-drivers=asahi
