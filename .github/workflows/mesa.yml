@@ -35,14 +35,25 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
+      - id: contract
+        name: Read pinned kernel contract
+        run: python3 .github/mesa-ci/kernel-contract.py >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          repository: omacom/linux-aurora
+          ref: ${{ steps.contract.outputs.sha }}
+          path: .ci-kernel
+          sparse-checkout: include/uapi/drm
+          persist-credentials: false
       - name: CPU source fixtures and CI gate regression tests
         run: |
           go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/mesa.yml
           python3 tools/siliconforest/check.py
+          python3 tools/siliconforest/check-kernel-abi.py .ci-kernel
           python3 -m unittest discover -s .github/mesa-ci/tests -v
           bash -n .github/mesa-ci/build.sh .github/mesa-ci/deps.sh
   build:
-    needs: plan
+    needs: [plan, source]
     if: needs.plan.outputs.build == 'true'
     strategy:
       fail-fast: false
@@ -56,8 +67,6 @@ jobs:
     timeout-minutes: 35
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
-      # Post-merge artifacts are always built clean, without PR compiler caches.
-      CCACHE_DISABLE: ${{ github.event_name == 'push' && '1' || '0' }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:

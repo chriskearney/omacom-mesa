@@ -11,7 +11,7 @@ path/branch filters on PRs, supports `merge_group`, and tests GitHub's checked-o
 merge commit rather than replacing it with the PR head. New PR commits cancel
 older PR runs; queued merges and post-merge builds do not cancel one another.
 
-Every PR runs production CPU fixtures, workflow lint and negative CI-control tests.
+Every PR runs production CPU fixtures, pinned kernel UAPI-layout checks, workflow lint and negative CI-control tests.
 Only a small documentation allowlist can skip native builds on PRs. Unknown paths,
 CI files, dependency metadata and every source change build both architectures.
 Merge-queue, manual and integration-branch push runs always build both.
@@ -21,7 +21,7 @@ LLVM/Clang/translator 22 toolchain and hash-pinned Meson 1.10.2. Two build worke
 limit peak memory. Compiler tools come from the same source; the final
 Asahi/Zink/Honeykrisp driver build disables LLVM and SPIRV-Tools linkage. It runs
 all configured Meson tests, then the existing no-submit drm-shim admission,
-pipeline and memory-map probes with Vulkan validation. Installed ELF dependencies
+pipeline and memory-map probes with Vulkan validation. Complete shader-compilation probes also cover float-to-int64 and perspective interpolateAtOffset on G13G, G15S, G15C, G17P and G15G. Installed ELF dependencies
 are checked before a manifest is created. CPU/shim success is not GPU or CTS proof.
 
 Ccache speeds up subsequent PR revisions. Keys include architecture and build

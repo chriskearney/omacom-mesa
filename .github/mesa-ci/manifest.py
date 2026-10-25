@@ -31,6 +31,7 @@ if not results or any(r['result'] not in {'OK', 'SKIP', 'EXPECTEDFAIL'} for r in
 provenance = {
     'source_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
     'architecture': platform.machine(),
+    'kernel_contract': json.loads(Path('SILICONFOREST-SOURCES.json').read_text())['integration_followups_20261024'],
     'event': os.environ.get('GITHUB_EVENT_NAME', 'local'),
     'run_id': os.environ.get('GITHUB_RUN_ID'),
     'run_attempt': os.environ.get('GITHUB_RUN_ATTEMPT'),

@@ -5,6 +5,11 @@ export PATH="$PWD/.ci-venv/bin:/usr/lib/llvm-22/bin:$PATH"
 export CC='ccache gcc' CXX='ccache g++'
 export CCACHE_BASEDIR="$PWD" CCACHE_COMPILERCHECK=content
 export CCACHE_MAXSIZE=400M
+if [[ ${GITHUB_EVENT_NAME:-local} == push ]]; then
+  export CCACHE_DISABLE=true
+else
+  unset CCACHE_DISABLE
+fi
 # Keep hosted 16 GiB runners below OOM even on large compiler translation units.
 ci_jobs=${CI_JOBS:-2}
 ci_meson=(--buildtype=debugoptimized -Db_ndebug=false --wrap-mode=nodownload
@@ -28,6 +33,7 @@ meson compile -C .ci-build -j "$ci_jobs"
 meson test -C .ci-build --no-rebuild --print-errorlogs --num-processes "$ci_jobs"
 VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation \
   python3 tools/siliconforest/drm-smoke.py .ci-build
+python3 .github/mesa-ci/pipelines.py
 DESTDIR="$PWD/.ci-stage" meson install -C .ci-build --no-rebuild
 python3 .github/mesa-ci/manifest.py
 ccache --show-stats
