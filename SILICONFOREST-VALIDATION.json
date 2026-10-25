@@ -1,12 +1,13 @@
 {
   "schema_version": 1,
-  "checked_at_utc": "2026-10-18T18:52:30.805404+00:00",
-  "source_commit": "3cca5b305cda31558540dbba86f0074568a4cb27",
+  "checked_at_utc": "2026-10-25T00:01:31.605700+00:00",
+  "source_commit": "c66c1969387bada0f1ace561d4c424822b803251",
   "driver_subtrees": {
-    "src/asahi": "62b2aa4bb21b526892f6c465fbd7adf98c778fe6",
+    "src/asahi": "9a90f930988ddee4f290c661bd6c48e8f3b928a5",
+    "src/gallium/drivers/asahi": "4e52bf0719cef4c094294aad9174219ab0d4a86a",
+    "src/gallium/drivers/zink": "035886779f61bacba0c6eb81a891829fc5144960",
     "src/drm-shim": "7818081c091bc1a9f8f73b6763ff4671f61b00f9",
-    "src/gallium/drivers/asahi": "22d4d2916940ddb53789627d910022c446c2a4e0",
-    "src/gallium/drivers/zink": "bf5b7303304456fef0be1086264f81853b6e0037"
+    "include/drm-uapi/asahi_drm.h": "3260e2f7ba2844413c7dc18dc001b66cafbe1a01"
   },
   "host": "x86_64 Linux",
   "c_compiler": "GCC 16.2.1 20260810",
@@ -16,12 +17,25 @@
     "Asahi and Zink Gallium shared driver",
     "Honeykrisp Vulkan shared driver",
     "GLX/EGL/GBM",
-    "tree-matched mesa_clc and asahi_clc",
+    "tree-matched mesa_clc and asahi_clc including G15G libagx programs",
     "Asahi drm-shim",
-    "all Asahi suite executables and wrapper dependencies"
+    "all registered Asahi test dependencies"
   ],
+  "build_options": {
+    "buildtype": "debugoptimized",
+    "b_ndebug": false,
+    "gallium_drivers": [
+      "asahi",
+      "zink",
+      "softpipe"
+    ],
+    "vulkan_drivers": [
+      "asahi"
+    ],
+    "glvnd": false
+  },
   "asahi_tests": {
-    "passed": 36,
+    "passed": 91,
     "failed": 0,
     "tests": [
       {
@@ -45,6 +59,10 @@
         "result": "OK"
       },
       {
+        "name": "asahi - mesa:agx3_gen1_null_as",
+        "result": "OK"
+      },
+      {
         "name": "asahi - mesa:agx3_gen1_hit_commit",
         "result": "OK"
       },
@@ -53,7 +71,15 @@
         "result": "OK"
       },
       {
+        "name": "asahi - mesa:agx3_gen1_position_fetch",
+        "result": "OK"
+      },
+      {
         "name": "asahi - mesa:agx3_ray_query_prerequisites",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:agx3_gen1_wait",
         "result": "OK"
       },
       {
@@ -62,18 +88,6 @@
       },
       {
         "name": "asahi - mesa:asahi-scs-layout",
-        "result": "OK"
-      },
-      {
-        "name": "asahi - mesa:agx2_python_disasm",
-        "result": "OK"
-      },
-      {
-        "name": "asahi - mesa:asahi-rt-bvh",
-        "result": "OK"
-      },
-      {
-        "name": "asahi - mesa:asahi_layout_tests",
         "result": "OK"
       },
       {
@@ -93,11 +107,63 @@
         "result": "OK"
       },
       {
+        "name": "asahi - mesa:agx2_python_disasm",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:vbo_robustness",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:asahi-rt-bvh",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:agx3_gen1_terminate",
+        "result": "OK"
+      },
+      {
         "name": "asahi - mesa:asahi-rt-envelope",
         "result": "OK"
       },
       {
+        "name": "asahi - mesa:hk_execution_allowance",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:hk_memory_budget",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:hk_barrier",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:hk_gen1_query_state",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:hk_root_size",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:asahi_layout_tests",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:hk_query_reset",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:hk_query_program",
+        "result": "OK"
+      },
+      {
         "name": "asahi - mesa:hk_g17p_compression",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:hk_query_copy",
         "result": "OK"
       },
       {
@@ -113,19 +179,31 @@
         "result": "OK"
       },
       {
+        "name": "asahi - mesa:hk_gs_ray_query",
+        "result": "OK"
+      },
+      {
         "name": "asahi - mesa:hk_sampler_bias",
         "result": "OK"
       },
       {
-        "name": "asahi - mesa:asahi-native-descriptor",
+        "name": "asahi - mesa:hk_rt_inlining",
         "result": "OK"
       },
       {
-        "name": "asahi - mesa:asahi-g17p-texture-crawl",
+        "name": "asahi - mesa:hk_memory_oom",
         "result": "OK"
       },
       {
-        "name": "asahi - mesa:hk_sync_prior",
+        "name": "asahi - mesa:hk_tes_query",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:hk_rt_pipeline_executable",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:hk_sparse_formats",
         "result": "OK"
       },
       {
@@ -133,7 +211,155 @@
         "result": "OK"
       },
       {
-        "name": "asahi - mesa:asahi-g13g-gallium-xfb-program",
+        "name": "asahi - mesa:hk_rt_cache_control",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:hk_rt_pipeline_binary",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:hk_rt_on_demand",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:hk_cpu_upload",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:hk_sync_prior",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:hk_host_as",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:asahi-native-descriptor",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:hk-g13g-explicit-plane-layout",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:hk_host_as_lifetime",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:asahi-g17p-texture-crawl",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:hk-g17p-explicit-plane-layout",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:hk_g17p_metadata_grid",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:hk-g17p-compressed-layer-copy",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:asahi-g13g-gallium-vs",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:asahi-g13g-gallium-query",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:asahi-g15c-gallium-vs",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:asahi-g15c-gallium-query",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:asahi-g15s-gallium-vs",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:asahi-g15s-gallium-query",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:asahi-g17p-gallium-vs",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:asahi-g17p-gallium-query",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:asahi-g17p-submit-retirement-split-pending",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:asahi-g17p-submit-retirement-split-completed",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:asahi-g17p-submit-retirement-mixed-pending",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:asahi-g17p-submit-retirement-mixed-completed",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:asahi-g17p-submit-retirement-first-ioctl-failure",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:asahi-g17p-shadow-border",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:asahi-g17p-submit-retirement-prepublication-no-fence",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:asahi-g17p-submit-retirement-stale-output-generation",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:asahi-g17p-submit-retirement-completed-error-fence",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:asahi-g17p-submit-retirement-first-ioctl-partial",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:asahi-g17p-submit-retirement-split-wait-error",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:hk-g17p-compressed-mip-blit",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:asahi-g17p-submit-retirement-mixed-wait-error",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:asahi-g17p-submit-retirement-publication-probe-error",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:asahi-g17p-submit-retirement-interrupted-wait",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:asahi-g13g-gallium-submit",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:asahi-g17p-gallium-submit",
         "result": "OK"
       },
       {
@@ -141,7 +367,7 @@
         "result": "OK"
       },
       {
-        "name": "asahi - mesa:asahi-g17p-gallium-blit",
+        "name": "asahi - mesa:asahi-g17p-gallium-vertex-output-shapes",
         "result": "OK"
       },
       {
@@ -149,7 +375,7 @@
         "result": "OK"
       },
       {
-        "name": "asahi - mesa:asahi-g17p-gallium-vertex-output-shapes",
+        "name": "asahi - mesa:asahi-g17p-gallium-blit",
         "result": "OK"
       },
       {
@@ -161,43 +387,65 @@
         "result": "OK"
       },
       {
+        "name": "asahi - mesa:asahi-g13g-gallium-xfb-program",
+        "result": "OK"
+      },
+      {
         "name": "asahi - mesa:agx3_gen1_ray_query",
+        "result": "OK"
+      },
+      {
+        "name": "asahi - mesa:hk_as_registry",
         "result": "OK"
       },
       {
         "name": "asahi - mesa:agx_tests",
         "result": "OK"
       }
-    ]
+    ],
+    "inner_suite_note": "The existing optional NativeFMA.ExactDyadicOracle GTest remains skipped."
   },
   "quick_checks": {
-    "production_test_programs": 4,
-    "compression_policy_checks": 3035,
-    "source_tags": 209
+    "production_test_programs": 5,
+    "compression_policy_checks": 3359,
+    "source_tags": 211,
+    "preserved_compatibility_profiles": 6
   },
   "vulkan_drm_shim": {
     "profiles": [
       "g13g",
       "g15s",
       "g15c",
-      "g17p"
+      "g17p",
+      "g15g opt-in=1"
     ],
-    "passed": 4,
+    "passed": 5,
+    "refusal_controls": [
+      "g15g opt-in unset",
+      "g15g opt-in=0",
+      "g16g opt-in=1"
+    ],
+    "refusal_controls_passed": 3,
     "validation_layer": "VK_LAYER_KHRONOS_validation",
     "validation_errors": 0,
     "gpu_submissions": 0,
     "covers": [
-      "device and graphics-pipeline creation",
-      "oversized cached BO placed-map guard preservation",
+      "device and graphics pipeline creation",
+      "oversized cached BO placed mapping guard preservation",
       "reserve unmap and remap",
-      "free while placed-mapped",
-      "NULL transform-feedback counters with valid XFB pipeline and buffer"
+      "free while placed mapped",
+      "NULL transform feedback counters with valid pipeline and buffer",
+      "synthetic T8122 feature baseline and four allocator reservations",
+      "Air opt-in and held M4 device admission"
     ]
   },
-  "native_kernel_abi": {
-    "kernel_commit": "6a421d4e76ff282b414138182fd28597ebf20a18",
-    "kernel_header_sha256": "1d0135e2f9a541284f88a12055d6b952e85ea1ffec36ec55dd5128a1b1e3d4fa",
-    "matched_wire_facts": {
+  "kernel_abi": {
+    "repository": "https://github.com/omacom/linux-aurora",
+    "commit": "7b969982306e1498a8cbe6e5da9bde743acd8fc5",
+    "header": "include/uapi/drm/asahi_drm.h",
+    "matched": true,
+    "kernel_header": "asahi_drm.h",
+    "values": {
       "params_size": 600,
       "params_hal_offset": 596,
       "queue_size": 40,
@@ -206,111 +454,430 @@
       "vm_ioctl": 3222824002,
       "queue_ioctl": 3223872584,
       "submit_ioctl": 1076388938,
-      "per_command_syncs": 8,
-      "vm_status_mirror": 16,
-      "prior_barriers": 32,
-      "fragment_barriers": 128,
-      "ray_query": 256,
-      "render_size": 384,
-      "render_prior_offset": 256,
-      "compute_size": 136,
-      "compute_scs_offset": 64,
-      "compute_prior_offset": 72
+      "per_command_syncs": 1024,
+      "vm_status_mirror": 2048,
+      "prior_barriers": 4096,
+      "fragment_barriers": 16384,
+      "ray_query": 32768,
+      "render_size": 448,
+      "render_prior_offset": 320,
+      "compute_size": 200,
+      "compute_scs_offset": 128,
+      "compute_prior_offset": 136
     },
-    "legacy_negative_control_differences": {
-      "per_command_syncs": {
-        "mesa": 8,
-        "kernel": 1024
-      },
-      "vm_status_mirror": {
-        "mesa": 16,
-        "kernel": 2048
-      },
-      "prior_barriers": {
-        "mesa": 32,
-        "kernel": 4096
-      },
-      "fragment_barriers": {
-        "mesa": 128,
-        "kernel": 16384
-      },
-      "ray_query": {
-        "mesa": 256,
-        "kernel": 32768
-      },
-      "render_size": {
-        "mesa": 384,
-        "kernel": 448
-      },
-      "render_prior_offset": {
-        "mesa": 256,
-        "kernel": 320
-      },
-      "compute_size": {
-        "mesa": 136,
-        "kernel": 200
-      },
-      "compute_scs_offset": {
-        "mesa": 64,
-        "kernel": 128
-      },
-      "compute_prior_offset": {
-        "mesa": 72,
-        "kernel": 136
+    "differences": {},
+    "negative_control": {
+      "repository": "https://github.com/iconidentify/siliconforest-linux",
+      "commit": "6a421d4e76ff282b414138182fd28597ebf20a18",
+      "header": "include/uapi/drm/asahi_m3_drm.h",
+      "rejected": true,
+      "differences": {
+        "per_command_syncs": {
+          "mesa": 1024,
+          "kernel": 8
+        },
+        "vm_status_mirror": {
+          "mesa": 2048,
+          "kernel": 16
+        },
+        "prior_barriers": {
+          "mesa": 4096,
+          "kernel": 32
+        },
+        "fragment_barriers": {
+          "mesa": 16384,
+          "kernel": 128
+        },
+        "ray_query": {
+          "mesa": 32768,
+          "kernel": 256
+        },
+        "render_size": {
+          "mesa": 448,
+          "kernel": 384
+        },
+        "render_prior_offset": {
+          "mesa": 320,
+          "kernel": 256
+        },
+        "compute_size": {
+          "mesa": 200,
+          "kernel": 136
+        },
+        "compute_scs_offset": {
+          "mesa": 128,
+          "kernel": 64
+        },
+        "compute_prior_offset": {
+          "mesa": 136,
+          "kernel": 72
+        }
       }
+    },
+    "t8122_feature_baseline_source": "drivers/gpu/drm/asahi/m3/m3_drm.rs Backend::feature_flags at the pinned Aurora commit"
+  },
+  "mutants": [
+    {
+      "name": "gate-open",
+      "compiled": true,
+      "returncode": -6,
+      "killed": true,
+      "assertion": "gate-open: src/asahi/lib/tests/test-chip-admission.c:236: main: Assertion `!agx_chip_experimental_admitted(AGX_CHIP_G15G)' failed."
+    },
+    {
+      "name": "air-cap-removed",
+      "compiled": true,
+      "returncode": -6,
+      "killed": true,
+      "assertion": "air-cap-removed: src/asahi/lib/tests/test-chip-admission.c:254: main: Assertion `start == UINT64_C(0x4000000000) && end == UINT64_C(0x6000000000)' failed."
+    },
+    {
+      "compiled": true,
+      "returncode": 1,
+      "killed": true,
+      "mutation": "Encode float image writes as integer on both chips"
     }
+  ],
+  "evidence_sha256": {
+    "configure.log": "ef6b5c01e3e930591510ffb60863d3c72c76b6c92140bba7507ae6a55e588042",
+    "build-verified.log": "18d35f0afbb1a8810a1597873655aae9dbcd0b5f40950f80815781b22ddf4536",
+    "asahi-tests-verified.log": "d3be5588f0d06a05070899fac56032b9b0b1c880cba53a4bad7a0fff0f91503e",
+    "drm-smoke-verified.log": "59d75250e08ed408699be997b5870fbcfa82c9fd7de03825232c77b3497dca77",
+    "quick-check-verified.log": "78f4a3ac4a020cbf31466ecc45fae6ff561245ae3ba1cc8157805e0ee14dfd3c",
+    "kernel-abi.json": "815bdd9bca1fcf4cc0b712bc227b0f7c44ee19a0060cc45f1b041e539f3f8016",
+    "kernel-abi-negative.json": "c49c7879660d21f27d8d366780dc76fd1004917b41b4276885c3247cac994a46",
+    "air-mutation-controls.json": "6074d71542829d37093e17e9fc3bc37fa65f6089ddde7e48b462efc4345ecba3",
+    "compiler-type-mutant.json": "5d031c451a304034edcaeb407d2b3dbc0dd219e79d3b9c84265f917b825a4d6e",
+    "compiler-type-mutant.log": "3e6de8434f91bcf950847e2a1651a472c28aad48d74d8b7c1973fbdd37fdfb2a"
   },
   "hardware_qualified": false,
   "system_install_performed": false,
   "not_run": [
-    "physical Apple GPU execution",
-    "full Vulkan/OpenGL CTS",
-    "Mesa-wide test suite",
-    "compatibility and experimental branch builds",
-    "virtio GPU execution"
+    "physical Apple GPU execution on this integration",
+    "AArch64 package build or deployment",
+    "full OpenGL or Vulkan CTS",
+    "M1/M2/M3 hardware regressions",
+    "revised T8122 J613 texture/MSAA/compute/desktop tests",
+    "T8122 HAL200 and J615 qualification",
+    "matched Quake FPS benchmark"
   ],
   "private_sources_in_this_repository": false,
-  "geometry_heap_followup": {
-    "checked_at_utc": "2026-10-19T00:43:29.712527+00:00",
-    "code_commit": "db96168675f5464d5293caf48ed718792b2bed74",
-    "test_commit": "df1456f7f4a2984087a335ed25ba4fca25205f52",
-    "asahi_tree": "88c6193c34676906a198ec27cd996dc71b3d0cff",
-    "host": "x86_64 Linux",
-    "buildtype": "release",
-    "b_ndebug": false,
-    "glvnd": true,
-    "full_driver_build": true,
-    "asahi_suite": {
-      "passed": 36,
-      "failed": 0
-    },
-    "public_cpu_test_programs": 5,
-    "actual_drirc_parser_cases": 11,
-    "heap_callback_sanitizers": [
-      "address",
-      "undefined"
-    ],
-    "heap_callback_cases": [
-      "12 XML integers including both INT limits, negative/zero and4096/5000MiB clamped to16..1024MiB",
-      "actual u32 GPU layout",
-      "BO allocation failure",
-      "map failure and BO release"
-    ],
-    "hardware_qualified": false,
-    "game_profile_added": false,
-    "initial_import_commit": "86e11a3ee2dee9037f7c51500b1dfe60a96dbe0c",
-    "actual_xml_parser_to_heap_cases": 12,
-    "actual_gpu_heap_layout_bytes": 16,
-    "heap_callback_invalid_values_clamped": [
-      -2147483648,
-      -1,
-      0,
-      15,
-      1025,
-      4096,
-      5000,
-      2147483647
-    ],
-    "unbounded_xml_mutant_rejected": true
-  }
+  "previous_runs": [
+    {
+      "schema_version": 1,
+      "checked_at_utc": "2026-10-18T18:52:30.805404+00:00",
+      "source_commit": "3cca5b305cda31558540dbba86f0074568a4cb27",
+      "driver_subtrees": {
+        "src/asahi": "62b2aa4bb21b526892f6c465fbd7adf98c778fe6",
+        "src/drm-shim": "7818081c091bc1a9f8f73b6763ff4671f61b00f9",
+        "src/gallium/drivers/asahi": "22d4d2916940ddb53789627d910022c446c2a4e0",
+        "src/gallium/drivers/zink": "bf5b7303304456fef0be1086264f81853b6e0037"
+      },
+      "host": "x86_64 Linux",
+      "c_compiler": "GCC 16.2.1 20260810",
+      "llvm": "22.1.8",
+      "meson": "1.10.2",
+      "built": [
+        "Asahi and Zink Gallium shared driver",
+        "Honeykrisp Vulkan shared driver",
+        "GLX/EGL/GBM",
+        "tree-matched mesa_clc and asahi_clc",
+        "Asahi drm-shim",
+        "all Asahi suite executables and wrapper dependencies"
+      ],
+      "asahi_tests": {
+        "passed": 36,
+        "failed": 0,
+        "tests": [
+          {
+            "name": "asahi - mesa:agx2_disasm",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:asahi-agx3-packing",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:agx3_rt_core",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:agx3_gen1_traversal",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:agx3_rt_gen1_entry",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:agx3_gen1_hit_commit",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:agx3_gen1_status",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:agx3_ray_query_prerequisites",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:asahi-rt-ift",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:asahi-scs-layout",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:agx2_python_disasm",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:asahi-rt-bvh",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:asahi_layout_tests",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:asahi-chip-admission",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:asahi-usc-base-page",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:asahi-rt-payload-gen1",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:asahi-rt-blas-gen3",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:asahi-rt-envelope",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:hk_g17p_compression",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:hk_image_layout_core",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:hk_native_descriptor",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:hk_native_sampler",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:hk_sampler_bias",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:asahi-native-descriptor",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:asahi-g17p-texture-crawl",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:hk_sync_prior",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:libasahi_tests",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:asahi-g13g-gallium-xfb-program",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:asahi-g13g-gallium-vertex-output-shapes",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:asahi-g17p-gallium-blit",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:asahi-g17p-gallium-blit-encode",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:asahi-g17p-gallium-vertex-output-shapes",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:agx3_gen1_scs_nir",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:asahi-g17p-gallium-xfb-program",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:agx3_gen1_ray_query",
+            "result": "OK"
+          },
+          {
+            "name": "asahi - mesa:agx_tests",
+            "result": "OK"
+          }
+        ]
+      },
+      "quick_checks": {
+        "production_test_programs": 4,
+        "compression_policy_checks": 3035,
+        "source_tags": 209
+      },
+      "vulkan_drm_shim": {
+        "profiles": [
+          "g13g",
+          "g15s",
+          "g15c",
+          "g17p"
+        ],
+        "passed": 4,
+        "validation_layer": "VK_LAYER_KHRONOS_validation",
+        "validation_errors": 0,
+        "gpu_submissions": 0,
+        "covers": [
+          "device and graphics-pipeline creation",
+          "oversized cached BO placed-map guard preservation",
+          "reserve unmap and remap",
+          "free while placed-mapped",
+          "NULL transform-feedback counters with valid XFB pipeline and buffer"
+        ]
+      },
+      "native_kernel_abi": {
+        "kernel_commit": "6a421d4e76ff282b414138182fd28597ebf20a18",
+        "kernel_header_sha256": "1d0135e2f9a541284f88a12055d6b952e85ea1ffec36ec55dd5128a1b1e3d4fa",
+        "matched_wire_facts": {
+          "params_size": 600,
+          "params_hal_offset": 596,
+          "queue_size": 40,
+          "vm_size": 24,
+          "submit_size": 40,
+          "vm_ioctl": 3222824002,
+          "queue_ioctl": 3223872584,
+          "submit_ioctl": 1076388938,
+          "per_command_syncs": 8,
+          "vm_status_mirror": 16,
+          "prior_barriers": 32,
+          "fragment_barriers": 128,
+          "ray_query": 256,
+          "render_size": 384,
+          "render_prior_offset": 256,
+          "compute_size": 136,
+          "compute_scs_offset": 64,
+          "compute_prior_offset": 72
+        },
+        "legacy_negative_control_differences": {
+          "per_command_syncs": {
+            "mesa": 8,
+            "kernel": 1024
+          },
+          "vm_status_mirror": {
+            "mesa": 16,
+            "kernel": 2048
+          },
+          "prior_barriers": {
+            "mesa": 32,
+            "kernel": 4096
+          },
+          "fragment_barriers": {
+            "mesa": 128,
+            "kernel": 16384
+          },
+          "ray_query": {
+            "mesa": 256,
+            "kernel": 32768
+          },
+          "render_size": {
+            "mesa": 384,
+            "kernel": 448
+          },
+          "render_prior_offset": {
+            "mesa": 256,
+            "kernel": 320
+          },
+          "compute_size": {
+            "mesa": 136,
+            "kernel": 200
+          },
+          "compute_scs_offset": {
+            "mesa": 64,
+            "kernel": 128
+          },
+          "compute_prior_offset": {
+            "mesa": 72,
+            "kernel": 136
+          }
+        }
+      },
+      "hardware_qualified": false,
+      "system_install_performed": false,
+      "not_run": [
+        "physical Apple GPU execution",
+        "full Vulkan/OpenGL CTS",
+        "Mesa-wide test suite",
+        "compatibility and experimental branch builds",
+        "virtio GPU execution"
+      ],
+      "private_sources_in_this_repository": false,
+      "geometry_heap_followup": {
+        "checked_at_utc": "2026-10-19T00:43:29.712527+00:00",
+        "code_commit": "db96168675f5464d5293caf48ed718792b2bed74",
+        "test_commit": "df1456f7f4a2984087a335ed25ba4fca25205f52",
+        "asahi_tree": "88c6193c34676906a198ec27cd996dc71b3d0cff",
+        "host": "x86_64 Linux",
+        "buildtype": "release",
+        "b_ndebug": false,
+        "glvnd": true,
+        "full_driver_build": true,
+        "asahi_suite": {
+          "passed": 36,
+          "failed": 0
+        },
+        "public_cpu_test_programs": 5,
+        "actual_drirc_parser_cases": 11,
+        "heap_callback_sanitizers": [
+          "address",
+          "undefined"
+        ],
+        "heap_callback_cases": [
+          "12 XML integers including both INT limits, negative/zero and4096/5000MiB clamped to16..1024MiB",
+          "actual u32 GPU layout",
+          "BO allocation failure",
+          "map failure and BO release"
+        ],
+        "hardware_qualified": false,
+        "game_profile_added": false,
+        "initial_import_commit": "86e11a3ee2dee9037f7c51500b1dfe60a96dbe0c",
+        "actual_xml_parser_to_heap_cases": 12,
+        "actual_gpu_heap_layout_bytes": 16,
+        "heap_callback_invalid_values_clamped": [
+          -2147483648,
+          -1,
+          0,
+          15,
+          1025,
+          4096,
+          5000,
+          2147483647
+        ],
+        "unbounded_xml_mutant_rejected": true
+      }
+    }
+  ]
 }

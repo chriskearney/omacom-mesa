@@ -1,4 +1,44 @@
-# SiliconForest Mesa validation — 2026-10-18
+# SiliconForest Mesa validation
+
+## October 24 integration candidate
+
+Tested source: **`c66c1969387bada0f1ace561d4c424822b803251`**.
+Later validation-only documentation does not change the tested driver subtrees.
+
+| Check | Result |
+| --- | --- |
+| Asahi/Zink OpenGL, Honeykrisp Vulkan, GLX/EGL/GBM, matched shader tools | Built on x86_64 with GCC 16.2.1, LLVM 22.1.8 and Meson 1.10.2 |
+| Complete registered Asahi host suite | **91 passed, 0 failed**; existing optional FMA oracle subtest remains skipped |
+| Standalone CPU programs and provenance | **5 passed**, 3,359 compression checks, 211 exact public tags and six preserved compatibility refs |
+| Vulkan device/pipeline/placed-map/XFB probes | **5 passed**: G13G, G15S, G15C, G17P and opt-in G15G |
+| Vulkan refusal controls | **3 passed**: G15G without opt-in, G15G opt-in=0, and held G16G with Air opt-in=1 |
+| Khronos validation | **0 errors**, **0 GPU submissions** across those eight probes |
+| Unified Aurora kernel contract | **18 wire facts match** `7b969982306e1498a8cbe6e5da9bde743acd8fc5`; old SiliconForest native header rejected with ten differences |
+| Deliberate negative mutations | Air gate bypass, removed Air address cap and float-as-integer image writes all compile and are caught |
+| Syntax and Git whitespace | Passed |
+
+The build uses the configuration below with `--buildtype=debugoptimized` and
+`-Db_ndebug=false`. It uses private shader-tool dependencies and performs no
+system installation. Build warnings are retained in the log; this is not a
+warning-free build claim.
+
+The G15G drm-shim identity is synthetic. Its baseline features match the Air
+runtime's VM_STATUS/SCHEDULED_QUEUES contract; it refuses binds into the four
+reserved ranges. It exercises host allocation and pipeline setup without
+executing a shader. The revised Air layout, physical M1/M2/M3 regressions,
+AArch64 package, full CTS, desktop stability and any FPS change remain untested.
+No kernel, firmware, m1n1, system package or boot setting was changed.
+
+The host run exposed stale expectations for G15G wide barriers and held M4
+admission, plus a compiler fixture comparing unrelated chip schedules. The
+corrected compiler fixture retains all type/format cases, compares the single
+image-write packet, and checks its data-type bit independently; a deliberate
+wrong-type compiler mutation fails it. No production compiler change was made.
+
+Exact tree IDs, pinned sources, evidence hashes and the earlier baseline are in
+[SILICONFOREST-VALIDATION.json](SILICONFOREST-VALIDATION.json).
+
+## October 18 baseline
 
 Validated source: **`3cca5b305cda31558540dbba86f0074568a4cb27`**.
 Later documentation and provenance-helper commits do not change driver source.
