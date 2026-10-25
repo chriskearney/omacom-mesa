@@ -29,6 +29,7 @@ meson setup .ci-build "${ci_meson[@]}" --native-file .ci-tools.ini \
   -Dllvm=disabled -Dspirv-tools=disabled -Dmesa-clc=system \
   -Dprecomp-compiler=system -Dbuild-tests=true
 meson compile -C .ci-build -j "$ci_jobs"
+python3 .github/mesa-ci/build-tests.py .ci-build
 # Run ALL configured suites: NIR, SPIR-V and Vulkan support tests as well as Asahi.
 meson test -C .ci-build --no-rebuild --print-errorlogs --num-processes "$ci_jobs"
 VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation \
