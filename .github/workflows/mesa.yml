@@ -24,6 +24,8 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 2
+          sparse-checkout: .github/mesa-ci/plan.py
+          sparse-checkout-cone-mode: false
       - id: paths
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
@@ -47,11 +49,11 @@ jobs:
           persist-credentials: false
       - name: CPU source fixtures and CI gate regression tests
         run: |
-          go run github.com/rhysd/actionlint/cmd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca .github/workflows/mesa.yml
+          bash .github/mesa-ci/lint.sh
           python3 tools/siliconforest/check.py
           python3 tools/siliconforest/check-kernel-abi.py .ci-kernel
           python3 -m unittest discover -s .github/mesa-ci/tests -v
-          bash -n .github/mesa-ci/build.sh .github/mesa-ci/deps.sh
+          bash -n .github/mesa-ci/build.sh .github/mesa-ci/deps.sh .github/mesa-ci/lint.sh
   build:
     needs: [plan, source]
     if: needs.plan.outputs.build == 'true'
@@ -87,7 +89,7 @@ jobs:
         run: bash .github/mesa-ci/build.sh
       - name: Save compiler cache
         continue-on-error: true
-        if: success() && github.event_name == 'pull_request' && steps.cache.outputs.cache-hit != 'true'
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && steps.cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: .ccache
@@ -130,6 +132,8 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
+          sparse-checkout: .github/mesa-ci/gate.py
+          sparse-checkout-cone-mode: false
       - name: Require all applicable checks
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
