@@ -1,0 +1,166 @@
+name: Mesa CI
+"on":
+  pull_request:
+  merge_group:
+  push:
+    branches: [integration/aurora]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mesa-ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+defaults:
+  run:
+    shell: bash
+jobs:
+  plan:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    outputs:
+      build: ${{ steps.paths.outputs.build }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - id: paths
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+        run: python3 .github/mesa-ci/plan.py
+  source:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - id: contract
+        name: Read pinned kernel contract
+        run: python3 .github/mesa-ci/kernel-contract.py >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          repository: omacom/linux-aurora
+          ref: ${{ steps.contract.outputs.sha }}
+          path: .ci-kernel
+          sparse-checkout: include/uapi/drm
+          persist-credentials: false
+      - name: CPU source fixtures and CI gate regression tests
+        run: |
+          go run github.com/rhysd/actionlint/cmd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca .github/workflows/mesa.yml
+          python3 tools/siliconforest/check.py
+          python3 tools/siliconforest/check-kernel-abi.py .ci-kernel
+          python3 -m unittest discover -s .github/mesa-ci/tests -v
+          bash -n .github/mesa-ci/build.sh .github/mesa-ci/deps.sh
+  build:
+    needs: [plan, source]
+    if: needs.plan.outputs.build == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-26.04
+            architecture: x86_64
+          - runner: ubuntu-26.04-arm
+            architecture: aarch64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Install matched toolchain
+        run: bash .github/mesa-ci/deps.sh
+      - name: Restore compiler cache
+        id: cache
+        continue-on-error: true
+        if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .ccache
+          key: mesa-ci-v1-${{ matrix.architecture }}-${{ hashFiles('.github/mesa-ci/build.sh', '.github/mesa-ci/deps.sh', '.github/mesa-ci/requirements.txt') }}-${{ github.sha }}
+          restore-keys: |
+            mesa-ci-v1-${{ matrix.architecture }}-${{ hashFiles('.github/mesa-ci/build.sh', '.github/mesa-ci/deps.sh', '.github/mesa-ci/requirements.txt') }}-
+      - name: Build and test the exact checked-out merge commit
+        run: bash .github/mesa-ci/build.sh
+      - name: Save compiler cache
+        continue-on-error: true
+        if: success() && github.event_name == 'pull_request' && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .ccache
+          key: mesa-ci-v1-${{ matrix.architecture }}-${{ hashFiles('.github/mesa-ci/build.sh', '.github/mesa-ci/deps.sh', '.github/mesa-ci/requirements.txt') }}-${{ github.sha }}
+      - name: Preserve test and configure evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mesa-evidence-${{ matrix.architecture }}-${{ github.run_id }}-${{ github.run_attempt }}
+          include-hidden-files: true
+          retention-days: 14
+          path: |
+            .ci-build/meson-logs/
+            .ci-build/meson-info/
+            .ci-tools/meson-logs/
+            .ci-manifest.json
+      - name: Archive clean ARM staging tree with file modes and symlinks
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/integration/aurora' && matrix.architecture == 'aarch64'
+        run: |
+          tar -czf mesa-arm-stage.tar.gz .ci-stage .ci-manifest.json
+          sha256sum mesa-arm-stage.tar.gz > mesa-arm-stage.tar.gz.sha256
+      - name: Retain unpromoted ARM staging input
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/integration/aurora' && matrix.architecture == 'aarch64'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mesa-arm-staging-${{ github.sha }}
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            mesa-arm-stage.tar.gz
+            mesa-arm-stage.tar.gz.sha256
+  result:
+    name: ci / result
+    if: always()
+    needs: [plan, source, build]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Require all applicable checks
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python3 .github/mesa-ci/gate.py
+
+  candidate:
+    name: Attested ARM candidate
+    needs: [result, build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/integration/aurora'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: mesa-arm-staging-${{ github.sha }}
+          path: candidate
+      - name: Verify archive digest
+        working-directory: candidate
+        run: sha256sum --check mesa-arm-stage.tar.gz.sha256
+      - name: Attest the clean archive after both architectures and the gate pass
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: candidate/mesa-arm-stage.tar.gz
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mesa-arm-candidate-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 14
+          path: candidate/
