@@ -104,3 +104,5 @@ that no private, deleted, unindexed or newer work exists.
 
 GitHub Actions runs the quick CPU checks on main and pull requests. Full host
 compilation and hardware qualification are distinct checks.
+
+<!-- Personal-fork CI documentation-only control; not a production change. -->
