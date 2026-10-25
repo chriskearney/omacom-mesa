@@ -88,11 +88,22 @@ def check(col, a_bits, b_bits):
     special = ~np.isfinite(wf) | (wf == 0.0)
     spec_bad = np.flatnonzero(special & (got != want) & ~both_nan)
     normal = np.flatnonzero(~special)
+    finite_result = np.isfinite(gf[normal])
     with np.errstate(all="ignore"):
-        dist = np.abs(gf[normal] - wf[normal]) / np.spacing(want[normal].view(np.float32).astype(np.float64))
-    over = normal[dist > 2.5]
-    return {"max_ulp": float(dist.max()) if len(normal) else 0.0,
+        # A binary32 ULP is positive for both signs. Derive its exponent
+        # before measuring in binary64; spacing(float64) measures the wrong
+        # format and spacing(negative) would hide errors. ldexp also handles
+        # FLT_MAX without overflowing to infinity like float32 spacing does.
+        exponent = np.frexp(np.abs(wf[normal]))[1]
+        ulp = np.ldexp(np.ones(len(normal)), np.maximum(exponent - 24, -149))
+        dist = np.abs(gf[normal] - wf[normal]) / ulp
+    # NaN comparisons are false, so reject non-finite results explicitly when
+    # the oracle expected a finite value.
+    over = normal[(dist > 2.5) | ~finite_result]
+    finite_dist = dist[finite_result]
+    return {"max_ulp": float(finite_dist.max()) if len(finite_dist) else 0.0,
             "over_2p5": len(over),
+            "nonfinite_mismatch": int(np.count_nonzero(~finite_result)),
             "special_mismatch": len(spec_bad),
             "examples": [[hex(int(v)) for v in inp[i][:2]] for i in over[:5]][:5]}
 
