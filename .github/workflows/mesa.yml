@@ -3,7 +3,7 @@ name: Mesa CI
   pull_request:
   merge_group:
   push:
-    branches: [integration/aurora]
+    branches: [ci/cd-validation-20261024]
   workflow_dispatch:
 permissions:
   contents: read
@@ -105,12 +105,12 @@ jobs:
             .ci-tools/meson-logs/
             .ci-manifest.json
       - name: Archive clean ARM staging tree with file modes and symlinks
-        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/integration/aurora' && matrix.architecture == 'aarch64'
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/ci/cd-validation-20261024' && matrix.architecture == 'aarch64'
         run: |
           tar -czf mesa-arm-stage.tar.gz .ci-stage .ci-manifest.json
           sha256sum mesa-arm-stage.tar.gz > mesa-arm-stage.tar.gz.sha256
       - name: Retain unpromoted ARM staging input
-        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/integration/aurora' && matrix.architecture == 'aarch64'
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/ci/cd-validation-20261024' && matrix.architecture == 'aarch64'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: mesa-arm-staging-${{ github.sha }}
@@ -138,7 +138,7 @@ jobs:
   candidate:
     name: Attested ARM candidate
     needs: [result, build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/integration/aurora'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/ci/cd-validation-20261024'
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
