@@ -23,6 +23,7 @@
 #include "agx_bo.h"
 #include "agx_compile.h"
 #include "agx_device_virtio.h"
+#include "agx_g15_wire.h"
 #include "agx_scratch.h"
 #include "decode.h"
 #include "glsl_types.h"
@@ -716,6 +717,36 @@ static int
 agx_submit(struct agx_device *dev, struct drm_asahi_submit *submit,
            struct agx_submit_virt *virt)
 {
+   if (dev->g15_legacy_wire) {
+      /* Preserve the caller's command buffer and syncs. The kernel reads
+       * this temporary command buffer synchronously during the ioctl. */
+      if (!submit->cmdbuf_size || submit->cmdbuf_size > (4u << 20)) {
+         errno = EINVAL;
+         return -1;
+      }
+      void *wire = malloc(submit->cmdbuf_size);
+      if (!wire) {
+         errno = ENOMEM;
+         return -1;
+      }
+      size_t size;
+      bool ok = agx_g15_wire_pack((void *)(uintptr_t)submit->cmdbuf,
+                                  submit->cmdbuf_size, wire,
+                                  submit->cmdbuf_size, &size);
+      if (!ok) {
+         free(wire);
+         errno = EINVAL;
+         return -1;
+      }
+      struct drm_asahi_submit packed = *submit;
+      packed.cmdbuf = (uintptr_t)wire;
+      packed.cmdbuf_size = size;
+      int ret = drmIoctl(dev->fd, DRM_IOCTL_ASAHI_SUBMIT, &packed);
+      int saved_errno = errno;
+      free(wire);
+      errno = saved_errno;
+      return ret;
+   }
    return drmIoctl(dev->fd, DRM_IOCTL_ASAHI_SUBMIT, submit);
 }
 
@@ -883,6 +914,14 @@ agx_open_device(void *memctx, struct agx_device *dev)
    }
 
    dev->chip = agx_chip_from_params(&dev->params);
+
+   uint64_t normalized_features;
+   dev->g15_legacy_wire = false;
+   if (!dev->is_virtio &&
+       agx_g15_wire_features(&dev->params, &normalized_features)) {
+      dev->g15_legacy_wire = true;
+      dev->params.features = normalized_features;
+   }
 
    /*
     * Recognition, shader codegen, descriptors and the command stream are

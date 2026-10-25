@@ -1,5 +1,25 @@
 # SiliconForest Mesa validation
 
+## Retained Omacom G15 wire follow-up
+
+The first physical J516S attempt of the integration below found that
+`omacom/linux-aurora@7b969982306e` still returns the separate G15 `0x3e`
+contract, not the canonical high-bit contract. The admission check stopped
+before VM creation; the old Mesa and default kernel were restored. The
+canonical-header comparison below was insufficient to establish G15 backend
+compatibility.
+
+`agx_g15_wire.c` now selects the exact retained G15S/G15C signatures, normalizes
+their feature assignments and converts every hardware packet into the backend's
+actual layout. Nonzero timestamp-copy slots and unknown signatures/packets fail
+closed. Air, G17, M1/M2 and virtio retain their existing packet paths. See
+[the contract and qualification notes](SILICONFOREST-G15-WIRE.md).
+
+The updated x86_64 build passes **92 registered Asahi tests**, including exact
+feature-signature, packet/prior/barrier, truncation and timestamp-copy refusal
+controls. The physical qualification of this follow-up is pending; the original
+receipts below describe the earlier integration head, not this source change.
+
 ## October 24 integration candidate
 
 Tested source: **`aefe5c2dd1525e37e0d329fdf39595dc25abbbcd`**.

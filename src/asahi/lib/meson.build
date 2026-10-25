@@ -34,6 +34,7 @@ libasahi_lib_files = files(
   'agx_bo.c',
   'agx_border.c',
   'agx_chip.c',
+  'agx_g15_wire.c',
   'agx_device.c',
   'agx_bytes.h',
   'agx_linker.c',
@@ -188,6 +189,17 @@ libasahi_lib = static_library(
 )
 
 if with_tests
+  test('asahi-g15-wire',
+    executable('asahi-g15-wire',
+      files('tests/test-g15-wire.c'),
+      include_directories : [inc_include, inc_src, inc_asahi],
+      dependencies : [idep_agx_pack, idep_mesautil],
+      link_with : [libasahi_lib],
+      c_args : [c_msvc_compat_args],
+      gnu_symbol_visibility : 'hidden',
+    ),
+    suite : ['asahi'],
+  )
   foreach rt_test : ['rt-bvh', 'rt-ift', 'scs-layout']
     test('asahi-' + rt_test,
       executable('asahi-' + rt_test,

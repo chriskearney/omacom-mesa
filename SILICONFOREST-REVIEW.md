@@ -16,8 +16,9 @@ maintenance, not 214 missing M3 driver fixes.
   implementations without dropping their regression coverage.
 - Update the known-collision ABI gate for Aurora's unified high feature bits
   and timestamp-copy payloads. The checked 18 wire facts match kernel
-  `7b969982306e1498a8cbe6e5da9bde743acd8fc5`. The prior low-bit native
-  header is incompatible, so this is not an automatic system upgrade.
+  `7b969982306e1498a8cbe6e5da9bde743acd8fc5`'s canonical header. Its retained
+  G15 backend uses a separate low-bit wire, now handled by the explicit
+  converter described below. Header equality alone does not qualify a backend.
 - T8122's separate runtime reports VM_STATUS and SCHEDULED_QUEUES, without
   exact-prior barriers (`m3/m3_drm.rs:217` in the pinned kernel). Give G15G its
   own baseline check instead of requiring the Pro/Max/Neo feature pair. Host
@@ -85,8 +86,11 @@ public PR history alongside the new integration commits.
    native kernel assign different meanings to bits 3–8 and 10–15. Render and
    compute payloads also differ by timestamp-copy fields. A GPU identity check
    alone is insufficient. Main requires the native per-command-sync and exact
-   prior-barrier contract and rejects the known legacy high-bit assignments on
-   native AGX3 before VM creation. CPU tests exercise missing and conflicting
+   prior-barrier contract. The physical integration follow-up also supports
+   Omacom's retained G15S/G15C `0x3e`/`0xbe` wire through an explicit feature
+   and packet converter; it never passes canonical packets to that backend.
+   See [the retained-wire contract](SILICONFOREST-G15-WIRE.md).
+   CPU tests exercise missing and conflicting
    feature bits. This does not prove compatibility with arbitrary kernels that
    fabricate the same feature word.
 3. **Blind cherry-picking regressed newer implementations.** Thomas Glanzmann's

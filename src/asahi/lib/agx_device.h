@@ -155,6 +155,7 @@ struct agx_device {
 
    char name[64];
    struct drm_asahi_params_global params;
+   bool g15_legacy_wire;
    bool is_virtio;
    /* Native DRM 0.2 added the four render resource-specifier high dwords.
     * Stock 0.0 kernels do not consume an oversized render packet's tail. */
