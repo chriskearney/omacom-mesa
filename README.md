@@ -17,7 +17,7 @@ The upstream Mesa README is [README.rst](README.rst).
 | M3 Pro, T6030 / G15S, legacy firmware interface with native AGX3 shaders | `siliconforest/next` | Pinned Aurora WIP native GL/Vulkan stack; this update needs hardware requalification |
 | M3 Max, T6031 / G15C, single die / four clusters | `siliconforest/next` | Naeem's identity, native admission and USC helper-table fixes merged with Eryk's follow-ups |
 | Neo / A18 Pro, T8140 / G17P, USC3 / HAL200 | `siliconforest/next` | DJ's current AGX3b stack retained, including its feature restrictions |
-| M3 Air, T8122 / G15G, legacy 14.x firmware | `siliconforest/next` | Scott Jones PR71 integrated with `ASAHI_M3_EXPERIMENTAL=1`; revised address layout is not hardware-qualified |
+| M3 Air, T8122 / G15G, legacy 14.x firmware | `siliconforest/next` | Scott Jones PR71 integrated; enabled without a Mesa environment opt-in for its exact supported contract; revised address layout is not hardware-qualified |
 | M3 Air, T8122, HAL200 / macOS 26.6.2 boot stack | `compat/m3-air-hal200` | Older OpenGL-only compatibility source; not part of the native main build |
 | Older M3 boot/firmware stacks | `compat/m3-legacy`, `compat/m3-pro-legacy` | Previous personal source profiles preserved with exact parent pins |
 | M4 | `experimental/m4` | Eryk's separate development/evidence branch; unqualified here |
@@ -26,7 +26,8 @@ The upstream Mesa README is [README.rst](README.rst).
 
 A chip name or shader encoder alone does not establish support. Main deliberately
 refuses M3 Ultra, M4 and M5 admission. Native M3 Air is experimental and
-requires its exact identity, a compatible kernel and the explicit opt-in above.
+requires its exact identity, supported firmware and a compatible kernel. No Mesa
+environment opt-in is required.
 Compatibility and experimental profiles are separate source trees, not additional
 drivers silently enabled in one binary. They have **not** undergone the main
 branch's build/test run.
@@ -45,8 +46,8 @@ header checked on October 18 is no longer the matching contract.
 Do not substitute headers, force a chip identity or use an old kernel simply
 because its version string resembles the checked one. Kernel configuration,
 firmware and m1n1 handoffs still need qualification on the actual board.
-M3 Air retains `ASAHI_M3_EXPERIMENTAL=1`; its kernel startup configuration is
-separate. This source update does not change any installed boot stack.
+M3 Air needs no `ASAHI_M3_EXPERIMENTAL` variable; its kernel startup
+configuration and package defaults are separate. This source update does not change any installed boot stack.
 
 ## Build and check
 

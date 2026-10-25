@@ -2,7 +2,7 @@
 
 ## October 24 integration candidate
 
-Tested source: **`0558621f2e8cdfc243e23289d23ccef951defcd5`**.
+Tested source: **`aefe5c2dd1525e37e0d329fdf39595dc25abbbcd`**.
 Later validation-only documentation does not change the tested driver subtrees.
 
 | Check | Result |
@@ -10,11 +10,11 @@ Later validation-only documentation does not change the tested driver subtrees.
 | Asahi/Zink OpenGL, Honeykrisp Vulkan, GLX/EGL/GBM, matched shader tools | Built on x86_64 with GCC 16.2.1, LLVM 22.1.8 and Meson 1.10.2 |
 | Complete registered Asahi host suite | **91 passed, 0 failed**; existing optional FMA oracle subtest remains skipped |
 | Standalone CPU programs and provenance | **5 passed**, 3,359 compression checks, 211 exact public tags and six preserved compatibility refs |
-| Vulkan device/pipeline/placed-map/XFB probes | **5 passed**: G13G, G15S, G15C, G17P and opt-in G15G |
-| Vulkan refusal controls | **3 passed**: G15G without opt-in, G15G opt-in=0, and held G16G with Air opt-in=1 |
+| Vulkan device/pipeline/placed-map/XFB probes | **7 passed**: G13G, G15S, G15C, G17P and G15G with its obsolete opt-in unset, `0` and `1` |
+| Vulkan refusal controls | **1 passed**: held G16G with the obsolete Air opt-in set |
 | Khronos validation | **0 errors**, **0 GPU submissions** across those eight probes |
 | Unified Aurora kernel contract | **18 wire facts match** `7b969982306e1498a8cbe6e5da9bde743acd8fc5`; old SiliconForest native header rejected with ten differences |
-| Deliberate negative mutations | Air gate bypass, removed Air address cap and float-as-integer image writes all compile and are caught |
+| Deliberate negative mutations | Earlier removed Air address-cap and float-as-integer image-write mutations compile and are caught; unchanged code, original receipts retained |
 | Syntax and Git whitespace | Passed |
 
 The build uses the configuration below with `--buildtype=debugoptimized` and
@@ -22,6 +22,8 @@ The build uses the configuration below with `--buildtype=debugoptimized` and
 system installation. Build warnings are retained in the log; this is not a
 warning-free build claim.
 
+G15G is now admitted without a Mesa environment opt-in for its exact supported
+identity and firmware/kernel contract. Kernel and package switch-on is separate.
 The G15G drm-shim identity is synthetic. Its baseline features match the Air
 runtime's VM_STATUS/SCHEDULED_QUEUES contract; it refuses binds into the four
 reserved ranges. It exercises host allocation and pipeline setup without

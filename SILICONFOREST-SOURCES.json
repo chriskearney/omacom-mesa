@@ -2112,7 +2112,7 @@
       "commit": "0163e7fa96f4c54f2fb72e6053b2aaa22446a44d",
       "tag": "sources/2026-10-24/aurora-pr/71",
       "url": "https://github.com/aurora-silicon/mesa/pull/71",
-      "disposition": "integrated as original ancestry; G15G needs ASAHI_M3_EXPERIMENTAL=1; revised layout hardware qualification pending"
+      "disposition": "integrated as original ancestry; G15G enabled without a Mesa environment opt-in for the exact supported contract; revised layout hardware qualification pending"
     }
   ],
   "pull_requests": [

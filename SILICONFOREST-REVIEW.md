@@ -24,8 +24,10 @@ maintenance, not 214 missing M3 driver fixes.
   drm-shim probes cover its actual feature baseline and reject user binds into
   all four T8122 reservations; no GPU submission is performed.
 - Keep M4 admission disabled even though the upstream snapshot contains M4
-  code. Preserve T6030/T6031/Neo identity checks. T8122 additionally requires
-  the literal `ASAHI_M3_EXPERIMENTAL=1`; empty, `0`, `true`, and unset refuse.
+  code. Preserve T6030/T6031/Neo identity checks. T8122 uses its exact supported
+  firmware/runtime contract without a Mesa environment opt-in, as requested by
+  the owner. The obsolete variable being unset, `0` or `1` does not change
+  admission. Kernel and packaging defaults remain separate work.
 - Keep all four T8122 runtime reservations and the below-2^39 heap/alias cap.
   The updated layout has host tests, but Scott's earlier hardware results used
   a different layout. J613 texture/MSAA/compute and desktop checks remain due;
