@@ -11,7 +11,7 @@ def load(name):
     spec.loader.exec_module(module)
     return module
 
-plan, gate = load('plan'), load('gate')
+plan, gate, policy, dependencies = load('plan'), load('gate'), load('policy'), load('build-tests')
 
 class ControlTests(unittest.TestCase):
     def needs(self, build='true', result='success'):
@@ -24,6 +24,23 @@ class ControlTests(unittest.TestCase):
                       ['src/asahi/compiler/agx_compile.c'], ['meson.build'], ['requirements.txt'],
                       ['docs/guide.rst', 'include/vulkan/vulkan.h'], ['unknown']]:
             self.assertFalse(plan.docs_only(paths))
+
+    def test_python_wrapped_executable_is_built(self):
+        build = Path('/tmp/build')
+        tests = [{'cmd': ['python3', 'wrapper.py', 'hidden-test'], 'depends': ['hidden@exe']}]
+        targets = [{'id': 'hidden@exe', 'build_by_default': False,
+                    'filename': ['/tmp/build/path/hidden-test']}]
+        self.assertEqual(dependencies.outputs(build, tests, targets), ['path/hidden-test'])
+        with self.assertRaises(ValueError):
+            dependencies.outputs(build, tests, [])
+
+    def test_required_test_evidence_cannot_disappear(self):
+        good = [{'name': 'suite - mesa:' + n, 'result': 'OK'} for n in policy.REQUIRED_SUITES]
+        self.assertEqual(policy.test_summary(good), {'OK': 4})
+        for bad in [[], good[:-1], [dict(r, result='SKIP') for r in good],
+                    good + [{'name': 'another-test', 'result': 'FAIL'}]]:
+            with self.assertRaises(ValueError):
+                policy.test_summary(bad)
 
     def test_required_work_fails_closed(self):
         self.assertTrue(gate.passes(self.needs()))
