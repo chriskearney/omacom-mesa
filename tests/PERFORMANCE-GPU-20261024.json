@@ -1,0 +1,708 @@
+{
+  "control_source": "97a65d845f39418aecc693dcaf9dcb14a05849f6",
+  "candidate_source": "5e45716701b64a4b627e7e60df5b781c65c87f42",
+  "test_only_followup": "9821305667e175e45b10748b89d66ff0293ca407",
+  "candidate_scope": "17 correctness-only commits over the PR12 native integration; excludes the larger PR6 CDM/barrier/scheduling/performance series",
+  "method": {
+    "benchmark": "vkQuake 1.36.0-1 demo1",
+    "executable_sha256": "3661f258b23a4ae66749af5062eab70ea1066ed936b9b7a114cc2c5cba379483",
+    "framebuffer": [
+      1920,
+      1080
+    ],
+    "settings": {
+      "vid_vsync": 0,
+      "vid_fsaa": 0,
+      "vid_fsaamode": 0,
+      "r_scale": 1,
+      "vid_maxframelatency": 2,
+      "r_oit": 1,
+      "r_waterwarpcompute": 1,
+      "r_rtshadows": 0,
+      "gamma": 0.9,
+      "contrast": 1.4
+    },
+    "live_settings_confirmed": true,
+    "same_boot": true,
+    "warmup": "one unmeasured demo per driver, plus 1000 wait frames before each demo",
+    "measured_order": [
+      "installed",
+      "candidate",
+      "candidate",
+      "installed",
+      "installed",
+      "candidate"
+    ],
+    "samples_per_driver": 3,
+    "loaded_library_hashes_verified": true,
+    "physical_screenshots_verified": true,
+    "clocks_forced": false
+  },
+  "results": [
+    {
+      "kernel": "7.2.11-lab182-205f5e8b20fc-normal",
+      "framebuffer": [
+        1920,
+        1080
+      ],
+      "fps": {
+        "installed": [
+          482.3,
+          478.5,
+          478.1
+        ],
+        "candidate": [
+          444.3,
+          445.6,
+          437.8
+        ]
+      },
+      "median_fps": {
+        "installed": 478.5,
+        "candidate": 444.3
+      },
+      "delta_percent": -7.147335423197488,
+      "GPU_faults_observed": false,
+      "packages_unchanged": true,
+      "rebooted": false,
+      "installed_driver_replaced": false,
+      "machine": "J293 M1",
+      "sequence": [
+        {
+          "index": 0,
+          "driver": "installed",
+          "measured": false,
+          "result": {
+            "frames": 969,
+            "seconds": 2.0,
+            "fps": 487.0
+          },
+          "executable_sha256": "3661f258b23a4ae66749af5062eab70ea1066ed936b9b7a114cc2c5cba379483",
+          "framebuffer": [
+            1920,
+            1080
+          ],
+          "driver_sha256": "71420cc636d9fb7ab4437fad5c970c684ca5b40d7538ac4beb6bcce52d5a98fd",
+          "live_settings_confirmed": true,
+          "screenshot_hashes": [
+            "511fc869eb2b23026f8c8e64876998c46a17da058de3b57b884814187488209c"
+          ],
+          "assets": {
+            "pak0.pak": "35a9c55e5e5a284a159ad2a62e0e8def23d829561fe2f54eb402dbc0a9a946af",
+            "pak1.pak": "94e355836ec42bc464e4cbe794cfb7b5163c6efa1bcc575622bb36475bf1cf30"
+          },
+          "demo": {
+            "pak0.pak:demo1.dem": {
+              "size": 184471,
+              "sha256": "893e5279e3a84fed0416a1101dfc2b6bca1ebd28787323daa8e22cefe54883c1"
+            },
+            "e1m3.bsp": {
+              "size": 1249944,
+              "sha256": "5941c37c67267ae11aff572fdba7f813148cc99da3cfc34d01eea81dc23edfd0"
+            }
+          }
+        },
+        {
+          "index": 1,
+          "driver": "candidate",
+          "measured": false,
+          "result": {
+            "frames": 969,
+            "seconds": 2.2,
+            "fps": 448.4
+          },
+          "executable_sha256": "3661f258b23a4ae66749af5062eab70ea1066ed936b9b7a114cc2c5cba379483",
+          "framebuffer": [
+            1920,
+            1080
+          ],
+          "driver_sha256": "2c7b66b189b64999246f3f9ed93860e0d0d5887d78ffb4f561fa33e051f7473e",
+          "live_settings_confirmed": true,
+          "screenshot_hashes": [
+            "8d95050ce0f9e44974b5cba8d82f4b8f166b8affc87276dd9209b88c75c61b14"
+          ],
+          "assets": {
+            "pak0.pak": "35a9c55e5e5a284a159ad2a62e0e8def23d829561fe2f54eb402dbc0a9a946af",
+            "pak1.pak": "94e355836ec42bc464e4cbe794cfb7b5163c6efa1bcc575622bb36475bf1cf30"
+          },
+          "demo": {
+            "pak0.pak:demo1.dem": {
+              "size": 184471,
+              "sha256": "893e5279e3a84fed0416a1101dfc2b6bca1ebd28787323daa8e22cefe54883c1"
+            },
+            "e1m3.bsp": {
+              "size": 1249944,
+              "sha256": "5941c37c67267ae11aff572fdba7f813148cc99da3cfc34d01eea81dc23edfd0"
+            }
+          }
+        },
+        {
+          "index": 2,
+          "driver": "installed",
+          "measured": true,
+          "result": {
+            "frames": 969,
+            "seconds": 2.0,
+            "fps": 482.3
+          },
+          "executable_sha256": "3661f258b23a4ae66749af5062eab70ea1066ed936b9b7a114cc2c5cba379483",
+          "framebuffer": [
+            1920,
+            1080
+          ],
+          "driver_sha256": "71420cc636d9fb7ab4437fad5c970c684ca5b40d7538ac4beb6bcce52d5a98fd",
+          "live_settings_confirmed": true,
+          "screenshot_hashes": [
+            "511fc869eb2b23026f8c8e64876998c46a17da058de3b57b884814187488209c"
+          ],
+          "assets": {
+            "pak0.pak": "35a9c55e5e5a284a159ad2a62e0e8def23d829561fe2f54eb402dbc0a9a946af",
+            "pak1.pak": "94e355836ec42bc464e4cbe794cfb7b5163c6efa1bcc575622bb36475bf1cf30"
+          },
+          "demo": {
+            "pak0.pak:demo1.dem": {
+              "size": 184471,
+              "sha256": "893e5279e3a84fed0416a1101dfc2b6bca1ebd28787323daa8e22cefe54883c1"
+            },
+            "e1m3.bsp": {
+              "size": 1249944,
+              "sha256": "5941c37c67267ae11aff572fdba7f813148cc99da3cfc34d01eea81dc23edfd0"
+            }
+          }
+        },
+        {
+          "index": 3,
+          "driver": "candidate",
+          "measured": true,
+          "result": {
+            "frames": 969,
+            "seconds": 2.2,
+            "fps": 444.3
+          },
+          "executable_sha256": "3661f258b23a4ae66749af5062eab70ea1066ed936b9b7a114cc2c5cba379483",
+          "framebuffer": [
+            1920,
+            1080
+          ],
+          "driver_sha256": "2c7b66b189b64999246f3f9ed93860e0d0d5887d78ffb4f561fa33e051f7473e",
+          "live_settings_confirmed": true,
+          "screenshot_hashes": [
+            "8d95050ce0f9e44974b5cba8d82f4b8f166b8affc87276dd9209b88c75c61b14"
+          ],
+          "assets": {
+            "pak0.pak": "35a9c55e5e5a284a159ad2a62e0e8def23d829561fe2f54eb402dbc0a9a946af",
+            "pak1.pak": "94e355836ec42bc464e4cbe794cfb7b5163c6efa1bcc575622bb36475bf1cf30"
+          },
+          "demo": {
+            "pak0.pak:demo1.dem": {
+              "size": 184471,
+              "sha256": "893e5279e3a84fed0416a1101dfc2b6bca1ebd28787323daa8e22cefe54883c1"
+            },
+            "e1m3.bsp": {
+              "size": 1249944,
+              "sha256": "5941c37c67267ae11aff572fdba7f813148cc99da3cfc34d01eea81dc23edfd0"
+            }
+          }
+        },
+        {
+          "index": 4,
+          "driver": "candidate",
+          "measured": true,
+          "result": {
+            "frames": 969,
+            "seconds": 2.2,
+            "fps": 445.6
+          },
+          "executable_sha256": "3661f258b23a4ae66749af5062eab70ea1066ed936b9b7a114cc2c5cba379483",
+          "framebuffer": [
+            1920,
+            1080
+          ],
+          "driver_sha256": "2c7b66b189b64999246f3f9ed93860e0d0d5887d78ffb4f561fa33e051f7473e",
+          "live_settings_confirmed": true,
+          "screenshot_hashes": [
+            "c2f915b9b02af5cd75a1c5960bdf83a62a5c55d5e9f7f02a5206c2d914f3b777"
+          ],
+          "assets": {
+            "pak0.pak": "35a9c55e5e5a284a159ad2a62e0e8def23d829561fe2f54eb402dbc0a9a946af",
+            "pak1.pak": "94e355836ec42bc464e4cbe794cfb7b5163c6efa1bcc575622bb36475bf1cf30"
+          },
+          "demo": {
+            "pak0.pak:demo1.dem": {
+              "size": 184471,
+              "sha256": "893e5279e3a84fed0416a1101dfc2b6bca1ebd28787323daa8e22cefe54883c1"
+            },
+            "e1m3.bsp": {
+              "size": 1249944,
+              "sha256": "5941c37c67267ae11aff572fdba7f813148cc99da3cfc34d01eea81dc23edfd0"
+            }
+          }
+        },
+        {
+          "index": 5,
+          "driver": "installed",
+          "measured": true,
+          "result": {
+            "frames": 969,
+            "seconds": 2.0,
+            "fps": 478.5
+          },
+          "executable_sha256": "3661f258b23a4ae66749af5062eab70ea1066ed936b9b7a114cc2c5cba379483",
+          "framebuffer": [
+            1920,
+            1080
+          ],
+          "driver_sha256": "71420cc636d9fb7ab4437fad5c970c684ca5b40d7538ac4beb6bcce52d5a98fd",
+          "live_settings_confirmed": true,
+          "screenshot_hashes": [
+            "8c06abbfccc494e77b9bb89c6bb90ff9e69e33328a8d8b8f5f1b34a448dfd2d2"
+          ],
+          "assets": {
+            "pak0.pak": "35a9c55e5e5a284a159ad2a62e0e8def23d829561fe2f54eb402dbc0a9a946af",
+            "pak1.pak": "94e355836ec42bc464e4cbe794cfb7b5163c6efa1bcc575622bb36475bf1cf30"
+          },
+          "demo": {
+            "pak0.pak:demo1.dem": {
+              "size": 184471,
+              "sha256": "893e5279e3a84fed0416a1101dfc2b6bca1ebd28787323daa8e22cefe54883c1"
+            },
+            "e1m3.bsp": {
+              "size": 1249944,
+              "sha256": "5941c37c67267ae11aff572fdba7f813148cc99da3cfc34d01eea81dc23edfd0"
+            }
+          }
+        },
+        {
+          "index": 6,
+          "driver": "installed",
+          "measured": true,
+          "result": {
+            "frames": 969,
+            "seconds": 2.0,
+            "fps": 478.1
+          },
+          "executable_sha256": "3661f258b23a4ae66749af5062eab70ea1066ed936b9b7a114cc2c5cba379483",
+          "framebuffer": [
+            1920,
+            1080
+          ],
+          "driver_sha256": "71420cc636d9fb7ab4437fad5c970c684ca5b40d7538ac4beb6bcce52d5a98fd",
+          "live_settings_confirmed": true,
+          "screenshot_hashes": [
+            "511fc869eb2b23026f8c8e64876998c46a17da058de3b57b884814187488209c"
+          ],
+          "assets": {
+            "pak0.pak": "35a9c55e5e5a284a159ad2a62e0e8def23d829561fe2f54eb402dbc0a9a946af",
+            "pak1.pak": "94e355836ec42bc464e4cbe794cfb7b5163c6efa1bcc575622bb36475bf1cf30"
+          },
+          "demo": {
+            "pak0.pak:demo1.dem": {
+              "size": 184471,
+              "sha256": "893e5279e3a84fed0416a1101dfc2b6bca1ebd28787323daa8e22cefe54883c1"
+            },
+            "e1m3.bsp": {
+              "size": 1249944,
+              "sha256": "5941c37c67267ae11aff572fdba7f813148cc99da3cfc34d01eea81dc23edfd0"
+            }
+          }
+        },
+        {
+          "index": 7,
+          "driver": "candidate",
+          "measured": true,
+          "result": {
+            "frames": 969,
+            "seconds": 2.2,
+            "fps": 437.8
+          },
+          "executable_sha256": "3661f258b23a4ae66749af5062eab70ea1066ed936b9b7a114cc2c5cba379483",
+          "framebuffer": [
+            1920,
+            1080
+          ],
+          "driver_sha256": "2c7b66b189b64999246f3f9ed93860e0d0d5887d78ffb4f561fa33e051f7473e",
+          "live_settings_confirmed": true,
+          "screenshot_hashes": [
+            "c2f915b9b02af5cd75a1c5960bdf83a62a5c55d5e9f7f02a5206c2d914f3b777"
+          ],
+          "assets": {
+            "pak0.pak": "35a9c55e5e5a284a159ad2a62e0e8def23d829561fe2f54eb402dbc0a9a946af",
+            "pak1.pak": "94e355836ec42bc464e4cbe794cfb7b5163c6efa1bcc575622bb36475bf1cf30"
+          },
+          "demo": {
+            "pak0.pak:demo1.dem": {
+              "size": 184471,
+              "sha256": "893e5279e3a84fed0416a1101dfc2b6bca1ebd28787323daa8e22cefe54883c1"
+            },
+            "e1m3.bsp": {
+              "size": 1249944,
+              "sha256": "5941c37c67267ae11aff572fdba7f813148cc99da3cfc34d01eea81dc23edfd0"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "kernel": "7.2.11-lab182-205f5e8b20fc-normal",
+      "framebuffer": [
+        1920,
+        1080
+      ],
+      "fps": {
+        "installed": [
+          517.4,
+          500.6,
+          512.3
+        ],
+        "candidate": [
+          437.8,
+          425.6,
+          446.4
+        ]
+      },
+      "median_fps": {
+        "installed": 512.3,
+        "candidate": 437.8
+      },
+      "delta_percent": -14.542260394300211,
+      "GPU_faults_observed": false,
+      "packages_unchanged": true,
+      "rebooted": false,
+      "installed_driver_replaced": false,
+      "machine": "J313 M1 Air",
+      "sequence": [
+        {
+          "index": 0,
+          "driver": "installed",
+          "measured": false,
+          "result": {
+            "frames": 969,
+            "seconds": 1.9,
+            "fps": 515.6
+          },
+          "executable_sha256": "3661f258b23a4ae66749af5062eab70ea1066ed936b9b7a114cc2c5cba379483",
+          "framebuffer": [
+            1920,
+            1080
+          ],
+          "driver_sha256": "71420cc636d9fb7ab4437fad5c970c684ca5b40d7538ac4beb6bcce52d5a98fd",
+          "live_settings_confirmed": true,
+          "screenshot_hashes": [
+            "4957f0120f52cf573fab63e6196051a678ce29b6807945095d7d6ace5ba9fc45"
+          ],
+          "assets": {
+            "PAK0.PAK": "35a9c55e5e5a284a159ad2a62e0e8def23d829561fe2f54eb402dbc0a9a946af",
+            "PAK1.PAK": "94e355836ec42bc464e4cbe794cfb7b5163c6efa1bcc575622bb36475bf1cf30",
+            "pak0.pak": "35a9c55e5e5a284a159ad2a62e0e8def23d829561fe2f54eb402dbc0a9a946af",
+            "pak1.pak": "94e355836ec42bc464e4cbe794cfb7b5163c6efa1bcc575622bb36475bf1cf30"
+          },
+          "demo": {
+            "PAK0.PAK:demo1.dem": {
+              "size": 184471,
+              "sha256": "893e5279e3a84fed0416a1101dfc2b6bca1ebd28787323daa8e22cefe54883c1"
+            },
+            "e1m3.bsp": {
+              "size": 1249944,
+              "sha256": "5941c37c67267ae11aff572fdba7f813148cc99da3cfc34d01eea81dc23edfd0"
+            },
+            "pak0.pak:demo1.dem": {
+              "size": 184471,
+              "sha256": "893e5279e3a84fed0416a1101dfc2b6bca1ebd28787323daa8e22cefe54883c1"
+            }
+          }
+        },
+        {
+          "index": 1,
+          "driver": "candidate",
+          "measured": false,
+          "result": {
+            "frames": 969,
+            "seconds": 2.1,
+            "fps": 456.6
+          },
+          "executable_sha256": "3661f258b23a4ae66749af5062eab70ea1066ed936b9b7a114cc2c5cba379483",
+          "framebuffer": [
+            1920,
+            1080
+          ],
+          "driver_sha256": "2c7b66b189b64999246f3f9ed93860e0d0d5887d78ffb4f561fa33e051f7473e",
+          "live_settings_confirmed": true,
+          "screenshot_hashes": [
+            "c0a36383417ee8070fa668308c7860a5b47f82eb37603d6665fb3eca5fe847b5"
+          ],
+          "assets": {
+            "PAK0.PAK": "35a9c55e5e5a284a159ad2a62e0e8def23d829561fe2f54eb402dbc0a9a946af",
+            "PAK1.PAK": "94e355836ec42bc464e4cbe794cfb7b5163c6efa1bcc575622bb36475bf1cf30",
+            "pak0.pak": "35a9c55e5e5a284a159ad2a62e0e8def23d829561fe2f54eb402dbc0a9a946af",
+            "pak1.pak": "94e355836ec42bc464e4cbe794cfb7b5163c6efa1bcc575622bb36475bf1cf30"
+          },
+          "demo": {
+            "PAK0.PAK:demo1.dem": {
+              "size": 184471,
+              "sha256": "893e5279e3a84fed0416a1101dfc2b6bca1ebd28787323daa8e22cefe54883c1"
+            },
+            "e1m3.bsp": {
+              "size": 1249944,
+              "sha256": "5941c37c67267ae11aff572fdba7f813148cc99da3cfc34d01eea81dc23edfd0"
+            },
+            "pak0.pak:demo1.dem": {
+              "size": 184471,
+              "sha256": "893e5279e3a84fed0416a1101dfc2b6bca1ebd28787323daa8e22cefe54883c1"
+            }
+          }
+        },
+        {
+          "index": 2,
+          "driver": "installed",
+          "measured": true,
+          "result": {
+            "frames": 969,
+            "seconds": 1.9,
+            "fps": 517.4
+          },
+          "executable_sha256": "3661f258b23a4ae66749af5062eab70ea1066ed936b9b7a114cc2c5cba379483",
+          "framebuffer": [
+            1920,
+            1080
+          ],
+          "driver_sha256": "71420cc636d9fb7ab4437fad5c970c684ca5b40d7538ac4beb6bcce52d5a98fd",
+          "live_settings_confirmed": true,
+          "screenshot_hashes": [
+            "4957f0120f52cf573fab63e6196051a678ce29b6807945095d7d6ace5ba9fc45"
+          ],
+          "assets": {
+            "PAK0.PAK": "35a9c55e5e5a284a159ad2a62e0e8def23d829561fe2f54eb402dbc0a9a946af",
+            "PAK1.PAK": "94e355836ec42bc464e4cbe794cfb7b5163c6efa1bcc575622bb36475bf1cf30",
+            "pak0.pak": "35a9c55e5e5a284a159ad2a62e0e8def23d829561fe2f54eb402dbc0a9a946af",
+            "pak1.pak": "94e355836ec42bc464e4cbe794cfb7b5163c6efa1bcc575622bb36475bf1cf30"
+          },
+          "demo": {
+            "PAK0.PAK:demo1.dem": {
+              "size": 184471,
+              "sha256": "893e5279e3a84fed0416a1101dfc2b6bca1ebd28787323daa8e22cefe54883c1"
+            },
+            "e1m3.bsp": {
+              "size": 1249944,
+              "sha256": "5941c37c67267ae11aff572fdba7f813148cc99da3cfc34d01eea81dc23edfd0"
+            },
+            "pak0.pak:demo1.dem": {
+              "size": 184471,
+              "sha256": "893e5279e3a84fed0416a1101dfc2b6bca1ebd28787323daa8e22cefe54883c1"
+            }
+          }
+        },
+        {
+          "index": 3,
+          "driver": "candidate",
+          "measured": true,
+          "result": {
+            "frames": 969,
+            "seconds": 2.2,
+            "fps": 437.8
+          },
+          "executable_sha256": "3661f258b23a4ae66749af5062eab70ea1066ed936b9b7a114cc2c5cba379483",
+          "framebuffer": [
+            1920,
+            1080
+          ],
+          "driver_sha256": "2c7b66b189b64999246f3f9ed93860e0d0d5887d78ffb4f561fa33e051f7473e",
+          "live_settings_confirmed": true,
+          "screenshot_hashes": [
+            "c0a36383417ee8070fa668308c7860a5b47f82eb37603d6665fb3eca5fe847b5"
+          ],
+          "assets": {
+            "PAK0.PAK": "35a9c55e5e5a284a159ad2a62e0e8def23d829561fe2f54eb402dbc0a9a946af",
+            "PAK1.PAK": "94e355836ec42bc464e4cbe794cfb7b5163c6efa1bcc575622bb36475bf1cf30",
+            "pak0.pak": "35a9c55e5e5a284a159ad2a62e0e8def23d829561fe2f54eb402dbc0a9a946af",
+            "pak1.pak": "94e355836ec42bc464e4cbe794cfb7b5163c6efa1bcc575622bb36475bf1cf30"
+          },
+          "demo": {
+            "PAK0.PAK:demo1.dem": {
+              "size": 184471,
+              "sha256": "893e5279e3a84fed0416a1101dfc2b6bca1ebd28787323daa8e22cefe54883c1"
+            },
+            "e1m3.bsp": {
+              "size": 1249944,
+              "sha256": "5941c37c67267ae11aff572fdba7f813148cc99da3cfc34d01eea81dc23edfd0"
+            },
+            "pak0.pak:demo1.dem": {
+              "size": 184471,
+              "sha256": "893e5279e3a84fed0416a1101dfc2b6bca1ebd28787323daa8e22cefe54883c1"
+            }
+          }
+        },
+        {
+          "index": 4,
+          "driver": "candidate",
+          "measured": true,
+          "result": {
+            "frames": 969,
+            "seconds": 2.3,
+            "fps": 425.6
+          },
+          "executable_sha256": "3661f258b23a4ae66749af5062eab70ea1066ed936b9b7a114cc2c5cba379483",
+          "framebuffer": [
+            1920,
+            1080
+          ],
+          "driver_sha256": "2c7b66b189b64999246f3f9ed93860e0d0d5887d78ffb4f561fa33e051f7473e",
+          "live_settings_confirmed": true,
+          "screenshot_hashes": [
+            "c0a36383417ee8070fa668308c7860a5b47f82eb37603d6665fb3eca5fe847b5"
+          ],
+          "assets": {
+            "PAK0.PAK": "35a9c55e5e5a284a159ad2a62e0e8def23d829561fe2f54eb402dbc0a9a946af",
+            "PAK1.PAK": "94e355836ec42bc464e4cbe794cfb7b5163c6efa1bcc575622bb36475bf1cf30",
+            "pak0.pak": "35a9c55e5e5a284a159ad2a62e0e8def23d829561fe2f54eb402dbc0a9a946af",
+            "pak1.pak": "94e355836ec42bc464e4cbe794cfb7b5163c6efa1bcc575622bb36475bf1cf30"
+          },
+          "demo": {
+            "PAK0.PAK:demo1.dem": {
+              "size": 184471,
+              "sha256": "893e5279e3a84fed0416a1101dfc2b6bca1ebd28787323daa8e22cefe54883c1"
+            },
+            "e1m3.bsp": {
+              "size": 1249944,
+              "sha256": "5941c37c67267ae11aff572fdba7f813148cc99da3cfc34d01eea81dc23edfd0"
+            },
+            "pak0.pak:demo1.dem": {
+              "size": 184471,
+              "sha256": "893e5279e3a84fed0416a1101dfc2b6bca1ebd28787323daa8e22cefe54883c1"
+            }
+          }
+        },
+        {
+          "index": 5,
+          "driver": "installed",
+          "measured": true,
+          "result": {
+            "frames": 969,
+            "seconds": 1.9,
+            "fps": 500.6
+          },
+          "executable_sha256": "3661f258b23a4ae66749af5062eab70ea1066ed936b9b7a114cc2c5cba379483",
+          "framebuffer": [
+            1920,
+            1080
+          ],
+          "driver_sha256": "71420cc636d9fb7ab4437fad5c970c684ca5b40d7538ac4beb6bcce52d5a98fd",
+          "live_settings_confirmed": true,
+          "screenshot_hashes": [
+            "4957f0120f52cf573fab63e6196051a678ce29b6807945095d7d6ace5ba9fc45"
+          ],
+          "assets": {
+            "PAK0.PAK": "35a9c55e5e5a284a159ad2a62e0e8def23d829561fe2f54eb402dbc0a9a946af",
+            "PAK1.PAK": "94e355836ec42bc464e4cbe794cfb7b5163c6efa1bcc575622bb36475bf1cf30",
+            "pak0.pak": "35a9c55e5e5a284a159ad2a62e0e8def23d829561fe2f54eb402dbc0a9a946af",
+            "pak1.pak": "94e355836ec42bc464e4cbe794cfb7b5163c6efa1bcc575622bb36475bf1cf30"
+          },
+          "demo": {
+            "PAK0.PAK:demo1.dem": {
+              "size": 184471,
+              "sha256": "893e5279e3a84fed0416a1101dfc2b6bca1ebd28787323daa8e22cefe54883c1"
+            },
+            "e1m3.bsp": {
+              "size": 1249944,
+              "sha256": "5941c37c67267ae11aff572fdba7f813148cc99da3cfc34d01eea81dc23edfd0"
+            },
+            "pak0.pak:demo1.dem": {
+              "size": 184471,
+              "sha256": "893e5279e3a84fed0416a1101dfc2b6bca1ebd28787323daa8e22cefe54883c1"
+            }
+          }
+        },
+        {
+          "index": 6,
+          "driver": "installed",
+          "measured": true,
+          "result": {
+            "frames": 969,
+            "seconds": 1.9,
+            "fps": 512.3
+          },
+          "executable_sha256": "3661f258b23a4ae66749af5062eab70ea1066ed936b9b7a114cc2c5cba379483",
+          "framebuffer": [
+            1920,
+            1080
+          ],
+          "driver_sha256": "71420cc636d9fb7ab4437fad5c970c684ca5b40d7538ac4beb6bcce52d5a98fd",
+          "live_settings_confirmed": true,
+          "screenshot_hashes": [
+            "4957f0120f52cf573fab63e6196051a678ce29b6807945095d7d6ace5ba9fc45"
+          ],
+          "assets": {
+            "PAK0.PAK": "35a9c55e5e5a284a159ad2a62e0e8def23d829561fe2f54eb402dbc0a9a946af",
+            "PAK1.PAK": "94e355836ec42bc464e4cbe794cfb7b5163c6efa1bcc575622bb36475bf1cf30",
+            "pak0.pak": "35a9c55e5e5a284a159ad2a62e0e8def23d829561fe2f54eb402dbc0a9a946af",
+            "pak1.pak": "94e355836ec42bc464e4cbe794cfb7b5163c6efa1bcc575622bb36475bf1cf30"
+          },
+          "demo": {
+            "PAK0.PAK:demo1.dem": {
+              "size": 184471,
+              "sha256": "893e5279e3a84fed0416a1101dfc2b6bca1ebd28787323daa8e22cefe54883c1"
+            },
+            "e1m3.bsp": {
+              "size": 1249944,
+              "sha256": "5941c37c67267ae11aff572fdba7f813148cc99da3cfc34d01eea81dc23edfd0"
+            },
+            "pak0.pak:demo1.dem": {
+              "size": 184471,
+              "sha256": "893e5279e3a84fed0416a1101dfc2b6bca1ebd28787323daa8e22cefe54883c1"
+            }
+          }
+        },
+        {
+          "index": 7,
+          "driver": "candidate",
+          "measured": true,
+          "result": {
+            "frames": 969,
+            "seconds": 2.2,
+            "fps": 446.4
+          },
+          "executable_sha256": "3661f258b23a4ae66749af5062eab70ea1066ed936b9b7a114cc2c5cba379483",
+          "framebuffer": [
+            1920,
+            1080
+          ],
+          "driver_sha256": "2c7b66b189b64999246f3f9ed93860e0d0d5887d78ffb4f561fa33e051f7473e",
+          "live_settings_confirmed": true,
+          "screenshot_hashes": [
+            "c0a36383417ee8070fa668308c7860a5b47f82eb37603d6665fb3eca5fe847b5"
+          ],
+          "assets": {
+            "PAK0.PAK": "35a9c55e5e5a284a159ad2a62e0e8def23d829561fe2f54eb402dbc0a9a946af",
+            "PAK1.PAK": "94e355836ec42bc464e4cbe794cfb7b5163c6efa1bcc575622bb36475bf1cf30",
+            "pak0.pak": "35a9c55e5e5a284a159ad2a62e0e8def23d829561fe2f54eb402dbc0a9a946af",
+            "pak1.pak": "94e355836ec42bc464e4cbe794cfb7b5163c6efa1bcc575622bb36475bf1cf30"
+          },
+          "demo": {
+            "PAK0.PAK:demo1.dem": {
+              "size": 184471,
+              "sha256": "893e5279e3a84fed0416a1101dfc2b6bca1ebd28787323daa8e22cefe54883c1"
+            },
+            "e1m3.bsp": {
+              "size": 1249944,
+              "sha256": "5941c37c67267ae11aff572fdba7f813148cc99da3cfc34d01eea81dc23edfd0"
+            },
+            "pak0.pak:demo1.dem": {
+              "size": 184471,
+              "sha256": "893e5279e3a84fed0416a1101dfc2b6bca1ebd28787323daa8e22cefe54883c1"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "limits": [
+    "short timedemo, not sustained stability or broad game performance",
+    "not an isolated commit bisect",
+    "candidate production-flags ARM build used LLVM23 bootstrap shader tools, while the older package used LLVM22; artifacts were compared, not a controlled rebuild of both sources",
+    "no M3 FPS comparison in this run",
+    "no full PR6 performance-series result",
+    "numerical division/reciprocal correctness improvement is recorded separately"
+  ],
+  "installed_driver_sha256": "71420cc636d9fb7ab4437fad5c970c684ca5b40d7538ac4beb6bcce52d5a98fd",
+  "candidate_driver_sha256": "2c7b66b189b64999246f3f9ed93860e0d0d5887d78ffb4f561fa33e051f7473e",
+  "test_leases_released": true
+}
